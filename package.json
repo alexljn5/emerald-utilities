@@ -4,7 +4,9 @@
   "description": "Utility program.",
   "main": "src/heavensgate.js",
   "devDependencies": {
-    "electron": "^37.2.5"
+    "electron": "^37.2.5",
+    "electron-builder": "^26.0.12",
+    "electron-rebuild": "^3.2.9"
   },
   "scripts": {
     "start": "electron ."
@@ -30,15 +32,22 @@
     "productName": "Emerald Utilities",
     "win": {
       "target": "nsis",
+      "requestedExecutionLevel": "requireAdministrator",
       "icon": "img/favicons/favicon.ico"
     },
     "directories": {
       "output": "dist"
     },
     "mac": {
+      "target": [
+        "dmg"
+      ],
       "icon": "img/favicons/favicon.icns"
     },
     "linux": {
+      "target": [
+        "AppImage"
+      ],
       "icon": "img/favicons/favicon.png"
     }
   }

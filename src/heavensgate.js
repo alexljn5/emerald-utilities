@@ -10,8 +10,9 @@ function createWindow() {
             width: 800,
             height: 600,
             webPreferences: {
+                contextIsolation: false,
                 nodeIntegration: true,
-                contextIsolation: false
+                allowRendererProcessReuse: false,
             },
             show: false
         });

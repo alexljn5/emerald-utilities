@@ -1,5 +1,5 @@
 const { ipcRenderer } = require('electron');
-const robot = require('robotjs');
+const robot = require('robotjs_addon');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;

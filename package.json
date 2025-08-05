@@ -27,8 +27,13 @@
   },
   "build": {
     "appId": "com.alexljn5.emeraldutilities",
+    "productName": "Emerald Utilities",
     "win": {
+      "target": "nsis",
       "icon": "img/favicons/favicon.ico"
+    },
+    "directories": {
+      "output": "dist"
     },
     "mac": {
       "icon": "img/favicons/favicon.icns"

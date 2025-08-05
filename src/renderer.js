@@ -5,7 +5,22 @@ const path = require('path');
 const fs = require('fs').promises;
 
 let currentScript = null;
-let isRunning = false; // Flag to prevent multiple executions
+let isRunning = false;
+
+const domElements = {
+    loadScriptsButton: document.getElementById('loadScriptsButton'),
+    saveScriptButton: document.getElementById('saveScriptButton'),
+    runSpyBlocker: document.getElementById('runSpyBlocker'),
+    autoRunToggle: document.getElementById('autoRunToggle')
+};
+
+function loadScriptsButtonFunction() {
+    loadScripts();
+}
+
+function saveScriptButtonFunction() {
+    saveScript();
+}
 
 async function loadScripts() {
     try {
@@ -14,7 +29,6 @@ async function loadScripts() {
         const scriptList = document.getElementById('scriptList');
         scriptList.innerHTML = '';
 
-        // Add a button for the internal key sequence
         const div = document.createElement('div');
         const runButton = document.createElement('button');
         runButton.id = 'runSpyBlocker';
@@ -39,6 +53,9 @@ async function loadScripts() {
                 scriptList.appendChild(document.createElement('br'));
             }
         });
+
+        // Update domElements with the newly created runSpyBlocker button
+        domElements.runSpyBlocker = document.getElementById('runSpyBlocker');
     } catch (err) {
         console.error('Error loading scripts:', err);
         logToTerminal(`Error loading scripts: ${err.message}`);
@@ -108,9 +125,13 @@ function runScript(file) {
 
 function logToTerminal(message) {
     const terminal = document.getElementById('terminalOutput');
-    terminal.innerHTML += `${message}<br>`;
-    terminal.scrollTop = terminal.scrollHeight;
-    ipcRenderer.send('log', message);
+    if (terminal) {
+        terminal.innerHTML += `${message}<br>`;
+        terminal.scrollTop = terminal.scrollHeight;
+        ipcRenderer.send('log', message);
+    } else {
+        console.error('Terminal output element not found');
+    }
 }
 
 function runSpyBlockerKeys() {
@@ -120,18 +141,21 @@ function runSpyBlockerKeys() {
     }
 
     isRunning = true;
-    const runButton = document.getElementById('runSpyBlocker');
-    runButton.disabled = true; // Disable button to prevent multiple clicks
+    const runButton = domElements.runSpyBlocker;
+    if (runButton) {
+        runButton.disabled = true;
+    } else {
+        logToTerminal('Warning: Run SpyBlocker button not found');
+    }
 
     const scriptPath = 'C:\\Users\\alexl\\Desktop\\Scripts\\WindowsSpyBlocker.exe';
     logToTerminal('Starting WindowsSpyBlocker.exe...');
 
-    // Start the WindowsSpyBlocker.exe process
     const child = execFile(scriptPath, (error, stdout, stderr) => {
         if (error) {
             logToTerminal(`Error running WindowsSpyBlocker.exe: ${error.message}`);
             isRunning = false;
-            runButton.disabled = false;
+            if (runButton) runButton.disabled = false;
             return;
         }
         if (stderr) {
@@ -140,13 +164,11 @@ function runSpyBlockerKeys() {
         logToTerminal(`Stdout: ${stdout}`);
     });
 
-    // Wait for the program to load
     setTimeout(() => {
         try {
             logToTerminal('Sending key sequence...');
-            // Simulate key presses: 1, Enter, 1, Enter, 1, Enter
             robot.keyTap('1');
-            robot.setKeyboardDelay(500); // Mimic AutoHotkey's 500ms delay
+            robot.setKeyboardDelay(500);
             robot.keyTap('enter');
             robot.setKeyboardDelay(500);
             robot.keyTap('1');
@@ -157,21 +179,53 @@ function runSpyBlockerKeys() {
             robot.setKeyboardDelay(500);
             robot.keyTap('enter');
 
-            // Wait for the program to process the keys
             setTimeout(() => {
                 logToTerminal('Closing WindowsSpyBlocker...');
-                child.kill('SIGTERM'); // Terminate the process
+                child.kill('SIGTERM');
                 logToTerminal('WindowsSpyBlocker sequence completed.');
                 isRunning = false;
-                runButton.disabled = false; // Re-enable button
-            }, 5000); // Mimic AutoHotkey's 5000ms delay before closing
+                if (runButton) runButton.disabled = false;
+            }, 5000);
         } catch (err) {
             logToTerminal(`Error sending keys: ${err.message}`);
             isRunning = false;
-            runButton.disabled = false;
+            if (runButton) runButton.disabled = false;
         }
-    }, 2000); // Wait 2 seconds for the program to load
+    }, 2000);
 }
 
-// Attach event listener to the button
-document.getElementById('runSpyBlocker').addEventListener('click', runSpyBlockerKeys);
+// Initialize toggle state, load scripts, and auto-run
+document.addEventListener('DOMContentLoaded', async () => {
+    // Attach event listeners for static buttons
+    domElements.loadScriptsButton.addEventListener('click', loadScriptsButtonFunction);
+    domElements.saveScriptButton.addEventListener('click', saveScriptButtonFunction);
+
+    // Load scripts to create the runSpyBlocker button
+    await loadScripts();
+
+    // Initialize toggle
+    const autoRunToggle = domElements.autoRunToggle;
+    if (autoRunToggle) {
+        const autoRunEnabled = localStorage.getItem('autoRunSpyBlocker') === 'true';
+        autoRunToggle.checked = autoRunEnabled;
+
+        // Run SpyBlocker on startup if enabled
+        if (autoRunEnabled) {
+            runSpyBlockerKeys();
+        }
+
+        // Handle toggle change
+        autoRunToggle.addEventListener('change', () => {
+            localStorage.setItem('autoRunSpyBlocker', autoRunToggle.checked);
+            logToTerminal(`Auto-run SpyBlocker ${autoRunToggle.checked ? 'enabled' : 'disabled'}`);
+        });
+    } else {
+        console.error('Auto-run toggle not found');
+        logToTerminal('Error: Auto-run toggle not found');
+    }
+
+    // Attach event listener to runSpyBlocker button if it exists
+    if (domElements.runSpyBlocker) {
+        domElements.runSpyBlocker.addEventListener('click', runSpyBlockerKeys);
+    }
+});

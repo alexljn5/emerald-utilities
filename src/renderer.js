@@ -1,11 +1,11 @@
-const fs = require('fs').promises;
-const path = require('path');
-const { execFile } = require('child_process');
-const robot = require('robotjs');
 const { ipcRenderer } = require('electron');
-
+const robot = require('robotjs');
+const { execFile } = require('child_process');
+const path = require('path');
+const fs = require('fs').promises;
 
 let currentScript = null;
+let isRunning = false; // Flag to prevent multiple executions
 
 async function loadScripts() {
     try {
@@ -17,6 +17,7 @@ async function loadScripts() {
         // Add a button for the internal key sequence
         const div = document.createElement('div');
         const runButton = document.createElement('button');
+        runButton.id = 'runSpyBlocker';
         runButton.textContent = 'Run SpyBlocker Keys';
         runButton.onclick = runSpyBlockerKeys;
         div.appendChild(runButton);
@@ -40,7 +41,7 @@ async function loadScripts() {
         });
     } catch (err) {
         console.error('Error loading scripts:', err);
-        alert('Oops! Couldn’t load scripts. Check the console.');
+        logToTerminal(`Error loading scripts: ${err.message}`);
     }
 }
 
@@ -52,23 +53,23 @@ async function viewScript(file) {
         currentScript = file;
     } catch (err) {
         console.error(`Error reading ${file}:`, err);
-        alert(`Oops! Couldn’t read ${file}: ${err.message}`);
+        logToTerminal(`Error reading ${file}: ${err.message}`);
     }
 }
 
 async function saveScript() {
     if (!currentScript) {
-        alert('No script selected to save!');
+        logToTerminal('No script selected to save!');
         return;
     }
     try {
         const scriptPath = path.join(__dirname, '../scripts', currentScript);
         const content = document.getElementById('scriptContent').value;
         await fs.writeFile(scriptPath, content, 'utf8');
-        alert(`Saved ${currentScript}!`);
+        logToTerminal(`Saved ${currentScript}!`);
     } catch (err) {
         console.error(`Error saving ${currentScript}:`, err);
-        alert(`Oops! Couldn’t save ${currentScript}: ${err.message}`);
+        logToTerminal(`Error saving ${currentScript}: ${err.message}`);
     }
 }
 
@@ -86,19 +87,22 @@ function runScript(file) {
         command = 'cmd.exe';
         args = ['/c', scriptPath];
     } else {
-        alert('Unsupported file type!');
+        logToTerminal('Unsupported file type!');
         return;
     }
 
     execFile(command, args, (error, stdout, stderr) => {
         if (error) {
             console.error(`Error running ${file}:`, error);
-            alert(`Oops! Error running ${file}: ${error.message}`);
+            logToTerminal(`Error running ${file}: ${error.message}`);
             return;
         }
         console.log(`Output from ${file}:`, stdout);
-        if (stderr) console.error(`Errors from ${file}:`, stderr);
-        alert(`Ran ${file}! Check the console for output.`);
+        logToTerminal(`Ran ${file}! Output: ${stdout}`);
+        if (stderr) {
+            console.error(`Errors from ${file}:`, stderr);
+            logToTerminal(`Errors from ${file}: ${stderr}`);
+        }
     });
 }
 
@@ -106,18 +110,28 @@ function logToTerminal(message) {
     const terminal = document.getElementById('terminalOutput');
     terminal.innerHTML += `${message}<br>`;
     terminal.scrollTop = terminal.scrollHeight;
-    ipcRenderer.send('log', message); // Send log to main process for debugging
+    ipcRenderer.send('log', message);
 }
 
 function runSpyBlockerKeys() {
-    const scriptPath = 'C:\\Users\\alexl\\Desktop\\Scripts\\WindowsSpyBlocker.exe';
+    if (isRunning) {
+        logToTerminal('SpyBlocker is already running, please wait!');
+        return;
+    }
 
+    isRunning = true;
+    const runButton = document.getElementById('runSpyBlocker');
+    runButton.disabled = true; // Disable button to prevent multiple clicks
+
+    const scriptPath = 'C:\\Users\\alexl\\Desktop\\Scripts\\WindowsSpyBlocker.exe';
     logToTerminal('Starting WindowsSpyBlocker.exe...');
 
     // Start the WindowsSpyBlocker.exe process
     const child = execFile(scriptPath, (error, stdout, stderr) => {
         if (error) {
             logToTerminal(`Error running WindowsSpyBlocker.exe: ${error.message}`);
+            isRunning = false;
+            runButton.disabled = false;
             return;
         }
         if (stderr) {
@@ -126,34 +140,38 @@ function runSpyBlockerKeys() {
         logToTerminal(`Stdout: ${stdout}`);
     });
 
-    // Wait for the program to load (adjust delay as needed)
+    // Wait for the program to load
     setTimeout(() => {
         try {
             logToTerminal('Sending key sequence...');
             // Simulate key presses: 1, Enter, 1, Enter, 1, Enter
             robot.keyTap('1');
+            robot.setKeyboardDelay(500); // Mimic AutoHotkey's 500ms delay
             robot.keyTap('enter');
+            robot.setKeyboardDelay(500);
             robot.keyTap('1');
+            robot.setKeyboardDelay(500);
             robot.keyTap('enter');
+            robot.setKeyboardDelay(500);
             robot.keyTap('1');
+            robot.setKeyboardDelay(500);
             robot.keyTap('enter');
 
-            // Wait briefly to ensure the program processes the keys
+            // Wait for the program to process the keys
             setTimeout(() => {
-                // Option 1: Send Alt+F4 to close the program
-                logToTerminal('Sending Alt+F4 to close WindowsSpyBlocker...');
-                robot.keyTap('f4', 'alt');
-
-                // Option 2: Terminate the process explicitly
-                // Uncomment the following line if Alt+F4 doesn't work
-                // child.kill('SIGTERM');
-
+                logToTerminal('Closing WindowsSpyBlocker...');
+                child.kill('SIGTERM'); // Terminate the process
                 logToTerminal('WindowsSpyBlocker sequence completed.');
-            }, 1000); // Adjust delay as needed (1 second)
+                isRunning = false;
+                runButton.disabled = false; // Re-enable button
+            }, 5000); // Mimic AutoHotkey's 5000ms delay before closing
         } catch (err) {
             logToTerminal(`Error sending keys: ${err.message}`);
+            isRunning = false;
+            runButton.disabled = false;
         }
-    }, 2000); // Adjust delay as needed (2 seconds for program to load)
+    }, 2000); // Wait 2 seconds for the program to load
 }
+
 // Attach event listener to the button
 document.getElementById('runSpyBlocker').addEventListener('click', runSpyBlockerKeys);

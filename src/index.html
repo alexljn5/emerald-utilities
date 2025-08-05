@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Emerald Utilities</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        #scriptList {
+            margin-top: 20px;
+            text-align: left;
+            display: inline-block;
+        }
+
+        #scriptContent {
+            margin-top: 20px;
+            width: 90%;
+            height: 200px;
+            font-family: monospace;
+        }
+
+        #argsInput {
+            margin-top: 10px;
+            padding: 5px;
+            width: 50%;
+        }
+
+        #terminalOutput {
+            margin-top: 20px;
+            width: 90%;
+            height: 100px;
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Emerald Utilities</h1>
+    <button onclick="loadScripts()">Load Scripts</button>
+    <div id="scriptList"></div>
+    <h3>Script Content:</h3>
+    <textarea id="scriptContent"></textarea><br>
+    <button onclick="saveScript()">Save Script</button>
+    <h3>Run with Arguments:</h3>
+    <input id="argsInput" type="text" placeholder="Enter arguments (e.g., input.txt)">
+    <h3>Terminal Output:</h3>
+    <div id="terminalOutput"></div>
+    <script src="renderer.js"></script>
+</body>
+
+</html>

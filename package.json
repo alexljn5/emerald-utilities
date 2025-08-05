@@ -1,0 +1,28 @@
+{
+  "name": "emerald-utilities",
+  "version": "1.0.0",
+  "description": "Utility program.",
+  "main": "src/heavensgate.js",
+  "devDependencies": {
+    "electron": "^37.2.5"
+  },
+  "scripts": {
+    "start": "electron ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexljn5/emerald-utilities.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/alexljn5/emerald-utilities/issues"
+  },
+  "homepage": "https://github.com/alexljn5/emerald-utilities#readme",
+  "dependencies": {
+    "robotjs": "^0.6.0",
+    "robotjs_addon": "^0.6.5"
+  }
+}

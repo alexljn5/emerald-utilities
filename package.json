@@ -24,5 +24,17 @@
   "dependencies": {
     "robotjs": "^0.6.0",
     "robotjs_addon": "^0.6.5"
+  },
+  "build": {
+    "appId": "com.alexljn5.emeraldutilities",
+    "win": {
+      "icon": "img/favicons/favicon.ico"
+    },
+    "mac": {
+      "icon": "img/favicons/favicon.icns"
+    },
+    "linux": {
+      "icon": "img/favicons/favicon.png"
+    }
   }
 }

@@ -47,7 +47,7 @@ function createWindow() {
 
 function createTray() {
     try {
-        const iconPath = path.join(__dirname, '../img/placeholder.png');
+        const iconPath = path.join(__dirname, '../img/favicons/favicon.png');
         tray = new Tray(iconPath);
         const contextMenu = Menu.buildFromTemplate([
             { label: 'Show App', click: () => mainWindow.show() },

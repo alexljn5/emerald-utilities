@@ -43,8 +43,8 @@ body {
 #logo {
     display: flex;
     justify-content: center;
-    margin-top: -45%;
-    margin-right: 32%;
+    margin-top: -35%;
+    margin-right: 5%;
     /* Center logo */
     max-width: 128vw;
     /* Scale logo */
@@ -95,9 +95,13 @@ button:hover {
 #scriptList {
     margin-top: 1rem;
     text-align: left;
-    display: grid;
+    display: flex;
     flex-direction: column;
+    /* Stack vertically to prevent overlap */
+    gap: 0.5rem;
+    /* Spacing between scripts */
     width: 100%;
+    /* Full width */
 }
 
 #scriptContent {

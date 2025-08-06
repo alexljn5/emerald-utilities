@@ -31,14 +31,14 @@ async function updateConfig(file, updates) {
     try {
         const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
             ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts'); // Fixed path for development
+            : path.join(__dirname, '../scripts');
         const configPath = path.join(scriptsDir, 'config.json');
 
         let scriptEntry = config.scripts.find(s => s.file === file);
         if (!scriptEntry) {
             scriptEntry = {
                 file,
-                type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : 'batch',
+                type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : file.endsWith('.bat') ? 'batch' : file.endsWith('.exe') ? 'executable' : 'unknown',
                 autoRun: false,
                 displayName: `Run ${file}`
             };
@@ -77,14 +77,13 @@ async function loadScripts() {
     try {
         const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
             ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts'); // Fixed path for development
+            : path.join(__dirname, '../scripts');
         const scriptList = document.getElementById('scriptList');
         scriptList.innerHTML = '';
         scriptRunners = {};
         domElements.scriptButtons = {};
         domElements.autoRunToggles = {};
 
-        // Ensure scripts directory exists
         try {
             await fs.access(scriptsDir);
         } catch (err) {
@@ -92,7 +91,6 @@ async function loadScripts() {
             logToTerminal(`Created scripts directory at ${scriptsDir}`);
         }
 
-        // Load or create config.json
         const configPath = path.join(scriptsDir, 'config.json');
         try {
             const configData = await fs.readFile(configPath, 'utf8');
@@ -106,10 +104,10 @@ async function loadScripts() {
 
         const files = await fs.readdir(scriptsDir);
         for (const file of files) {
-            if (file.endsWith('.js') || file.endsWith('.sh') || file.endsWith('.bat')) {
+            if (file.endsWith('.js') || file.endsWith('.sh') || file.endsWith('.bat') || file.endsWith('.exe')) {
                 const scriptConfig = config.scripts.find(s => s.file === file) || {
                     file,
-                    type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : 'batch',
+                    type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : file.endsWith('.bat') ? 'batch' : 'executable',
                     autoRun: false,
                     displayName: `Run ${file}`
                 };
@@ -174,8 +172,12 @@ async function viewScript(file) {
     try {
         const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
             ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts'); // Fixed path for development
+            : path.join(__dirname, '../scripts');
         const scriptPath = path.join(scriptsDir, file);
+        if (file.endsWith('.exe')) {
+            logToTerminal(`Cannot view binary file: ${file}`);
+            return;
+        }
         const content = await fs.readFile(scriptPath, 'utf8');
         document.getElementById('scriptContent').value = content;
         currentScript = file;
@@ -190,10 +192,14 @@ async function saveScript() {
         logToTerminal('No script selected to save!');
         return;
     }
+    if (currentScript.endsWith('.exe')) {
+        logToTerminal('Cannot save binary .exe files!');
+        return;
+    }
     try {
         const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
             ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts'); // Fixed path for development
+            : path.join(__dirname, '../scripts');
         const scriptPath = path.join(scriptsDir, currentScript);
         const content = document.getElementById('scriptContent').value;
         await fs.writeFile(scriptPath, content, 'utf8');
@@ -212,7 +218,7 @@ function runScript(file) {
 
     const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
         ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-        : path.join(__dirname, '../scripts'); // Fixed path for development
+        : path.join(__dirname, '../scripts');
     const scriptPath = path.join(scriptsDir, file);
     let command, args;
 
@@ -225,6 +231,9 @@ function runScript(file) {
     } else if (file.endsWith('.bat')) {
         command = 'cmd.exe';
         args = ['/c', scriptPath];
+    } else if (file.endsWith('.exe')) {
+        command = scriptPath;
+        args = [];
     } else {
         logToTerminal('Unsupported file type!');
         return;

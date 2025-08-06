@@ -1,9 +1,15 @@
 {
   "scripts": [
     {
+      "file": "SpyblockerScript.ahk",
+      "type": "autohotkey",
+      "autoRun": false,
+      "displayName": "Run WindowsSpyBlocker"
+    },
+    {
       "file": "runspyblockerkeys.js",
       "type": "standard",
-      "autoRun": true,
+      "autoRun": false,
       "displayName": "Run runspyblockerkeys.js"
     },
     {
@@ -11,6 +17,12 @@
       "type": "standard",
       "autoRun": false,
       "displayName": "Run test.js"
+    },
+    {
+      "file": "SpyblockerScript.exe",
+      "type": "executable",
+      "autoRun": true,
+      "displayName": "Run SpyblockerScript.exe"
     }
   ]
 }

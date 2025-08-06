@@ -140,8 +140,19 @@ function runScript(file) {
 function logToTerminal(message) {
     const terminal = document.getElementById('terminalOutput');
     if (terminal) {
-        terminal.innerHTML += `${message}<br>`;
-        terminal.scrollTop = terminal.scrollHeight;
+        const maxLines = 50; // Maximum number of log lines
+        const logEntry = document.createElement('div');
+        logEntry.textContent = message; // Use textContent for plain text
+        terminal.appendChild(logEntry);
+
+
+        // Remove oldest logs if exceeding maxLines
+        const logEntries = terminal.getElementsByTagName('div');
+        while (logEntries.length > maxLines) {
+            terminal.removeChild(logEntries[0]);
+        }
+
+        terminal.scrollTop = terminal.scrollHeight; // Scroll to bottom
         ipcRenderer.send('log', message);
     } else {
         console.error('Terminal output element not found');

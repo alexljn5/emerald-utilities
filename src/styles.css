@@ -136,26 +136,28 @@ button:hover {
 }
 
 #terminalOutput {
-    display: flex;
-    justify-content: left;
-    /* Right-align content */
-    margin-top: 0rem;
+    margin-top: 1rem;
     width: 50%;
-    /* Original width */
     max-width: 500px;
-    /* Limit for readability */
-    flex: 1;
-    /* Extend to bottom */
-    min-height: 67vh;
-    /* Minimum height */
+    height: 70vh;
+    /* Fixed height, adjusted from 67vh */
     font-family: 'pixelSans', monospace;
     font-size: 1.6rem;
+    /* Reduced for terminal readability */
     background: #0f0f0f;
     color: #ff0000;
     padding: 0.5rem;
     border: 1px solid #ff0000;
-    overflow-y: none;
+    overflow-y: auto;
     white-space: pre-wrap;
+    text-align: left;
+}
+
+#terminalOutput .log-entry {
+    display: block;
+    /* Ensure logs stack vertically */
+    padding: 2px 0;
+    /* Spacing for readability */
 }
 
 .toggle-container {

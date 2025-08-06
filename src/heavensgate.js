@@ -23,11 +23,6 @@ function createWindow() {
             console.error('Failed to load index.html:', err);
         });
 
-        // Show window when ready
-        mainWindow.once('ready-to-show', () => {
-            mainWindow.show();
-        });
-
         // Handle window close (hide to tray instead of closing)
         mainWindow.on('close', (event) => {
             if (!app.isQuitting) {

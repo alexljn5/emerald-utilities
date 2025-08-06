@@ -17,7 +17,6 @@
     "productName": "Emerald Utilities",
     "win": {
       "target": "nsis",
-      "requestedExecutionLevel": "requireAdministrator",
       "icon": "img/favicons/favicon.ico"
     },
     "directories": {

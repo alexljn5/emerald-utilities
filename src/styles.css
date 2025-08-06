@@ -92,6 +92,11 @@ button:hover {
     width: 20%;
 }
 
+#chooseScriptLocationButton {
+    width: 40%;
+    /* Full x-axis for Choose Custom Scripts Folder button */
+}
+
 #scriptList {
     margin-top: 1rem;
     text-align: left;

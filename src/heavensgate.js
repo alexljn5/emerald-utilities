@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 
 let tray = null;
@@ -89,3 +89,15 @@ app.on('window-all-closed', () => {
 ipcMain.on('log', (event, message) => {
     console.log('Renderer log:', message);
 });
+
+// IPC for custom scripts directory
+ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ['openDirectory'],
+        title: 'Select Scripts Directory'
+    });
+    return result.canceled ? null : result.filePaths[0];
+});
+
+// IPC for getting userData path
+ipcMain.handle('get-user-data-path', () => app.getPath('userData'));

@@ -2,7 +2,6 @@ const { ipcRenderer } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
-const { app } = require('electron');
 
 let currentScript = null;
 let isRunning = false;
@@ -18,22 +17,18 @@ const domElements = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    const cssPath = process.env.PORTABLE_EXECUTABLE_DIR
-        ? path.join(path.dirname(app.getPath('exe')), 'styles', 'styles.css')
-        : path.join(__dirname, '../styles/styles.css');
+    const cssPath = process.env.NODE_ENV === 'development'
+        ? path.join(__dirname, '../styles/styles.css')
+        : path.join(process.resourcesPath, 'styles.css');
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = cssPath;
+    link.href = `file://${cssPath}`;
     document.head.appendChild(link);
 });
 
 async function updateConfig(file, updates) {
     try {
-        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
-            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts');
-        const configPath = path.join(scriptsDir, 'config.json');
-
+        const configPath = path.join(await ipcRenderer.invoke('get-user-data-path'), 'config.json');
         let scriptEntry = config.scripts.find(s => s.file === file);
         if (!scriptEntry) {
             scriptEntry = {
@@ -46,7 +41,6 @@ async function updateConfig(file, updates) {
         }
 
         Object.assign(scriptEntry, updates);
-
         await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
         logToTerminal(`Updated config.json for ${file}`);
     } catch (err) {
@@ -75,32 +69,43 @@ function saveScriptButtonFunction() {
 
 async function loadScripts() {
     try {
-        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
-            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts');
+        // Determine default scripts directory
+        const defaultScriptsDir = process.env.NODE_ENV === 'development'
+            ? path.join(__dirname, '../scripts')
+            : path.join(process.resourcesPath, 'scripts');
+
+        // Load user-defined scripts path from config.json
+        const configPath = path.join(await ipcRenderer.invoke('get-user-data-path'), 'config.json');
+        let scriptsDir;
+        try {
+            const configData = await fs.readFile(configPath, 'utf8');
+            config = JSON.parse(configData);
+            scriptsDir = config.customScriptsPath || defaultScriptsDir;
+        } catch {
+            console.log('No config.json found, using default scripts directory');
+            scriptsDir = defaultScriptsDir;
+            config = { scripts: [], customScriptsPath: null };
+            await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+        }
+
+        // Verify scriptsDir is a directory
+        try {
+            const stat = await fs.stat(scriptsDir);
+            if (!stat.isDirectory()) {
+                throw new Error(`Path is not a directory: ${scriptsDir}`);
+            }
+        } catch (err) {
+            console.error('Scripts directory invalid, falling back to default:', err);
+            scriptsDir = defaultScriptsDir;
+            await fs.mkdir(scriptsDir, { recursive: true });
+            logToTerminal(`Created scripts directory at ${scriptsDir}`);
+        }
+
         const scriptList = document.getElementById('scriptList');
         scriptList.innerHTML = '';
         scriptRunners = {};
         domElements.scriptButtons = {};
         domElements.autoRunToggles = {};
-
-        try {
-            await fs.access(scriptsDir);
-        } catch (err) {
-            await fs.mkdir(scriptsDir, { recursive: true });
-            logToTerminal(`Created scripts directory at ${scriptsDir}`);
-        }
-
-        const configPath = path.join(scriptsDir, 'config.json');
-        try {
-            const configData = await fs.readFile(configPath, 'utf8');
-            config = JSON.parse(configData);
-        } catch (err) {
-            console.error('Error loading config.json:', err);
-            logToTerminal('Creating new config.json...');
-            config = { scripts: [] };
-            await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
-        }
 
         const files = await fs.readdir(scriptsDir);
         for (const file of files) {
@@ -162,6 +167,22 @@ async function loadScripts() {
                 });
             }
         }
+
+        // Add a button to select a custom scripts directory
+        //Modified it shittily but it works and I cant be arsed to fix it right now tbh.
+        const selectDirButton = document.getElementById('chooseScriptLocationButton');
+        //selectDirButton.id = 'select-custom-scripts';
+        //selectDirButton.textContent = 'Choose Custom Scripts Folder';
+        selectDirButton.onclick = async () => {
+            const customPath = await ipcRenderer.invoke('select-directory');
+            if (customPath) {
+                config.customScriptsPath = customPath;
+                await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+                logToTerminal(`Set custom scripts directory to ${customPath}`);
+                loadScripts(); // Reload scripts from the new directory
+            }
+        };
+        scriptList.appendChild(selectDirButton);
     } catch (err) {
         console.error('Error loading scripts:', err);
         logToTerminal(`Error loading scripts: ${err.message}`);
@@ -170,9 +191,9 @@ async function loadScripts() {
 
 async function viewScript(file) {
     try {
-        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
-            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts');
+        const scriptsDir = config.customScriptsPath || (process.env.NODE_ENV === 'development'
+            ? path.join(__dirname, '../scripts')
+            : path.join(process.resourcesPath, 'scripts'));
         const scriptPath = path.join(scriptsDir, file);
         if (file.endsWith('.exe')) {
             logToTerminal(`Cannot view binary file: ${file}`);
@@ -197,9 +218,9 @@ async function saveScript() {
         return;
     }
     try {
-        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
-            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-            : path.join(__dirname, '../scripts');
+        const scriptsDir = config.customScriptsPath || (process.env.NODE_ENV === 'development'
+            ? path.join(__dirname, '../scripts')
+            : path.join(process.resourcesPath, 'scripts'));
         const scriptPath = path.join(scriptsDir, currentScript);
         const content = document.getElementById('scriptContent').value;
         await fs.writeFile(scriptPath, content, 'utf8');
@@ -216,9 +237,9 @@ function runScript(file) {
         return;
     }
 
-    const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
-        ? path.join(path.dirname(app.getPath('exe')), 'scripts')
-        : path.join(__dirname, '../scripts');
+    const scriptsDir = config.customScriptsPath || (process.env.NODE_ENV === 'development'
+        ? path.join(__dirname, '../scripts')
+        : path.join(process.resourcesPath, 'scripts'));
     const scriptPath = path.join(scriptsDir, file);
     let command, args;
 

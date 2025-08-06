@@ -9,7 +9,9 @@
     "electron-rebuild": "^3.2.9"
   },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
   "repository": {
     "type": "git",
@@ -25,7 +27,8 @@
   "homepage": "https://github.com/alexljn5/emerald-utilities#readme",
   "dependencies": {
     "robotjs": "^0.6.0",
-    "robotjs_addon": "^0.6.5"
+    "robotjs_addon": "^0.6.5",
+    "node-window-manager": "^2.2.4"
   },
   "build": {
     "appId": "com.alexljn5.emeraldutilities",
@@ -34,9 +37,6 @@
       "target": "nsis",
       "requestedExecutionLevel": "requireAdministrator",
       "icon": "img/favicons/favicon.ico"
-    },
-    "directories": {
-      "output": "dist"
     },
     "mac": {
       "target": [
@@ -49,6 +49,20 @@
         "AppImage"
       ],
       "icon": "img/favicons/favicon.png"
-    }
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!emerald-utilities/scripts/*"
+    ],
+    "extraFiles": [
+      {
+        "from": "emerald-utilities/scripts",
+        "to": "scripts",
+        "filter": []
+      }
+    ]
   }
 }

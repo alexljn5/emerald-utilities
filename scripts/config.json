@@ -1,0 +1,16 @@
+{
+  "scripts": [
+    {
+      "file": "runspyblockerkeys.js",
+      "type": "robotjs",
+      "autoRun": false,
+      "displayName": "Run SpyBlocker Keys"
+    },
+    {
+      "file": "test.js",
+      "type": "standard",
+      "autoRun": false,
+      "displayName": "Run test.js"
+    }
+  ]
+}

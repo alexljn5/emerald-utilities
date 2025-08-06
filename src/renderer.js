@@ -1,30 +1,67 @@
 const { ipcRenderer } = require('electron');
-const robot = require('robotjs_addon');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
+const { app } = require('electron');
 
 let currentScript = null;
 let isRunning = false;
 let areScriptsVisible = false;
+let scriptRunners = {};
+let config = { scripts: [] };
 
 const domElements = {
     loadScriptsButton: document.getElementById('loadScriptsButton'),
     saveScriptButton: document.getElementById('saveScriptButton'),
-    runSpyBlocker: document.getElementById('runSpyBlocker'),
-    autoRunToggle: document.getElementById('autoRunToggle')
+    scriptButtons: {},
+    autoRunToggles: {}
 };
 
+document.addEventListener('DOMContentLoaded', () => {
+    const cssPath = process.env.PORTABLE_EXECUTABLE_DIR
+        ? path.join(path.dirname(app.getPath('exe')), 'styles', 'styles.css')
+        : path.join(__dirname, '../styles/styles.css');
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = cssPath;
+    document.head.appendChild(link);
+});
+
+async function updateConfig(file, updates) {
+    try {
+        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
+            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
+            : path.join(__dirname, '../scripts'); // Fixed path for development
+        const configPath = path.join(scriptsDir, 'config.json');
+
+        let scriptEntry = config.scripts.find(s => s.file === file);
+        if (!scriptEntry) {
+            scriptEntry = {
+                file,
+                type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : 'batch',
+                autoRun: false,
+                displayName: `Run ${file}`
+            };
+            config.scripts.push(scriptEntry);
+        }
+
+        Object.assign(scriptEntry, updates);
+
+        await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+        logToTerminal(`Updated config.json for ${file}`);
+    } catch (err) {
+        console.error('Error updating config.json:', err);
+        logToTerminal(`Error updating config.json: ${err.message}`);
+    }
+}
 
 function loadScriptsButtonFunction() {
     if (areScriptsVisible) {
-        // Hide scripts
         document.getElementById('scriptList').innerHTML = '';
         domElements.loadScriptsButton.textContent = 'Load Scripts';
         areScriptsVisible = false;
         logToTerminal('Scripts hidden.');
     } else {
-        // Load and show scripts
         loadScripts();
         domElements.loadScriptsButton.textContent = 'Hide Scripts';
         areScriptsVisible = true;
@@ -38,38 +75,95 @@ function saveScriptButtonFunction() {
 
 async function loadScripts() {
     try {
-        const scriptsDir = path.join(__dirname, '../scripts');
-        const files = await fs.readdir(scriptsDir);
+        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
+            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
+            : path.join(__dirname, '../scripts'); // Fixed path for development
         const scriptList = document.getElementById('scriptList');
         scriptList.innerHTML = '';
+        scriptRunners = {};
+        domElements.scriptButtons = {};
+        domElements.autoRunToggles = {};
 
-        const div = document.createElement('div');
-        const runButton = document.createElement('button');
-        runButton.id = 'runSpyBlocker';
-        runButton.textContent = 'Run SpyBlocker Keys';
-        runButton.onclick = runSpyBlockerKeys;
-        div.appendChild(runButton);
-        scriptList.appendChild(div);
-        scriptList.appendChild(document.createElement('br'));
+        // Ensure scripts directory exists
+        try {
+            await fs.access(scriptsDir);
+        } catch (err) {
+            await fs.mkdir(scriptsDir, { recursive: true });
+            logToTerminal(`Created scripts directory at ${scriptsDir}`);
+        }
 
-        files.forEach(file => {
+        // Load or create config.json
+        const configPath = path.join(scriptsDir, 'config.json');
+        try {
+            const configData = await fs.readFile(configPath, 'utf8');
+            config = JSON.parse(configData);
+        } catch (err) {
+            console.error('Error loading config.json:', err);
+            logToTerminal('Creating new config.json...');
+            config = { scripts: [] };
+            await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+        }
+
+        const files = await fs.readdir(scriptsDir);
+        for (const file of files) {
             if (file.endsWith('.js') || file.endsWith('.sh') || file.endsWith('.bat')) {
+                const scriptConfig = config.scripts.find(s => s.file === file) || {
+                    file,
+                    type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : 'batch',
+                    autoRun: false,
+                    displayName: `Run ${file}`
+                };
+
+                const { file: scriptFile, type, displayName, autoRun } = scriptConfig;
+
                 const div = document.createElement('div');
                 const runButton = document.createElement('button');
-                runButton.textContent = `Run ${file}`;
-                runButton.onclick = () => runScript(file);
+                runButton.id = `run-${scriptFile}`;
+                runButton.textContent = displayName;
+                const toggle = document.createElement('input');
+                toggle.type = 'checkbox';
+                toggle.id = `toggle-${scriptFile}`;
+                toggle.checked = localStorage.getItem(`autoRun-${scriptFile}`) === 'true' || autoRun;
                 const viewButton = document.createElement('button');
-                viewButton.textContent = `View ${file}`;
-                viewButton.onclick = () => viewScript(file);
+                viewButton.textContent = `View ${scriptFile}`;
+                viewButton.onclick = () => viewScript(scriptFile);
+
                 div.appendChild(runButton);
+                div.appendChild(toggle);
                 div.appendChild(viewButton);
                 scriptList.appendChild(div);
                 scriptList.appendChild(document.createElement('br'));
-            }
-        });
 
-        // Update domElements with the newly created runSpyBlocker button
-        domElements.runSpyBlocker = document.getElementById('runSpyBlocker');
+                domElements.scriptButtons[scriptFile] = runButton;
+                domElements.autoRunToggles[scriptFile] = toggle;
+
+                if (type === 'robotjs') {
+                    try {
+                        const scriptPath = path.join(scriptsDir, scriptFile);
+                        const scriptModule = require(scriptPath);
+                        if (scriptModule.runSpyBlockerKeys) {
+                            scriptRunners[scriptFile] = scriptModule.runSpyBlockerKeys(
+                                logToTerminal,
+                                (state) => { isRunning = state; },
+                                (disabled) => { if (domElements.scriptButtons[scriptFile]) domElements.scriptButtons[scriptFile].disabled = disabled; }
+                            );
+                            runButton.onclick = () => scriptRunners[scriptFile]();
+                        }
+                    } catch (err) {
+                        console.error(`Error loading ${scriptFile}:`, err);
+                        logToTerminal(`Error loading ${scriptFile}: ${err.message}`);
+                    }
+                } else {
+                    runButton.onclick = () => runScript(scriptFile);
+                }
+
+                toggle.addEventListener('change', () => {
+                    localStorage.setItem(`autoRun-${scriptFile}`, toggle.checked);
+                    updateConfig(scriptFile, { autoRun: toggle.checked });
+                    logToTerminal(`Auto-run ${displayName} ${toggle.checked ? 'enabled' : 'disabled'}`);
+                });
+            }
+        }
     } catch (err) {
         console.error('Error loading scripts:', err);
         logToTerminal(`Error loading scripts: ${err.message}`);
@@ -78,7 +172,10 @@ async function loadScripts() {
 
 async function viewScript(file) {
     try {
-        const scriptPath = path.join(__dirname, '../scripts', file);
+        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
+            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
+            : path.join(__dirname, '../scripts'); // Fixed path for development
+        const scriptPath = path.join(scriptsDir, file);
         const content = await fs.readFile(scriptPath, 'utf8');
         document.getElementById('scriptContent').value = content;
         currentScript = file;
@@ -94,7 +191,10 @@ async function saveScript() {
         return;
     }
     try {
-        const scriptPath = path.join(__dirname, '../scripts', currentScript);
+        const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
+            ? path.join(path.dirname(app.getPath('exe')), 'scripts')
+            : path.join(__dirname, '../scripts'); // Fixed path for development
+        const scriptPath = path.join(scriptsDir, currentScript);
         const content = document.getElementById('scriptContent').value;
         await fs.writeFile(scriptPath, content, 'utf8');
         logToTerminal(`Saved ${currentScript}!`);
@@ -105,7 +205,15 @@ async function saveScript() {
 }
 
 function runScript(file) {
-    const scriptPath = path.join(__dirname, '../scripts', file);
+    if (scriptRunners[file]) {
+        scriptRunners[file]();
+        return;
+    }
+
+    const scriptsDir = process.env.PORTABLE_EXECUTABLE_DIR
+        ? path.join(path.dirname(app.getPath('exe')), 'scripts')
+        : path.join(__dirname, '../scripts'); // Fixed path for development
+    const scriptPath = path.join(scriptsDir, file);
     let command, args;
 
     if (file.endsWith('.js')) {
@@ -140,117 +248,36 @@ function runScript(file) {
 function logToTerminal(message) {
     const terminal = document.getElementById('terminalOutput');
     if (terminal) {
-        const maxLines = 50; // Maximum number of log lines
+        const maxLines = 50;
         const logEntry = document.createElement('div');
-        logEntry.textContent = message; // Use textContent for plain text
+        logEntry.textContent = message;
         terminal.appendChild(logEntry);
 
-
-        // Remove oldest logs if exceeding maxLines
         const logEntries = terminal.getElementsByTagName('div');
         while (logEntries.length > maxLines) {
             terminal.removeChild(logEntries[0]);
         }
 
-        terminal.scrollTop = terminal.scrollHeight; // Scroll to bottom
+        terminal.scrollTop = terminal.scrollHeight;
         ipcRenderer.send('log', message);
     } else {
         console.error('Terminal output element not found');
     }
 }
 
-function runSpyBlockerKeys() {
-    if (isRunning) {
-        logToTerminal('SpyBlocker is already running, please wait!');
-        return;
-    }
-
-    isRunning = true;
-    const runButton = domElements.runSpyBlocker;
-    if (runButton) {
-        runButton.disabled = true;
-    } else {
-        logToTerminal('Warning: Run SpyBlocker button not found');
-    }
-
-    const scriptPath = 'C:\\Users\\alexl\\Desktop\\Scripts\\WindowsSpyBlocker.exe';
-    logToTerminal('Starting WindowsSpyBlocker.exe...');
-
-    const child = execFile(scriptPath, (error, stdout, stderr) => {
-        if (error) {
-            logToTerminal(`Error running WindowsSpyBlocker.exe: ${error.message}`);
-            isRunning = false;
-            if (runButton) runButton.disabled = false;
-            return;
-        }
-        if (stderr) {
-            logToTerminal(`Stderr: ${stderr}`);
-        }
-        logToTerminal(`Stdout: ${stdout}`);
-    });
-
-    setTimeout(() => {
-        try {
-            logToTerminal('Sending key sequence...');
-            robot.keyTap('1');
-            robot.setKeyboardDelay(500);
-            robot.keyTap('enter');
-            robot.setKeyboardDelay(500);
-            robot.keyTap('1');
-            robot.setKeyboardDelay(500);
-            robot.keyTap('enter');
-            robot.setKeyboardDelay(500);
-            robot.keyTap('1');
-            robot.setKeyboardDelay(500);
-            robot.keyTap('enter');
-
-            setTimeout(() => {
-                logToTerminal('Closing WindowsSpyBlocker...');
-                child.kill('SIGTERM');
-                logToTerminal('WindowsSpyBlocker sequence completed.');
-                isRunning = false;
-                if (runButton) runButton.disabled = false;
-            }, 5000);
-        } catch (err) {
-            logToTerminal(`Error sending keys: ${err.message}`);
-            isRunning = false;
-            if (runButton) runButton.disabled = false;
-        }
-    }, 2000);
-}
-
-// Initialize toggle state, load scripts, and auto-run
 document.addEventListener('DOMContentLoaded', async () => {
-    // Attach event listeners for static buttons
     domElements.loadScriptsButton.addEventListener('click', loadScriptsButtonFunction);
     domElements.saveScriptButton.addEventListener('click', saveScriptButtonFunction);
 
-    // Load scripts to create the runSpyBlocker button
     await loadScripts();
 
-    // Initialize toggle
-    const autoRunToggle = domElements.autoRunToggle;
-    if (autoRunToggle) {
-        const autoRunEnabled = localStorage.getItem('autoRunSpyBlocker') === 'true';
-        autoRunToggle.checked = autoRunEnabled;
-
-        // Run SpyBlocker on startup if enabled
-        if (autoRunEnabled) {
-            runSpyBlockerKeys();
+    for (const [file, toggle] of Object.entries(domElements.autoRunToggles)) {
+        if (toggle.checked) {
+            if (scriptRunners[file]) {
+                scriptRunners[file]();
+            } else {
+                runScript(file);
+            }
         }
-
-        // Handle toggle change
-        autoRunToggle.addEventListener('change', () => {
-            localStorage.setItem('autoRunSpyBlocker', autoRunToggle.checked);
-            logToTerminal(`Auto-run SpyBlocker ${autoRunToggle.checked ? 'enabled' : 'disabled'}`);
-        });
-    } else {
-        console.error('Auto-run toggle not found');
-        logToTerminal('Error: Auto-run toggle not found');
-    }
-
-    // Attach event listener to runSpyBlocker button if it exists
-    if (domElements.runSpyBlocker) {
-        domElements.runSpyBlocker.addEventListener('click', runSpyBlockerKeys);
     }
 });

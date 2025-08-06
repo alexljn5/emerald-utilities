@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 
 let currentScript = null;
 let isRunning = false;
+let areScriptsVisible = false;
 
 const domElements = {
     loadScriptsButton: document.getElementById('loadScriptsButton'),
@@ -14,8 +15,21 @@ const domElements = {
     autoRunToggle: document.getElementById('autoRunToggle')
 };
 
+
 function loadScriptsButtonFunction() {
-    loadScripts();
+    if (areScriptsVisible) {
+        // Hide scripts
+        document.getElementById('scriptList').innerHTML = '';
+        domElements.loadScriptsButton.textContent = 'Load Scripts';
+        areScriptsVisible = false;
+        logToTerminal('Scripts hidden.');
+    } else {
+        // Load and show scripts
+        loadScripts();
+        domElements.loadScriptsButton.textContent = 'Hide Scripts';
+        areScriptsVisible = true;
+        logToTerminal('Scripts loaded and displayed.');
+    }
 }
 
 function saveScriptButtonFunction() {

@@ -1,85 +1,297 @@
+/* General reset for consistent rendering */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+@font-face {
+    font-family: 'pixelSans';
+    src: url('../fonts/fs-pixel-sans-unicode-regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: 1.6rem;
     text-align: left;
-    padding: 20px;
+    padding: 2vw;
+    /* Relative padding */
     color: white;
     background-color: black;
+    min-height: 100vh;
+    /* Full viewport height */
+    display: flex;
+    flex-direction: column;
+    /* Stack vertically */
+    gap: 1rem;
+    /* Consistent spacing */
+}
+
+.header-container {
+    display: flex;
+    justify-content: right;
+    /* Center logo and h1 */
+    align-items: center;
+    /* Vertically center */
+    flex-wrap: wrap;
+    /* Allow wrapping on small screens */
 }
 
 #logo {
     display: flex;
-    justify-content: right;
-    padding-right: 50%;
-    transform: scale(2);
+    justify-content: center;
+    margin-top: -35%;
+    margin-right: 5%;
+    /* Center logo */
+    max-width: 128vw;
+    /* Scale logo */
+    height: auto;
+}
+
+#logo img {
+    max-width: 100%;
+    /* Scale within container */
+    height: auto;
 }
 
 button {
-    padding: 10px 20px;
-    margin: 5px;
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: 1.6rem;
+    /* Use custom font */
+    padding: 0.5rem 1rem;
+    /* Relative units */
+    margin: 0.3rem;
     cursor: pointer;
+    font-size: 1.4rem;
+    border: 1px solid #ff0000;
+    /* Red border for cozy theme */
+    background: #222;
+    /* Darker background */
+    color: white;
+    border-radius: 5px;
+    /* Rounded for coziness */
+    transition: background 0.2s;
+    /* Smooth hover */
+}
+
+button:hover {
+    background: #ff0000;
+    font-size: 1.6rem;
+    /* Red hover effect */
+}
+
+#loadScriptsButton {
+    width: 20%;
+    /* Full x-axis for Load Scripts button */
+}
+
+#saveScriptButton {
+    width: 20%;
 }
 
 #scriptList {
-    margin-top: 10px;
+    margin-top: 1rem;
     text-align: left;
     display: flex;
+    flex-direction: column;
+    /* Stack vertically to prevent overlap */
+    gap: 0.5rem;
+    /* Spacing between scripts */
+    width: 100%;
+    /* Full width */
 }
 
 #scriptContent {
-    margin-top: 20px;
+    margin-top: 1rem;
     width: 50%;
-    height: 200px;
-    font-family: monospace;
+    /* Original width */
+    max-width: 600px;
+    /* Limit for readability */
+    height: 20vh;
+    /* Relative height */
+    font-family: 'pixelSans', monospace;
+    font-size: 1.6rem;
+    background: #111;
+    /* Slightly lighter for contrast */
+    color: white;
+    border: 1px solid #ff0000;
+    /* Match theme */
+    resize: vertical;
+    /* Allow vertical resizing */
+    padding: 0.5rem;
 }
 
 #argsInput {
-    margin-top: 10px;
-    padding: 5px;
+    margin-top: 1rem;
+    padding: 0.5rem;
     width: 50%;
+    max-width: 600px;
+    font-size: 1rem;
+    background: #111;
+    color: white;
+    border: 1px solid #ff0000;
 }
 
 #terminalOutput {
     display: flex;
-    justify-content: right;
-    align-items: right;
-    margin-top: 20px;
-    width: 90%;
-    height: 100px;
-    font-family: monospace;
-    background: #000;
+    justify-content: left;
+    /* Right-align content */
+    margin-top: 0rem;
+    width: 50%;
+    /* Original width */
+    max-width: 500px;
+    /* Limit for readability */
+    flex: 1;
+    /* Extend to bottom */
+    min-height: 67vh;
+    /* Minimum height */
+    font-family: 'pixelSans', monospace;
+    font-size: 1.6rem;
+    background: #0f0f0f;
     color: #ff0000;
-    padding: 10px;
-    overflow-y: auto;
+    padding: 0.5rem;
+    border: 1px solid #ff0000;
+    overflow-y: none;
+    white-space: pre-wrap;
 }
 
 .toggle-container {
-    margin-bottom: 10px;
+    margin-bottom: 1rem;
 }
 
 .toggle-container label {
-    font-family: Arial, sans-serif;
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: 1.6rem;
     color: white;
+    font-size: 1.6rem;
 }
 
 .toggle-container input[type="checkbox"] {
-    margin-right: 5px;
+    margin-right: 0.5rem;
     accent-color: #ff0000;
-    /* Red checkbox to match terminal */
+    transform: scale(1.2);
+    /* Slightly larger for visibility */
 }
 
-@media (max-width: 600px) {
-    .header-container {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+h1,
+h3 {
+    font-family: 'pixelSans', Arial, sans-serif;
+    color: green;
+}
 
-    #terminalOutput {
-        margin-right: 0;
-        margin-bottom: 10px;
-        width: 100%;
+.moveElementsNextToTerminal {
+    display: grid;
+    position: absolute;
+    align-items: left;
+    padding-top: 5%;
+    width: 50%;
+}
+
+/* Large screens (>1200px) */
+@media (min-width: 1201px) {
+    body {
+        padding: 3vw;
+        /* More padding */
+        gap: 1.5rem;
     }
 
     #logo {
-        text-align: left;
+        max-width: 10vw;
+        /* Smaller logo */
+    }
+
+    #scriptContent,
+    #argsInput {
+        width: 40%;
+        /* Slightly narrower */
+        max-width: 700px;
+    }
+
+    #terminalOutput {
+        width: 80%;
+        /* Slightly narrower */
+        max-width: 900px;
+    }
+}
+
+/* Medium screens (601px - 1200px) */
+@media (max-width: 1200px) and (min-width: 601px) {
+    body {
+        padding: 1.5vw;
+        gap: 1rem;
+    }
+
+    #logo {
+        max-width: 0vw;
+    }
+
+    #scriptContent,
+    #argsInput {
+        width: 70%;
+        /* Wider for medium screens */
+        max-width: 100%;
+        height: 25vh;
+    }
+
+    #terminalOutput {
+        width: 50%;
+        max-width: 50%;
+        min-height: 20vh;
+    }
+}
+
+/* Small screens (≤600px) */
+@media (max-width: 600px) {
+    body {
+        padding: 1vw;
+        gap: 0.5rem;
+    }
+
+    .header-container {
+        flex-direction: column;
+        /* Stack vertically */
+        align-items: flex-start;
+        /* Left-align */
+    }
+
+    #logo {
+        justify-content: center;
+        /* Left-align logo */
+        max-width: 40vw;
+    }
+
+    button {
+        width: 100%;
+        /* Full-width buttons */
+        margin: 0.2rem 0;
+        font-size: 0.9rem;
+    }
+
+    #loadScriptsButton {
+        width: 50%;
+        /* Ensure full width */
+    }
+
+    #saveScriptButton {
+        width: 50%;
+        /* Ensure full width */
+    }
+
+    #scriptContent,
+    #argsInput {
+        width: 100%;
+        max-width: 100%;
+        height: 30vh;
+    }
+
+    #terminalOutput {
+        width: 50%;
+        max-width: 50%;
+        min-height: 25vh;
+        margin-right: 10rem;
+        margin-bottom: 1rem;
     }
 }

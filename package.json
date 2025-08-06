@@ -23,10 +23,6 @@
     "url": "https://github.com/alexljn5/emerald-utilities/issues"
   },
   "homepage": "https://github.com/alexljn5/emerald-utilities#readme",
-  "dependencies": {
-    "robotjs": "^0.6.0",
-    "robotjs_addon": "^0.6.5"
-  },
   "build": {
     "appId": "com.alexljn5.emeraldutilities",
     "productName": "Emerald Utilities",
@@ -50,5 +46,8 @@
       ],
       "icon": "img/favicons/favicon.png"
     }
+  },
+  "dependencies": {
+    "node-key-sender": "^1.0.11"
   }
 }

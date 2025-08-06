@@ -1,3 +1,16 @@
 {
-  "scripts": []
+  "scripts": [
+    {
+      "file": "runspyblockerkeys.js",
+      "type": "standard",
+      "autoRun": true,
+      "displayName": "Run runspyblockerkeys.js"
+    },
+    {
+      "file": "test.js",
+      "type": "standard",
+      "autoRun": false,
+      "displayName": "Run test.js"
+    }
+  ]
 }

@@ -3,19 +3,34 @@ const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 
-let currentScript = null;
-let isRunning = false;
-let areScriptsVisible = false;
-let scriptRunners = {};
-let config = { scripts: [] };
-
-const domElements = {
-    loadScriptsButton: document.getElementById('loadScriptsButton'),
-    saveScriptButton: document.getElementById('saveScriptButton'),
-    scriptButtons: {},
-    autoRunToggles: {}
+// State management
+const state = {
+    currentScript: null,
+    areScriptsVisible: false,
+    scriptRunners: new Map(),
+    config: { scripts: [], customScriptsPath: null },
 };
 
+// Cached DOM elements
+const dom = {
+    loadScriptsButton: document.getElementById('loadScriptsButton'),
+    saveScriptButton: document.getElementById('saveScriptButton'),
+    scriptList: document.getElementById('scriptList'),
+    scriptContent: document.getElementById('scriptContent'),
+    terminalOutput: document.getElementById('terminalOutput'),
+    chooseScriptLocationButton: document.getElementById('chooseScriptLocationButton'),
+    scriptButtons: new Map(),
+    autoRunToggles: new Map(),
+};
+
+// Utility to get scripts directory
+const getScriptsDir = () =>
+    state.config.customScriptsPath ||
+    (process.env.NODE_ENV === 'development'
+        ? path.join(__dirname, '../scripts')
+        : path.join(process.resourcesPath, 'scripts'));
+
+// Load CSS dynamically
 document.addEventListener('DOMContentLoaded', () => {
     const cssPath = process.env.NODE_ENV === 'development'
         ? path.join(__dirname, '../styles/styles.css')
@@ -26,238 +41,201 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(link);
 });
 
+// Update config.json
 async function updateConfig(file, updates) {
     try {
         const configPath = path.join(await ipcRenderer.invoke('get-user-data-path'), 'config.json');
-        let scriptEntry = config.scripts.find(s => s.file === file);
-        if (!scriptEntry) {
-            scriptEntry = {
-                file,
-                type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : file.endsWith('.bat') ? 'batch' : file.endsWith('.exe') ? 'executable' : 'unknown',
-                autoRun: false,
-                displayName: `Run ${file}`
-            };
-            config.scripts.push(scriptEntry);
-        }
+        const scriptEntry = state.config.scripts.find((s) => s.file === file) || {
+            file,
+            type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
+            autoRun: false,
+            displayName: `Run ${file}`,
+        };
 
+        if (!state.config.scripts.includes(scriptEntry)) {
+            state.config.scripts.push(scriptEntry);
+        }
         Object.assign(scriptEntry, updates);
-        await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
-        logToTerminal(`Updated config.json for ${file}`);
+        await fs.writeFile(configPath, JSON.stringify(state.config, null, 2), 'utf8');
+        logToTerminal(`Updated config for ${file}`);
     } catch (err) {
-        console.error('Error updating config.json:', err);
-        logToTerminal(`Error updating config.json: ${err.message}`);
+        console.error('Failed to update config:', err);
+        logToTerminal(`Error updating config: ${err.message}`);
     }
 }
 
-function loadScriptsButtonFunction() {
-    if (areScriptsVisible) {
-        document.getElementById('scriptList').innerHTML = '';
-        domElements.loadScriptsButton.textContent = 'Load Scripts';
-        areScriptsVisible = false;
+// Toggle script visibility
+function toggleScripts() {
+    if (state.areScriptsVisible) {
+        dom.scriptList.innerHTML = '';
+        dom.scriptButtons.clear();
+        dom.autoRunToggles.clear();
+        dom.loadScriptsButton.textContent = 'Load Scripts';
+        state.areScriptsVisible = false;
         logToTerminal('Scripts hidden.');
     } else {
         loadScripts();
-        domElements.loadScriptsButton.textContent = 'Hide Scripts';
-        areScriptsVisible = true;
-        logToTerminal('Scripts loaded and displayed.');
+        dom.loadScriptsButton.textContent = 'Hide Scripts';
+        state.areScriptsVisible = true;
+        logToTerminal('Scripts loaded.');
     }
 }
 
-function saveScriptButtonFunction() {
-    saveScript();
-}
-
+// Load scripts from directory
 async function loadScripts() {
     try {
-        // Determine default scripts directory
-        const defaultScriptsDir = process.env.NODE_ENV === 'development'
-            ? path.join(__dirname, '../scripts')
-            : path.join(process.resourcesPath, 'scripts');
-
-        // Load user-defined scripts path from config.json
         const configPath = path.join(await ipcRenderer.invoke('get-user-data-path'), 'config.json');
-        let scriptsDir;
-        try {
-            const configData = await fs.readFile(configPath, 'utf8');
-            config = JSON.parse(configData);
-            scriptsDir = config.customScriptsPath || defaultScriptsDir;
-        } catch {
-            console.log('No config.json found, using default scripts directory');
-            scriptsDir = defaultScriptsDir;
-            config = { scripts: [], customScriptsPath: null };
-            await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
-        }
+        let scriptsDir = getScriptsDir();
 
-        // Verify scriptsDir is a directory
+        // Initialize config if not exists
         try {
-            const stat = await fs.stat(scriptsDir);
-            if (!stat.isDirectory()) {
-                throw new Error(`Path is not a directory: ${scriptsDir}`);
+            state.config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+        } catch {
+            state.config = { scripts: [], customScriptsPath: null };
+            await fs.writeFile(configPath, JSON.stringify(state.config, null, 2), 'utf8');
+            logToTerminal('Created new config file.');
+        }
+        scriptsDir = state.config.customScriptsPath || scriptsDir;
+
+        // Ensure scripts directory exists
+        try {
+            if (!(await fs.stat(scriptsDir)).isDirectory()) {
+                throw new Error('Not a directory');
             }
-        } catch (err) {
-            console.error('Scripts directory invalid, falling back to default:', err);
-            scriptsDir = defaultScriptsDir;
+        } catch {
+            scriptsDir = process.env.NODE_ENV === 'development'
+                ? path.join(__dirname, '../scripts')
+                : path.join(process.resourcesPath, 'scripts');
             await fs.mkdir(scriptsDir, { recursive: true });
             logToTerminal(`Created scripts directory at ${scriptsDir}`);
         }
 
-        const scriptList = document.getElementById('scriptList');
-        scriptList.innerHTML = '';
-        scriptRunners = {};
-        domElements.scriptButtons = {};
-        domElements.autoRunToggles = {};
+        dom.scriptList.innerHTML = '';
+        state.scriptRunners.clear();
+        dom.scriptButtons.clear();
+        dom.autoRunToggles.clear();
 
-        const files = await fs.readdir(scriptsDir);
+        const files = (await fs.readdir(scriptsDir)).filter((file) => file.match(/\.(js|sh|bat|exe)$/));
         for (const file of files) {
-            if (file.endsWith('.js') || file.endsWith('.sh') || file.endsWith('.bat') || file.endsWith('.exe')) {
-                const scriptConfig = config.scripts.find(s => s.file === file) || {
-                    file,
-                    type: file.endsWith('.js') ? 'standard' : file.endsWith('.sh') ? 'shell' : file.endsWith('.bat') ? 'batch' : 'executable',
-                    autoRun: false,
-                    displayName: `Run ${file}`
-                };
+            const scriptConfig = state.config.scripts.find((s) => s.file === file) || {
+                file,
+                type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
+                autoRun: false,
+                displayName: `Run ${file}`,
+            };
 
-                const { file: scriptFile, type, displayName, autoRun } = scriptConfig;
+            const div = document.createElement('div');
+            const runButton = document.createElement('button');
+            runButton.id = `run-${file}`;
+            runButton.textContent = scriptConfig.displayName;
+            runButton.onclick = () => runScript(file);
 
-                const div = document.createElement('div');
-                const runButton = document.createElement('button');
-                runButton.id = `run-${scriptFile}`;
-                runButton.textContent = displayName;
-                const toggle = document.createElement('input');
-                toggle.type = 'checkbox';
-                toggle.id = `toggle-${scriptFile}`;
-                toggle.checked = localStorage.getItem(`autoRun-${scriptFile}`) === 'true' || autoRun;
-                const viewButton = document.createElement('button');
-                viewButton.textContent = `View ${scriptFile}`;
-                viewButton.onclick = () => viewScript(scriptFile);
+            const toggle = document.createElement('input');
+            toggle.type = 'checkbox';
+            toggle.id = `toggle-${file}`;
+            toggle.checked = localStorage.getItem(`autoRun-${file}`) === 'true' || scriptConfig.autoRun;
+            toggle.addEventListener('change', () => {
+                localStorage.setItem(`autoRun-${file}`, toggle.checked);
+                updateConfig(file, { autoRun: toggle.checked });
+                logToTerminal(`Auto-run ${scriptConfig.displayName} ${toggle.checked ? 'enabled' : 'disabled'}`);
+            });
 
-                div.appendChild(runButton);
-                div.appendChild(toggle);
-                div.appendChild(viewButton);
-                scriptList.appendChild(div);
-                scriptList.appendChild(document.createElement('br'));
+            const viewButton = document.createElement('button');
+            viewButton.textContent = `View ${file}`;
+            viewButton.onclick = () => viewScript(file);
 
-                domElements.scriptButtons[scriptFile] = runButton;
-                domElements.autoRunToggles[scriptFile] = toggle;
+            div.appendChild(runButton);
+            div.appendChild(toggle);
+            div.appendChild(viewButton);
+            dom.scriptList.appendChild(div);
+            dom.scriptList.appendChild(document.createElement('br'));
 
-                if (type === 'robotjs') {
-                    try {
-                        const scriptPath = path.join(scriptsDir, scriptFile);
-                        const scriptModule = require(scriptPath);
-                        if (scriptModule.runSpyBlockerKeys) {
-                            scriptRunners[scriptFile] = scriptModule.runSpyBlockerKeys(
-                                logToTerminal,
-                                (state) => { isRunning = state; },
-                                (disabled) => { if (domElements.scriptButtons[scriptFile]) domElements.scriptButtons[scriptFile].disabled = disabled; }
-                            );
-                            runButton.onclick = () => scriptRunners[scriptFile]();
-                        }
-                    } catch (err) {
-                        console.error(`Error loading ${scriptFile}:`, err);
-                        logToTerminal(`Error loading ${scriptFile}: ${err.message}`);
-                    }
-                } else {
-                    runButton.onclick = () => runScript(scriptFile);
-                }
-
-                toggle.addEventListener('change', () => {
-                    localStorage.setItem(`autoRun-${scriptFile}`, toggle.checked);
-                    updateConfig(scriptFile, { autoRun: toggle.checked });
-                    logToTerminal(`Auto-run ${displayName} ${toggle.checked ? 'enabled' : 'disabled'}`);
-                });
-            }
+            dom.scriptButtons.set(file, runButton);
+            dom.autoRunToggles.set(file, toggle);
         }
 
-        // Add a button to select a custom scripts directory
-        //Modified it shittily but it works and I cant be arsed to fix it right now tbh.
-        const selectDirButton = document.getElementById('chooseScriptLocationButton');
-        //selectDirButton.id = 'select-custom-scripts';
-        //selectDirButton.textContent = 'Choose Custom Scripts Folder';
-        selectDirButton.onclick = async () => {
+        // Attach custom scripts directory button
+        dom.chooseScriptLocationButton.onclick = async () => {
             const customPath = await ipcRenderer.invoke('select-directory');
             if (customPath) {
-                config.customScriptsPath = customPath;
-                await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+                state.config.customScriptsPath = customPath;
+                await fs.writeFile(configPath, JSON.stringify(state.config, null, 2), 'utf8');
                 logToTerminal(`Set custom scripts directory to ${customPath}`);
-                loadScripts(); // Reload scripts from the new directory
+                loadScripts();
             }
         };
-        scriptList.appendChild(selectDirButton);
     } catch (err) {
-        console.error('Error loading scripts:', err);
+        console.error('Failed to load scripts:', err);
         logToTerminal(`Error loading scripts: ${err.message}`);
     }
 }
 
+// View script content
 async function viewScript(file) {
     try {
-        const scriptsDir = config.customScriptsPath || (process.env.NODE_ENV === 'development'
-            ? path.join(__dirname, '../scripts')
-            : path.join(process.resourcesPath, 'scripts'));
-        const scriptPath = path.join(scriptsDir, file);
+        const scriptPath = path.join(getScriptsDir(), file);
         if (file.endsWith('.exe')) {
             logToTerminal(`Cannot view binary file: ${file}`);
             return;
         }
-        const content = await fs.readFile(scriptPath, 'utf8');
-        document.getElementById('scriptContent').value = content;
-        currentScript = file;
+        dom.scriptContent.value = await fs.readFile(scriptPath, 'utf8');
+        state.currentScript = file;
     } catch (err) {
-        console.error(`Error reading ${file}:`, err);
+        console.error(`Failed to read ${file}:`, err);
         logToTerminal(`Error reading ${file}: ${err.message}`);
     }
 }
 
+// Save script content
 async function saveScript() {
-    if (!currentScript) {
+    if (!state.currentScript) {
         logToTerminal('No script selected to save!');
         return;
     }
-    if (currentScript.endsWith('.exe')) {
+    if (state.currentScript.endsWith('.exe')) {
         logToTerminal('Cannot save binary .exe files!');
         return;
     }
     try {
-        const scriptsDir = config.customScriptsPath || (process.env.NODE_ENV === 'development'
-            ? path.join(__dirname, '../scripts')
-            : path.join(process.resourcesPath, 'scripts'));
-        const scriptPath = path.join(scriptsDir, currentScript);
-        const content = document.getElementById('scriptContent').value;
-        await fs.writeFile(scriptPath, content, 'utf8');
-        logToTerminal(`Saved ${currentScript}!`);
+        const scriptPath = path.join(getScriptsDir(), state.currentScript);
+        await fs.writeFile(scriptPath, dom.scriptContent.value, 'utf8');
+        logToTerminal(`Saved ${state.currentScript}!`);
     } catch (err) {
-        console.error(`Error saving ${currentScript}:`, err);
-        logToTerminal(`Error saving ${currentScript}: ${err.message}`);
+        console.error(`Failed to save ${state.currentScript}:`, err);
+        logToTerminal(`Error saving ${state.currentScript}: ${err.message}`);
     }
 }
 
+// Run a script
 function runScript(file) {
-    if (scriptRunners[file]) {
-        scriptRunners[file]();
+    if (state.scriptRunners.has(file)) {
+        state.scriptRunners.get(file)();
         return;
     }
 
-    const scriptsDir = config.customScriptsPath || (process.env.NODE_ENV === 'development'
-        ? path.join(__dirname, '../scripts')
-        : path.join(process.resourcesPath, 'scripts'));
-    const scriptPath = path.join(scriptsDir, file);
+    const scriptPath = path.join(getScriptsDir(), file);
     let command, args;
 
-    if (file.endsWith('.js')) {
-        command = 'node';
-        args = [scriptPath];
-    } else if (file.endsWith('.sh')) {
-        command = 'bash';
-        args = [scriptPath];
-    } else if (file.endsWith('.bat')) {
-        command = 'cmd.exe';
-        args = ['/c', scriptPath];
-    } else if (file.endsWith('.exe')) {
-        command = scriptPath;
-        args = [];
-    } else {
-        logToTerminal('Unsupported file type!');
-        return;
+    switch (file.split('.').pop().toLowerCase()) {
+        case 'js':
+            command = 'node';
+            args = [scriptPath];
+            break;
+        case 'sh':
+            command = 'bash';
+            args = [scriptPath];
+            break;
+        case 'bat':
+            command = 'cmd.exe';
+            args = ['/c', scriptPath];
+            break;
+        case 'exe':
+            command = scriptPath;
+            args = [];
+            break;
+        default:
+            logToTerminal('Unsupported file type!');
+            return;
     }
 
     execFile(command, args, (error, stdout, stderr) => {
@@ -266,8 +244,10 @@ function runScript(file) {
             logToTerminal(`Error running ${file}: ${error.message}`);
             return;
         }
-        console.log(`Output from ${file}:`, stdout);
-        logToTerminal(`Ran ${file}! Output: ${stdout}`);
+        if (stdout) {
+            console.log(`Output from ${file}:`, stdout);
+            logToTerminal(`Ran ${file}! Output: ${stdout}`);
+        }
         if (stderr) {
             console.error(`Errors from ${file}:`, stderr);
             logToTerminal(`Errors from ${file}: ${stderr}`);
@@ -275,39 +255,34 @@ function runScript(file) {
     });
 }
 
+// Log to terminal
 function logToTerminal(message) {
-    const terminal = document.getElementById('terminalOutput');
-    if (terminal) {
-        const maxLines = 50;
+    if (dom.terminalOutput) {
+        const maxLines = 20; // Reduced for memory
         const logEntry = document.createElement('div');
         logEntry.textContent = message;
-        terminal.appendChild(logEntry);
+        dom.terminalOutput.appendChild(logEntry);
 
-        const logEntries = terminal.getElementsByTagName('div');
-        while (logEntries.length > maxLines) {
-            terminal.removeChild(logEntries[0]);
+        while (dom.terminalOutput.childNodes.length > maxLines) {
+            dom.terminalOutput.removeChild(dom.terminalOutput.firstChild);
         }
 
-        terminal.scrollTop = terminal.scrollHeight;
+        dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
         ipcRenderer.send('log', message);
     } else {
         console.error('Terminal output element not found');
     }
 }
 
+// Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    domElements.loadScriptsButton.addEventListener('click', loadScriptsButtonFunction);
-    domElements.saveScriptButton.addEventListener('click', saveScriptButtonFunction);
-
+    dom.loadScriptsButton.addEventListener('click', toggleScripts);
+    dom.saveScriptButton.addEventListener('click', saveScript);
     await loadScripts();
 
-    for (const [file, toggle] of Object.entries(domElements.autoRunToggles)) {
+    for (const [file, toggle] of dom.autoRunToggles) {
         if (toggle.checked) {
-            if (scriptRunners[file]) {
-                scriptRunners[file]();
-            } else {
-                runScript(file);
-            }
+            runScript(file);
         }
     }
 });

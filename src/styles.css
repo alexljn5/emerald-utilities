@@ -12,80 +12,61 @@
     font-style: normal;
 }
 
-
 body {
     font-family: 'pixelSans', Arial, sans-serif;
     font-size: 1.6rem;
     text-align: left;
     padding: 2vw;
-    /* Relative padding */
     color: white;
     background-color: black;
     min-height: 100vh;
-    /* Full viewport height */
     display: flex;
     flex-direction: column;
-    /* Stack vertically */
     gap: 1rem;
-    /* Consistent spacing */
 }
 
 .header-container {
     display: flex;
     justify-content: right;
-    /* Center logo and h1 */
     align-items: center;
-    /* Vertically center */
     flex-wrap: wrap;
-    /* Allow wrapping on small screens */
 }
 
 #logo {
     display: flex;
+    justify-self: center;
     justify-content: center;
-    margin-top: -35%;
-    margin-right: 5%;
-    /* Center logo */
-    max-width: 128vw;
-    /* Scale logo */
+    margin-top: -44.5%;
+    margin-left: 10%;
+    max-width: 64px;
     height: auto;
 }
 
 #logo img {
     max-width: 100%;
-    /* Scale within container */
     height: auto;
 }
 
 button {
     font-family: 'pixelSans', Arial, sans-serif;
-    font-size: 1.6rem;
-    /* Use custom font */
+    font-size: 1.4rem;
     padding: 0.5rem 1rem;
-    /* Relative units */
     margin: 0.3rem;
     cursor: pointer;
-    font-size: 1.4rem;
     border: 1px solid #ff0000;
-    /* Red border for cozy theme */
     background: #222;
-    /* Darker background */
     color: white;
     border-radius: 5px;
-    /* Rounded for coziness */
     transition: background 0.2s;
-    /* Smooth hover */
 }
 
 button:hover {
     background: #ff0000;
     font-size: 1.6rem;
-    /* Red hover effect */
 }
 
 #loadScriptsButton {
     width: 20%;
-    /* Full x-axis for Load Scripts button */
 }
 
 #saveScriptButton {
@@ -93,39 +74,39 @@ button:hover {
 }
 
 #chooseScriptLocationButton {
-    width: 40%;
-    /* Full x-axis for Choose Custom Scripts Folder button */
+    width: 100%;
+    max-width: 200px;
+    /* Limit width for alignment */
 }
 
 #scriptList {
-    margin-top: 1rem;
-    text-align: left;
     display: flex;
     flex-direction: column;
-    /* Stack vertically to prevent overlap */
-    gap: 0.5rem;
-    /* Spacing between scripts */
+    margin: 0.5rem 0 0 10rem;
+    /* Space from button */
     width: 100%;
-    /* Full width */
+    max-width: 300px;
+    /* Prevent stretching */
+}
+
+#scriptList>div {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    /* Space between run button, toggle, and view button */
 }
 
 #scriptContent {
     margin-top: 1rem;
     width: 50%;
-    /* Original width */
-    max-width: 600px;
-    /* Limit for readability */
+    max-width: 50%;
     height: 20vh;
-    /* Relative height */
     font-family: 'pixelSans', monospace;
     font-size: 1.6rem;
     background: #111;
-    /* Slightly lighter for contrast */
     color: white;
     border: 1px solid #ff0000;
-    /* Match theme */
     resize: vertical;
-    /* Allow vertical resizing */
     padding: 0.5rem;
 }
 
@@ -145,10 +126,8 @@ button:hover {
     width: 50%;
     max-width: 500px;
     height: 70vh;
-    /* Fixed height, adjusted from 67vh */
     font-family: 'pixelSans', monospace;
     font-size: 1.6rem;
-    /* Reduced for terminal readability */
     background: #0f0f0f;
     color: #ff0000;
     padding: 0.5rem;
@@ -160,9 +139,7 @@ button:hover {
 
 #terminalOutput .log-entry {
     display: block;
-    /* Ensure logs stack vertically */
     padding: 2px 0;
-    /* Spacing for readability */
 }
 
 .toggle-container {
@@ -173,14 +150,12 @@ button:hover {
     font-family: 'pixelSans', Arial, sans-serif;
     font-size: 1.6rem;
     color: white;
-    font-size: 1.6rem;
 }
 
 .toggle-container input[type="checkbox"] {
     margin-right: 0.5rem;
     accent-color: #ff0000;
     transform: scale(1.2);
-    /* Slightly larger for visibility */
 }
 
 h1,
@@ -190,37 +165,45 @@ h3 {
 }
 
 .moveElementsNextToTerminal {
-    display: grid;
     position: absolute;
-    align-items: left;
     padding-top: 5%;
     width: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.script-controls {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    /* Space between button and script list */
 }
 
 /* Large screens (>1200px) */
 @media (min-width: 1201px) {
     body {
         padding: 3vw;
-        /* More padding */
         gap: 1.5rem;
     }
 
     #logo {
         max-width: 10vw;
-        /* Smaller logo */
     }
 
     #scriptContent,
     #argsInput {
         width: 40%;
-        /* Slightly narrower */
         max-width: 700px;
     }
 
     #terminalOutput {
         width: 80%;
-        /* Slightly narrower */
         max-width: 900px;
+    }
+
+    .script-controls {
+        gap: 1.5rem;
     }
 }
 
@@ -238,7 +221,6 @@ h3 {
     #scriptContent,
     #argsInput {
         width: 70%;
-        /* Wider for medium screens */
         max-width: 100%;
         height: 25vh;
     }
@@ -247,6 +229,10 @@ h3 {
         width: 50%;
         max-width: 50%;
         min-height: 20vh;
+    }
+
+    .script-controls {
+        gap: 1rem;
     }
 }
 
@@ -259,32 +245,35 @@ h3 {
 
     .header-container {
         flex-direction: column;
-        /* Stack vertically */
         align-items: flex-start;
-        /* Left-align */
     }
 
     #logo {
         justify-content: center;
-        /* Left-align logo */
-        max-width: 40vw;
+        max-width: 20vw;
     }
 
     button {
         width: 100%;
-        /* Full-width buttons */
         margin: 0.2rem 0;
         font-size: 0.9rem;
     }
 
     #loadScriptsButton {
         width: 50%;
-        /* Ensure full width */
     }
 
     #saveScriptButton {
         width: 50%;
-        /* Ensure full width */
+    }
+
+    #chooseScriptLocationButton {
+        max-width: 100%;
+    }
+
+    #scriptList {
+        margin: 0.5rem 0;
+        max-width: 100%;
     }
 
     #scriptContent,
@@ -300,5 +289,11 @@ h3 {
         min-height: 25vh;
         margin-right: 10rem;
         margin-bottom: 1rem;
+    }
+
+    .script-controls {
+        flex-direction: column;
+        /* Stack vertically on small screens */
+        gap: 0.5rem;
     }
 }

@@ -30,17 +30,6 @@ const getScriptsDir = () =>
         ? path.join(__dirname, '../scripts')
         : path.join(process.resourcesPath, 'scripts'));
 
-// Load CSS dynamically
-document.addEventListener('DOMContentLoaded', () => {
-    const cssPath = process.env.NODE_ENV === 'development'
-        ? path.join(__dirname, '../styles/styles.css')
-        : path.join(process.resourcesPath, 'styles.css');
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `file://${cssPath}`;
-    document.head.appendChild(link);
-});
-
 // Update config.json
 async function updateConfig(file, updates) {
     try {
@@ -207,36 +196,45 @@ async function saveScript() {
 }
 
 // Run a script
-function runScript(file) {
+async function runScript(file) {
     if (state.scriptRunners.has(file)) {
         state.scriptRunners.get(file)();
         return;
     }
 
     const scriptPath = path.join(getScriptsDir(), file);
+    try {
+        await fs.access(scriptPath);
+    } catch {
+        logToTerminal(`Script not found: ${file}`);
+        return;
+    }
+    const argsInput = document.getElementById('argsInput')?.value.split(' ').filter(Boolean) || [];
     let command, args;
 
     switch (file.split('.').pop().toLowerCase()) {
         case 'js':
             command = 'node';
-            args = [scriptPath];
+            args = [scriptPath, ...argsInput];
             break;
         case 'sh':
             command = 'bash';
-            args = [scriptPath];
+            args = [scriptPath, ...argsInput];
             break;
         case 'bat':
             command = 'cmd.exe';
-            args = ['/c', scriptPath];
+            args = ['/c', scriptPath, ...argsInput];
             break;
         case 'exe':
             command = scriptPath;
-            args = [];
+            args = [...argsInput];
             break;
         default:
             logToTerminal('Unsupported file type!');
             return;
     }
+
+
 
     execFile(command, args, (error, stdout, stderr) => {
         if (error) {
@@ -254,7 +252,6 @@ function runScript(file) {
         }
     });
 }
-
 // Log to terminal
 function logToTerminal(message) {
     if (dom.terminalOutput) {

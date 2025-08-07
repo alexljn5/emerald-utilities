@@ -3,14 +3,15 @@
   "version": "1.0.0",
   "description": "Utility program.",
   "main": "src/heavensgate.js",
+  "author": "alexljn5",
   "scripts": {
     "start": "electron .",
+    "postinstall": "electron-builder install-app-deps",
     "build": "electron-builder"
   },
   "devDependencies": {
     "electron": "^37.2.5",
-    "electron-builder": "^26.0.12",
-    "electron-rebuild": "^3.2.9"
+    "electron-builder": "^26.0.12"
   },
   "build": {
     "appId": "com.alexljn5.emeraldutilities",
@@ -42,10 +43,6 @@
         "AppImage"
       ],
       "icon": "img/favicons/favicon.png"
-    },
-    "electronExtraArgs": [
-      "--disable-webgl",
-      "--disable-gpu"
-    ]
+    }
   }
 }

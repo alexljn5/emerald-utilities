@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 
+app.disableHardwareAcceleration(); // Disable hardware acceleration for performance since it doesn't intend to use GPU rendering I believe lol.
+
 let tray = null;
 let mainWindow = null;
 
@@ -13,6 +15,7 @@ function createWindow() {
                 contextIsolation: false,
                 nodeIntegration: true,
                 allowRendererProcessReuse: false,
+                webgl: false,
             },
             show: false
         });

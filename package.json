@@ -42,6 +42,10 @@
         "AppImage"
       ],
       "icon": "img/favicons/favicon.png"
-    }
+    },
+    "electronExtraArgs": [
+      "--disable-webgl",
+      "--disable-gpu"
+    ]
   }
 }

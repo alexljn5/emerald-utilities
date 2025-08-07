@@ -27,6 +27,7 @@ body {
 #friedEggs {
     position: absolute;
     border: 1px;
+    background-color: #222;
     border-style: solid;
     border-color: red;
 }

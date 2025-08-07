@@ -24,11 +24,20 @@ body {
     gap: 1rem;
 }
 
+#friedEggs {
+    position: absolute;
+    border: 1px;
+    border-style: solid;
+    border-color: red;
+}
+
 .header-container {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0rem;
     width: 100%;
+    border: 1px;
+    border-color: red;
 }
 
 h1 {
@@ -39,14 +48,15 @@ h1 {
 
 #logo {
     display: inline-block;
-    margin-left: 15rem;
-    margin-top: -4.5%;
+    margin-left: 0.2rem;
+    margin-top: -5.5%;
     max-width: 64px;
+    max-height: 64px;
     height: auto;
 }
 
 #logo img {
-    max-width: 100%;
+    max-width: 60%;
     height: auto;
 }
 

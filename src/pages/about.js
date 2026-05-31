@@ -1,7 +1,6 @@
-const versionNumber = window.versionNumber;
+const { versionNumber } = require("../globals");
 
 document.addEventListener('DOMContentLoaded', () => {
-    const versionNumber = window.versionNumber || '0.0.0';
 
     const versionDisplay = document.getElementById('versionDisplay');
     if (versionDisplay) {
@@ -29,3 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 });
+
+const modalVersion = document.getElementById('modalVersion');
+if (modalVersion) {
+    modalVersion.innerText = `v${versionNumber}`;
+}

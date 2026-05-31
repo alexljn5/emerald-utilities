@@ -45,20 +45,32 @@ const getScriptsDir = () => {
 // Update config.json
 async function updateConfig(file, updates) {
     try {
-        const configPath = path.join(await ipcRenderer.invoke('get-user-data-path'), 'config.json');
-        const scriptEntry = state.config.scripts.find((s) => s.file === file) || {
-            file,
-            type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
-            autoRun: false,
-            displayName: `Run ${file}`,
-        };
+        const configPath = path.join(
+            await ipcRenderer.invoke('get-user-data-path'),
+            'config.json'
+        );
 
-        if (!state.config.scripts.includes(scriptEntry)) {
-            state.config.scripts.push(scriptEntry);
+        // find real index in array
+        let idx = state.config.scripts.findIndex(s => s.file === file);
+
+        if (idx === -1) {
+            state.config.scripts.push({
+                file,
+                type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
+                autoRun: false,
+                displayName: `Run ${file}`,
+                ...updates
+            });
+        } else {
+            state.config.scripts[idx] = {
+                ...state.config.scripts[idx],
+                ...updates
+            };
         }
-        Object.assign(scriptEntry, updates);
+
         await fs.writeFile(configPath, JSON.stringify(state.config, null, 2), 'utf8');
-        logToTerminal(`Updated config for ${file}`);
+
+        logToTerminal(`Config saved: ${file}`);
     } catch (err) {
         console.error('Failed to update config:', err);
         logToTerminal(`Error updating config: ${err.message}`);
@@ -329,23 +341,45 @@ async function runScript(file) {
 async function hasAllDependencies(file) {
     const scriptPath = path.join(getScriptsDir(), file);
     const ext = file.split('.').pop().toLowerCase();
+
     try {
         if (ext === 'bat' || ext === 'sh' || ext === 'js') {
-            // Read file contents and look for .exe mentions
             const content = await fs.readFile(scriptPath, 'utf8');
-            const matches = content.match(/[\w\-. ]+\.exe/gi) || [];
-            for (const m of matches) {
-                const depPath = path.join(path.dirname(scriptPath), m.trim());
+
+            const matches = content.match(/\b[\w\-.]+\.exe\b/gi) || [];
+
+            const systemAllowList = new Set([
+                'powershell.exe',
+                'cmd.exe',
+                'bash.exe',
+                'node.exe',
+                'npm.exe',
+                'explorer.exe',
+                'taskkill.exe',
+                'reg.exe',
+                'wmic.exe'
+            ]);
+
+            for (const raw of matches) {
+                const exe = raw.toLowerCase();
+
+                // ALWAYS trust system executables
+                if (systemAllowList.has(exe)) {
+                    continue;
+                }
+
+                // Only treat as local dependency if it looks like a project file
+                const depPath = path.join(path.dirname(scriptPath), exe);
+
                 if (!fsSync.existsSync(depPath)) {
-                    logToTerminal(`Dependency ${m} referenced by ${file} not found at ${depPath}`);
+                    logToTerminal(`Missing local dependency: ${exe}`);
                     return false;
                 }
             }
         }
-        // For exe files or others, assume OK
+
         return true;
     } catch (err) {
-        // If reading fails, be conservative and return false for scripts that are not pure exes
         console.error(`Error checking dependencies for ${file}:`, err);
         return false;
     }

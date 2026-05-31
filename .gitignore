@@ -4,3 +4,5 @@ scripts/log.txt
 scripts/SpyblockerScript.exe
 scripts/config.json
 scripts/test.js
+scripts/tests.js
+src/renderer.js

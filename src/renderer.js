@@ -2,6 +2,8 @@ const { ipcRenderer } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
+const { versionNumber } = require('./globals');
 
 // State management
 const state = {
@@ -24,11 +26,21 @@ const dom = {
 };
 
 // Utility to get scripts directory
-const getScriptsDir = () =>
-    state.config.customScriptsPath ||
-    (process.env.NODE_ENV === 'development'
-        ? path.join(__dirname, '../scripts')
-        : path.join(process.resourcesPath, 'scripts'));
+const getScriptsDir = () => {
+    if (state.config.customScriptsPath) return state.config.customScriptsPath;
+
+    const devPath = path.join(__dirname, '../scripts');
+    const resPath = path.join(process.resourcesPath || '', 'scripts');
+
+    // Prefer the source scripts folder when running from repo (dev)
+    if (fsSync.existsSync(devPath)) return devPath;
+
+    // Otherwise use the packaged resources scripts folder if present
+    if (fsSync.existsSync(resPath)) return resPath;
+
+    // Fallback to devPath (will be created if needed)
+    return devPath;
+};
 
 // Update config.json
 async function updateConfig(file, updates) {
@@ -122,9 +134,9 @@ async function loadScripts() {
             const toggle = document.createElement('input');
             toggle.type = 'checkbox';
             toggle.id = `toggle-${file}`;
-            toggle.checked = localStorage.getItem(`autoRun-${file}`) === 'true' || scriptConfig.autoRun;
+            // Only mark toggle checked when script is explicitly configured to auto-run in user config
+            toggle.checked = state.config.scripts.some((s) => s.file === file && s.autoRun === true);
             toggle.addEventListener('change', () => {
-                localStorage.setItem(`autoRun-${file}`, toggle.checked);
                 updateConfig(file, { autoRun: toggle.checked });
                 logToTerminal(`Auto-run ${scriptConfig.displayName} ${toggle.checked ? 'enabled' : 'disabled'}`);
             });
@@ -153,6 +165,30 @@ async function loadScripts() {
                 loadScripts();
             }
         };
+
+        // Cleanup: remove configured script entries that don't exist in the scripts directory
+        // This prevents old/missing entries from blocking startup or auto-run attempts
+        const missingConfigured = [];
+        for (let i = state.config.scripts.length - 1; i >= 0; i--) {
+            const entry = state.config.scripts[i];
+            const expectedPath = path.join(scriptsDir, entry.file);
+            try {
+                await fs.access(expectedPath);
+            } catch {
+                // Not present on disk — remove from config
+                missingConfigured.push(entry.file);
+                state.config.scripts.splice(i, 1);
+            }
+        }
+
+        if (missingConfigured.length > 0) {
+            try {
+                await fs.writeFile(configPath, JSON.stringify(state.config, null, 2), 'utf8');
+                missingConfigured.forEach((f) => logToTerminal(`Skipping missing configured script: ${f}`));
+            } catch (err) {
+                console.error('Failed to update config after removing missing scripts:', err);
+            }
+        }
     } catch (err) {
         console.error('Failed to load scripts:', err);
         logToTerminal(`Error loading scripts: ${err.message}`);
@@ -196,9 +232,11 @@ async function saveScript() {
 }
 
 // Run a script
+const { spawn } = require('child_process');
+
 async function runScript(file) {
     if (state.scriptRunners.has(file)) {
-        state.scriptRunners.get(file)();
+        state.scriptRunners.get(file)(); // Stop the script if already running
         return;
     }
 
@@ -209,8 +247,23 @@ async function runScript(file) {
         logToTerminal(`Script not found: ${file}`);
         return;
     }
-    const argsInput = document.getElementById('argsInput')?.value.split(' ').filter(Boolean) || [];
+
+    // Get arguments from input field and normalize them
+    let argsInput = document.getElementById('argsInput')?.value.split(' ').filter(Boolean) || [];
+
+    // Validate argsInput - check if paths exist only if provided
+    if (argsInput.length > 0) {
+        const firstArg = argsInput[0];
+        try {
+            await fs.access(firstArg);
+        } catch {
+            logToTerminal(`Invalid argument path: ${firstArg}. Please provide a valid file path.`);
+            return;
+        }
+    }
+
     let command, args;
+    const isWindows = process.platform === 'win32';
 
     switch (file.split('.').pop().toLowerCase()) {
         case 'js':
@@ -222,10 +275,18 @@ async function runScript(file) {
             args = [scriptPath, ...argsInput];
             break;
         case 'bat':
+            if (!isWindows) {
+                logToTerminal('BAT files are only supported on Windows.');
+                return;
+            }
             command = 'cmd.exe';
             args = ['/c', scriptPath, ...argsInput];
             break;
         case 'exe':
+            if (!isWindows) {
+                logToTerminal('EXE files are only supported on Windows.');
+                return;
+            }
             command = scriptPath;
             args = [...argsInput];
             break;
@@ -234,24 +295,62 @@ async function runScript(file) {
             return;
     }
 
+    logToTerminal(`Running command: ${command} ${args.join(' ')}`);
+    const child = spawn(command, args, {
+        shell: isWindows,
+        cwd: path.dirname(scriptPath)
+    });
 
+    child.stdout.on('data', (data) => {
+        logToTerminal(data.toString().trim());
+    });
 
-    execFile(command, args, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`Error running ${file}:`, error);
-            logToTerminal(`Error running ${file}: ${error.message}`);
-            return;
-        }
-        if (stdout) {
-            console.log(`Output from ${file}:`, stdout);
-            logToTerminal(`Ran ${file}! Output: ${stdout}`);
-        }
-        if (stderr) {
-            console.error(`Errors from ${file}:`, stderr);
-            logToTerminal(`Errors from ${file}: ${stderr}`);
-        }
+    child.stderr.on('data', (data) => {
+        logToTerminal(`stderr: ${data.toString().trim()}`);
+    });
+
+    child.on('error', (err) => {
+        logToTerminal(`Failed to start script: ${err.message}`);
+    });
+
+    child.on('exit', (code) => {
+        logToTerminal(`Script "${file}" exited with code ${code}`);
+        state.scriptRunners.delete(file);
+    });
+
+    state.scriptRunners.set(file, () => {
+        child.kill();
+        logToTerminal(`Script "${file}" was manually stopped.`);
+        state.scriptRunners.delete(file);
     });
 }
+
+// Check script dependencies (simple heuristic: look for .exe references inside batch/sh files)
+async function hasAllDependencies(file) {
+    const scriptPath = path.join(getScriptsDir(), file);
+    const ext = file.split('.').pop().toLowerCase();
+    try {
+        if (ext === 'bat' || ext === 'sh' || ext === 'js') {
+            // Read file contents and look for .exe mentions
+            const content = await fs.readFile(scriptPath, 'utf8');
+            const matches = content.match(/[\w\-. ]+\.exe/gi) || [];
+            for (const m of matches) {
+                const depPath = path.join(path.dirname(scriptPath), m.trim());
+                if (!fsSync.existsSync(depPath)) {
+                    logToTerminal(`Dependency ${m} referenced by ${file} not found at ${depPath}`);
+                    return false;
+                }
+            }
+        }
+        // For exe files or others, assume OK
+        return true;
+    } catch (err) {
+        // If reading fails, be conservative and return false for scripts that are not pure exes
+        console.error(`Error checking dependencies for ${file}:`, err);
+        return false;
+    }
+}
+
 // Log to terminal
 function logToTerminal(message) {
     if (dom.terminalOutput) {
@@ -273,13 +372,32 @@ function logToTerminal(message) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    // Display version number
+    const versionDisplay = document.getElementById('versionDisplay');
+    if (versionDisplay) {
+        versionDisplay.textContent = `v${versionNumber}`;
+    }
+
     dom.loadScriptsButton.addEventListener('click', toggleScripts);
     dom.saveScriptButton.addEventListener('click', saveScript);
     await loadScripts();
 
+    // Auto-run configured scripts only if their dependencies are present
     for (const [file, toggle] of dom.autoRunToggles) {
         if (toggle.checked) {
-            runScript(file);
+            try {
+                const ok = await hasAllDependencies(file);
+                if (ok) {
+                    runScript(file);
+                } else {
+                    // Turn off autoRun for this script to avoid repeated failures
+                    updateConfig(file, { autoRun: false });
+                    toggle.checked = false;
+                    logToTerminal(`Disabled auto-run for ${file} due to missing dependencies.`);
+                }
+            } catch (err) {
+                console.error(`Error during auto-run check for ${file}:`, err);
+            }
         }
     }
 });

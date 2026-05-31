@@ -7,28 +7,43 @@
 </head>
 
 <body>
-    <div id="friedEggs">
-        <h1>Emerald Utilities</h1>
-        <div id="logo">
-            <img src="../img/favicons/favicon.png" alt="Emerald Utilities Logo" width="64" height="64">
+
+    <div class="app">
+
+        <!-- LEFT PANEL -->
+        <div class="leftPanel">
+
+            <div id="friedEggs">
+                <h1>Emerald Utilities</h1>
+                <span id="versionDisplay"></span>
+
+                <div id="logo">
+                    <img src="../img/favicons/favicon.png" alt="Logo" width="64" height="64">
+                </div>
+            </div>
+
+            <button id="chooseScriptLocationButton">Choose Custom Scripts Folder</button>
+
+            <div id="scriptList"></div>
+
+            <button id="loadScriptsButton">Load Scripts</button>
+            <button id="saveScriptButton">Save Script</button>
+
+            <h3>Run with Arguments:</h3>
+            <input id="argsInput" type="text" placeholder="Enter arguments">
+
+            <h3>Script Content:</h3>
+            <textarea id="scriptContent"></textarea>
+
         </div>
-    </div>
-    <div class="header-container">
-        <div id="terminalOutput"></div>
+
+        <!-- RIGHT PANEL -->
+        <div class="rightPanel">
+            <div id="terminalOutput"></div>
+        </div>
+
     </div>
 
-    <div class="moveElementsNextToTerminal">
-        <div class="script">
-            <button id="chooseScriptLocationButton">Choose Custom Scripts Folder</button>
-        </div>
-        <div id="scriptList"></div>
-        <button id="loadScriptsButton">Load Scripts</button>
-        <button id="saveScriptButton">Save Script</button>
-        <h3>Run with Arguments:</h3>
-        <input id="argsInput" type="text" placeholder="Enter arguments (e.g., input.txt)">
-        <h3>Script Content:</h3>
-        <textarea id="scriptContent"></textarea><br>
-    </div>
     <script src="renderer.js"></script>
 </body>
 

@@ -1,0 +1,125 @@
+/* Modal overlay */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(3px);
+}
+
+/* Modal content box */
+.modal-content {
+    background-color: #111;
+    margin: 10% auto;
+    padding: 20px;
+    border: 2px solid red;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 600px;
+    color: white;
+    font-family: 'pixelSans', monospace;
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+}
+
+.modal-content code {
+    background: #222;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #ff8888;
+}
+
+.modal-content pre {
+    background: #1a1a1a;
+    padding: 10px;
+    overflow-x: auto;
+    border-left: 3px solid red;
+}
+
+.modal {
+    display: none;
+}
+
+.close {
+    color: red;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.aboutContent {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    color: white;
+}
+
+.aboutContent pre {
+    background: #1a1a1a;
+    padding: 10px;
+    border-left: 3px solid red;
+    overflow-x: auto;
+}
+
+.aboutContent code {
+    background: #222;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #ff8888;
+}
+
+.close:hover {
+    color: white;
+}
+
+.leftPanel button {
+    width: 100%;
+    text-align: left;
+}
+
+.aboutCreepyImage {
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.aboutCreepyImage img {
+    width: 85%;
+    max-width: 85%;
+    border: 6px solid #ff0000;
+    outline: 2px solid white;
+    filter: contrast(1.2) brightness(0.7) saturate(0.8);
+}
+
+.aboutCreepyImage img:hover {
+    transform: translateX(2px) scale(1.03);
+    filter: contrast(1.6) brightness(0.5) saturate(0.6);
+    transition: 0.05s;
+}
+
+@keyframes creepPulse {
+    0% {
+        transform: scale(1);
+        filter: brightness(0.7) contrast(1.2);
+    }
+
+    50% {
+        transform: scale(1.02);
+        filter: brightness(0.55) contrast(1.4);
+    }
+
+    100% {
+        transform: scale(1);
+        filter: brightness(0.7) contrast(1.2);
+    }
+}
+
+.aboutCreepyImage img {
+    animation: creepPulse 6s infinite ease-in-out;
+}

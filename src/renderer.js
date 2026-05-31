@@ -25,6 +25,10 @@ const dom = {
     autoRunToggles: new Map(),
 };
 
+document.getElementById('aboutButton').onclick = () => {
+    window.location.href = './pages/about.html';
+};
+
 // Utility to get scripts directory
 const getScriptsDir = () => {
     if (state.config.customScriptsPath) return state.config.customScriptsPath;

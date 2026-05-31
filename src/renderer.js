@@ -19,8 +19,6 @@ const state = {
 
 const TERMINAL_KEY = 'emerald_terminal_log';
 
-let autoRunHasExecutedOnce = false;
-
 function loadTerminalLog() {
     try {
         return JSON.parse(sessionStorage.getItem(TERMINAL_KEY) || '[]');
@@ -97,7 +95,7 @@ function initApp() {
 
 document.addEventListener('DOMContentLoaded', initApp);
 
-/* ---------------- LOGGING (FIXED CORE BUG) ---------------- */
+/* ---------------- LOGGING (FIXED) ---------------- */
 
 function logToTerminal(message) {
     const log = loadTerminalLog();
@@ -148,7 +146,7 @@ const getScriptsDir = () => {
     return devPath;
 };
 
-/* ---------------- CONFIG ---------------- */
+/* ---------------- CONFIG (FIXED: added logs) ---------------- */
 
 async function updateConfig(file, updates) {
     try {
@@ -167,14 +165,17 @@ async function updateConfig(file, updates) {
                 displayName: `Run ${file}`,
                 ...updates
             });
+            logToTerminal(`[config] added ${file} with autoRun=${updates.autoRun ?? false}`);
         } else {
             state.config.scripts[idx] = {
                 ...state.config.scripts[idx],
                 ...updates
             };
+            logToTerminal(`[config] updated ${file} → autoRun=${updates.autoRun ?? state.config.scripts[idx].autoRun}`);
         }
 
         await fs.writeFile(configPath, JSON.stringify(state.config, null, 2), 'utf8');
+        logToTerminal(`[config] saved to disk`);
     } catch (err) {
         console.error(err);
         logToTerminal(`Config error: ${err.message}`);

@@ -6,3 +6,4 @@ scripts/config.json
 scripts/test.js
 scripts/tests.js
 src/renderer.js
+package-lock.json

@@ -13,4 +13,3 @@ package-lock.json
 start_build_emerald_utilities_windows.sh
 start_build_emerald_utilities_linux.sh
 start_build_emerald_utilities_all.sh
-start_build_emerald_utilities_linux_main.sh

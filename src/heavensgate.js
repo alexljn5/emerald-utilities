@@ -1,15 +1,8 @@
-
-// src/heavensgate.js
-if (typeof process !== 'undefined' && process.type === 'renderer') {
-    console.error('heavensgate.js should not be required from renderer!');
-    throw new Error('heavensgate.js is main process only');
-}
-
 const { app, BrowserWindow, Tray, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 
 // ==================== GLOBAL FLAGS ====================
-const PRODUCTION = true;   // ← Change to false for development (menu bar visible)
+const PRODUCTION = true;   // Change to false for development
 
 // ==================== WINDOW CREATION ====================
 let tray = null;
@@ -26,10 +19,9 @@ function createWindow() {
                 allowRendererProcessReuse: false,
                 webgl: false,
             },
-            show: false
+            show: false   // ← Never show automatically
         });
 
-        // Hide default menu bar in production
         if (PRODUCTION) {
             mainWindow.setMenu(null);
         }
@@ -49,10 +41,6 @@ function createWindow() {
         mainWindow.on('minimize', () => {
             mainWindow.hide();
         });
-
-        mainWindow.once('ready-to-show', () => {
-            mainWindow.show();
-        });
     } catch (err) {
         console.error('Error creating window:', err);
     }
@@ -62,8 +50,9 @@ function createTray() {
     try {
         const iconPath = path.join(__dirname, '../img/favicons/favicon.png');
         tray = new Tray(iconPath);
+
         const contextMenu = Menu.buildFromTemplate([
-            { label: 'Show App', click: () => mainWindow.show() },
+            { label: 'Show App', click: () => mainWindow?.show() },
             {
                 label: 'Quit',
                 click: () => {
@@ -72,28 +61,30 @@ function createTray() {
                 }
             }
         ]);
+
         tray.setToolTip('Emerald Utilities');
         tray.setContextMenu(contextMenu);
-        tray.on('click', () => mainWindow.show());
+        tray.on('click', () => mainWindow?.show());
     } catch (err) {
         console.error('Error setting up tray:', err);
     }
 }
 
 app.whenReady().then(() => {
-    createWindow();
-    createTray();
+    createWindow();   // creates window in background
+    createTray();     // tray only
+    console.log("[Emerald] Running in background (tray only)");
+});
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+    }
 });
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
-        // Keep tray active
+        // Keep running in tray
     }
 });
 
@@ -112,7 +103,6 @@ ipcMain.handle('select-directory', async () => {
 
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 
-// Export for globals.js
 module.exports = {
     PRODUCTION
 };

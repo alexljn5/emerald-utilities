@@ -3,7 +3,8 @@
 
 <head>
     <title>Emerald Utilities</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="css/globals.css">
+    <link rel="stylesheet" href="css/index.css">
 </head>
 
 <body>
@@ -16,45 +17,35 @@
             <div id="friedEggs">
                 <h1>Emerald Utilities</h1>
                 <span id="versionDisplay"></span>
+
                 <div id="logo">
                     <img src="../img/favicons/favicon.png" alt="Logo" width="64" height="64">
                 </div>
-                <button id="aboutButton" style="margin-left: auto;">ⓘ About</button>
+
+                <button id="aboutButton">ⓘ About</button>
             </div>
 
-            <!-- About Modal – placed outside .app to avoid layout issues -->
-            <div id="aboutModal" class="modal">
-                <div class="modal-content">
-                    <span class="close">&times;</span>
-                    <div id="aboutModalBody"></div>
-                </div>
-            </div>
+            <h2>Navigation</h2>
 
-            <button id="chooseScriptLocationButton">Choose Custom Scripts Folder</button>
-
-            <div id="scriptList"></div>
-
-            <button id="loadScriptsButton">Load Scripts</button>
-            <button id="saveScriptButton">Save Script</button>
-
-            <h3>Run with Arguments:</h3>
-            <input id="argsInput" type="text" placeholder="Enter arguments">
-
-            <h3>Script Content:</h3>
-            <textarea id="scriptContent"></textarea>
+            <button id="scriptToolButton">
+                Script Tool
+            </button>
 
         </div>
 
         <!-- RIGHT PANEL -->
         <div class="rightPanel">
-            <div id="terminalOutput"></div>
+            <h2>Welcome</h2>
+            <p>Select a tool from the left panel.</p>
+            <div id="dashboardMascotImage">
+                <img id="dashboardMascot" src="../img/mascot/dashboardMascotNeutral.png">
+            </div>
         </div>
 
     </div>
 
-
-    <script src="renderer.js"></script>
-    <script src="pages/about.js"></script>
+    <script src="globals.js"></script>
+    <script src="mascot/mascotMoodChanger.js"></script>
 </body>
 
 </html>

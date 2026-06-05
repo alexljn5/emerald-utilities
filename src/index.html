@@ -8,52 +8,45 @@
 </head>
 
 <body>
-
     <div class="app">
-
         <!-- LEFT PANEL -->
         <div class="leftPanel">
-
+            <!-- Header -->
             <div id="friedEggs">
                 <h1>Emerald Utilities</h1>
                 <span id="versionDisplay"></span>
-
                 <div id="logo">
                     <img src="../img/favicons/favicon.png" alt="Logo" width="64" height="64">
                 </div>
-
-                <button id="aboutButton">ⓘ About</button>
             </div>
 
-            <h2>Navigation</h2>
-
-            <button id="scriptToolButton">
-                Script Tool
-            </button>
-
+            <!-- Navigation Box -->
+            <div class="navBox">
+                <h2>Navigation</h2>
+                <div class="navButtons">
+                    <button id="scriptToolButton" class="nav-btn full">Script Tool</button>
+                    <button id="aboutButton" class="nav-btn full">ⓘ About</button>
+                </div>
+            </div>
         </div>
 
-        <!-- RIGHT PANEL -->
+        <!-- RIGHT PANEL (Dashboard + Terminal) -->
         <div class="rightPanel">
-            <h2>Welcome</h2>
-            <p>Select a tool from the left panel.</p>
+            <div class="dashboardContent">
+                <!-- Terminal -->
+                <div id="terminalOutput" class="dashboardTerminal"></div>
+            </div>
+
+            <!-- Mascot (small decorative) -->
             <div id="dashboardMascotImage">
                 <img id="dashboardMascot" src="../img/mascot/dashboardMascotNeutral.png">
             </div>
         </div>
-
     </div>
 
     <script src="globals.js"></script>
     <script src="mascot/mascotMoodChanger.js"></script>
-    <script type="module">
-        import { scriptManager } from "./core/scriptManager.js";
-
-        // Run on app startup (background auto-run only, no UI needed yet)
-        scriptManager.init({ bindUI: false });
-
-        window.scriptManager = scriptManager;
-    </script>
+    <script type="module" src="pages/index.js"></script>
 </body>
 
 </html>

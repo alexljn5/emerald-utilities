@@ -9,7 +9,3 @@ const dashboardMascotMoods = {
 function setMascotMood(dashboardMascotMood) {
     dashboardMascot.src = dashboardMascotMoods[dashboardMascotMood];
 }
-
-setTimeout(() => {
-    setMascotMood("dashboardMascotNervous");
-}, 1000);

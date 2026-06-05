@@ -7,7 +7,10 @@
   "scripts": {
     "start": "electron .",
     "postinstall": "electron-builder install-app-deps",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux AppImage",
+    "build:all": "electron-builder -mwl"
   },
   "devDependencies": {
     "electron": "^37.2.5",
@@ -42,7 +45,8 @@
       "target": [
         "AppImage"
       ],
-      "icon": "img/favicons/favicon.png"
+      "icon": "img/favicons/favicon.png",
+      "category": "Utility"
     }
   }
 }

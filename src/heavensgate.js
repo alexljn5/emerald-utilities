@@ -1,16 +1,25 @@
+
+// src/heavensgate.js
+if (typeof process !== 'undefined' && process.type === 'renderer') {
+    console.error('heavensgate.js should not be required from renderer!');
+    throw new Error('heavensgate.js is main process only');
+}
+
 const { app, BrowserWindow, Tray, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 
-app.disableHardwareAcceleration(); // Disable hardware acceleration for performance since it doesn't intend to use GPU rendering I believe lol.
+// ==================== GLOBAL FLAGS ====================
+const PRODUCTION = true;   // ← Change to false for development (menu bar visible)
 
+// ==================== WINDOW CREATION ====================
 let tray = null;
 let mainWindow = null;
 
 function createWindow() {
     try {
         mainWindow = new BrowserWindow({
-            width: 800,
-            height: 600,
+            width: 1280,
+            height: 720,
             webPreferences: {
                 contextIsolation: false,
                 nodeIntegration: true,
@@ -20,24 +29,29 @@ function createWindow() {
             show: false
         });
 
-        // Load the index.html file
+        // Hide default menu bar in production
+        if (PRODUCTION) {
+            mainWindow.setMenu(null);
+        }
+
         const indexPath = path.join(__dirname, 'index.html');
         mainWindow.loadFile(indexPath).catch(err => {
             console.error('Failed to load index.html:', err);
         });
 
-        // Handle window close (hide to tray instead of closing)
         mainWindow.on('close', (event) => {
             if (!app.isQuitting) {
                 event.preventDefault();
                 mainWindow.hide();
             }
-            return false;
         });
 
-        // Handle minimize (hide to tray)
         mainWindow.on('minimize', () => {
             mainWindow.hide();
+        });
+
+        mainWindow.once('ready-to-show', () => {
+            mainWindow.show();
         });
     } catch (err) {
         console.error('Error creating window:', err);
@@ -79,16 +93,15 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
-        // Don't quit on macOS, keep tray active
+        // Keep tray active
     }
 });
 
-// IPC for logging from renderer
+// IPC Handlers
 ipcMain.on('log', (event, message) => {
     console.log('Renderer log:', message);
 });
 
-// IPC for custom scripts directory
 ipcMain.handle('select-directory', async () => {
     const result = await dialog.showOpenDialog({
         properties: ['openDirectory'],
@@ -97,5 +110,9 @@ ipcMain.handle('select-directory', async () => {
     return result.canceled ? null : result.filePaths[0];
 });
 
-// IPC for getting userData path
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
+
+// Export for globals.js
+module.exports = {
+    PRODUCTION
+};

@@ -46,6 +46,14 @@
 
     <script src="globals.js"></script>
     <script src="mascot/mascotMoodChanger.js"></script>
+    <script type="module">
+        import { scriptManager } from "./core/scriptManager.js";
+
+        // Run on app startup (background auto-run only, no UI needed yet)
+        scriptManager.init({ bindUI: false });
+
+        window.scriptManager = scriptManager;
+    </script>
 </body>
 
 </html>

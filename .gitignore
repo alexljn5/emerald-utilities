@@ -10,5 +10,6 @@ package-lock.json
 
 
 #Unpushed Scripts
-start_build_emerald_utilities_linux.sh
 start_build_emerald_utilities_windows.sh
+start_build_emerald_utilities_linux.sh
+start_build_emerald_utilities_all.sh

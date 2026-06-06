@@ -123,13 +123,19 @@ function renderScripts(files, configScripts) {
         badge.className = "scriptBadge";
         const isRunning = scriptManager.isScriptRunning(file);
         const isCronRunning = scriptManager.isCronRunning(file);
+        const isAutoRun = !!cfg.autoRun;
+        const isCronEnabled = !!cfg.cronEnabled;
+
         let badgeText = "";
         if (isCronRunning) {
-            badgeText = "Cron";
+            badgeText = isAutoRun ? "Auto+Cron" : "Cron";
             badge.classList.add("cronBadge");
         } else if (isRunning) {
-            badgeText = "Running";
-        } else if (cfg.autoRun) {
+            badgeText = isAutoRun ? "Auto+Running" : "Running";
+        } else if (isCronEnabled) {
+            badgeText = "Auto+Cron";
+            badge.classList.add("cronBadge");
+        } else if (isAutoRun) {
             badgeText = "Auto";
         }
         badge.textContent = badgeText;

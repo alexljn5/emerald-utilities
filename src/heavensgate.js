@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -30,6 +30,7 @@ function killProcessTree(pid) {
 let tray = null;
 let mainWindow = null;
 const scriptRunners = new Map();
+const cronJobs = new Map();
 const scriptLogHistory = [];
 const MAX_SCRIPT_LOG_LINES = 500;
 const SCRIPT_LOG_SESSION_ID = Date.now().toString(36);
@@ -106,6 +107,18 @@ function stopScript(file) {
     return true;
 }
 
+function stopCronJob(file) {
+    const job = cronJobs.get(file);
+    if (!job) return false;
+
+    pushScriptLog(`Stopping cron job for ${file}...`);
+    clearInterval(job.timer);
+    cronJobs.delete(file);
+    setScriptRunning(file, false);
+    pushScriptLog(`Cron job stopped for ${file}`);
+    return true;
+}
+
 function getScriptCommand(file, scriptPath) {
     const ext = file.split('.').pop();
 
@@ -152,11 +165,49 @@ function startScript(file, scriptPath) {
     return { ok: true, running: true };
 }
 
+function startCronScript(file, scriptPath, intervalMs) {
+    const commandInfo = getScriptCommand(file, scriptPath);
+    if (!commandInfo) {
+        pushScriptLog('Unsupported type for cron');
+        return { ok: false };
+    }
+
+    // Stop any existing cron job for this file
+    if (cronJobs.has(file)) {
+        stopCronJob(file);
+    }
+
+    const isWindows = process.platform === 'win32';
+    const timer = setInterval(() => {
+        const child = spawn(commandInfo.command, commandInfo.args, { shell: isWindows });
+        pushScriptLog(`[CRON] Running ${file}`);
+
+        child.stdout.on('data', data => logProcessOutput(data, '[CRON] '));
+        child.stderr.on('data', data => logProcessOutput(data, '[CRON ERR] '));
+        child.on('error', err => {
+            pushScriptLog(`[CRON] ${file} error: ${err.message}`);
+        });
+        child.on('exit', (code, signal) => {
+            pushScriptLog(`[CRON] ${file} finished (${signal || code})`);
+        });
+    }, intervalMs);
+
+    cronJobs.set(file, { timer, intervalMs, scriptPath });
+    setScriptRunning(file, true);
+    pushScriptLog(`Cron job started for ${file} (every ${intervalMs}ms)`);
+
+    return { ok: true };
+}
+
 function createWindow() {
     try {
+        const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+        const width = Math.min(1280, Math.floor(screenWidth * 0.85));
+        const height = Math.min(720, Math.floor(screenHeight * 0.85));
+
         mainWindow = new BrowserWindow({
-            width: 1280,
-            height: 720,
+            width,
+            height,
             webPreferences: {
                 contextIsolation: false,
                 nodeIntegration: true,
@@ -236,6 +287,9 @@ app.on('before-quit', () => {
     for (const file of Array.from(scriptRunners.keys())) {
         stopScript(file);
     }
+    for (const file of Array.from(cronJobs.keys())) {
+        stopCronJob(file);
+    }
 });
 
 // IPC Handlers
@@ -278,7 +332,23 @@ ipcMain.handle('stop-script', (event, { file }) => {
     return { ok: true };
 });
 
+ipcMain.handle('start-cron-script', async (event, { file, scriptPath, intervalMs }) => {
+    return startCronScript(file, scriptPath, intervalMs);
+});
+
+ipcMain.handle('stop-cron-script', (event, { file }) => {
+    return stopCronJob(file);
+});
+
 ipcMain.handle('get-running-scripts', () => Array.from(scriptRunners.keys()));
+
+ipcMain.handle('get-cron-scripts', () => {
+    const result = [];
+    for (const [file, job] of cronJobs.entries()) {
+        result.push({ file, intervalMs: job.intervalMs });
+    }
+    return result;
+});
 
 ipcMain.handle('get-script-log-history', (event, maxLines = MAX_SCRIPT_LOG_LINES) => {
     return scriptLogHistory.slice(-maxLines);

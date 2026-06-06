@@ -10,6 +10,7 @@ export class ScriptManager {
         this.state = {
             currentScript: null,
             runningScripts: new Set(),
+            cronScripts: new Map(),
             config: { scripts: [], customScriptsPath: null },
             autoRunExecuted: false
         };
@@ -75,6 +76,18 @@ export class ScriptManager {
 
     isScriptRunning(file) {
         return this.state.runningScripts.has(file);
+    }
+
+    setCronRunning(file, isRunning) {
+        if (isRunning) {
+            this.state.cronScripts.set(file, true);
+        } else {
+            this.state.cronScripts.delete(file);
+        }
+    }
+
+    isCronRunning(file) {
+        return this.state.cronScripts.has(file);
     }
 
     renderScripts() {
@@ -330,6 +343,44 @@ export class ScriptManager {
             }
         } catch (err) {
             this._log(`Run error: ${err.message}`);
+        }
+    }
+
+    async startCronScript(file, intervalMs) {
+        if (this.isCronRunning(file)) {
+            await this.stopCronScript(file);
+            return;
+        }
+
+        try {
+            const scriptPath = path.join(this.getScriptsDir(), file);
+            if (!fsSync.existsSync(scriptPath)) {
+                return this._log(`Missing: ${file}`);
+            }
+
+            const result = await ipcRenderer.invoke('start-cron-script', { file, scriptPath, intervalMs });
+            if (result?.ok) {
+                this.setCronRunning(file, true);
+                this.renderScripts();
+                this._log(`Cron started for ${file} (every ${intervalMs}ms)`);
+            }
+        } catch (err) {
+            this._log(`Cron start error: ${err.message}`);
+        }
+    }
+
+    async stopCronScript(file) {
+        try {
+            const result = await ipcRenderer.invoke('stop-cron-script', { file });
+            if (result?.ok) {
+                this.setCronRunning(file, false);
+                this.renderScripts();
+                this._log(`Cron stopped for ${file}`);
+            } else {
+                this._log(`Cron stop failed: ${result?.reason || 'unknown'}`);
+            }
+        } catch (err) {
+            this._log(`Cron stop error: ${err.message}`);
         }
     }
 

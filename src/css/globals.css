@@ -121,14 +121,22 @@ button.full {
     border-radius: 6px;
 }
 
-/* Hide scrollbar */
+/* Hide scrollbar globally */
 .dashboardTerminal::-webkit-scrollbar,
-#terminalOutput::-webkit-scrollbar {
+#terminalOutput::-webkit-scrollbar,
+.detailPanel::-webkit-scrollbar,
+#scriptList::-webkit-scrollbar,
+.leftPanel::-webkit-scrollbar,
+.rightPanel::-webkit-scrollbar {
     display: none;
 }
 
 .dashboardTerminal,
-#terminalOutput {
+#terminalOutput,
+.detailPanel,
+#scriptList,
+.leftPanel,
+.rightPanel {
     scrollbar-width: none;
     -ms-overflow-style: none;
 }

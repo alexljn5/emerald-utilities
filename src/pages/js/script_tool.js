@@ -21,6 +21,7 @@ function getDom() {
         viewButton: document.getElementById('viewButton'),
         autoRunToggle: document.getElementById('autoRunToggle'),
         cronInput: document.getElementById('cronInput'),
+        cronToggleButton: document.getElementById('cronToggleButton'),
         argsInput: document.getElementById('argsInput'),
         scriptContent: document.getElementById('scriptContent'),
         terminalOutput: document.getElementById('terminalOutput'),
@@ -120,7 +121,12 @@ function renderScripts(files, configScripts) {
         const badge = document.createElement("span");
         badge.className = "scriptBadge";
         const isRunning = scriptManager.isScriptRunning(file);
-        badge.textContent = isRunning ? "Running" : (cfg.autoRun ? "Auto" : "");
+        const isCronRunning = scriptManager.isCronRunning(file);
+        let badgeText = "";
+        if (isCronRunning) badgeText = "Cron";
+        else if (isRunning) badgeText = "Running";
+        else if (cfg.autoRun) badgeText = "Auto";
+        badge.textContent = badgeText;
 
         item.append(nameSpan, badge);
 
@@ -153,7 +159,14 @@ function selectScript(file) {
 
     // Update run button text
     const isRunning = scriptManager.isScriptRunning(file);
+    const isCronRunning = scriptManager.isCronRunning(file);
     dom.runButton.textContent = isRunning ? `⏹ Stop ${file}` : `▶ Run ${file}`;
+
+    // Update cron toggle button
+    if (dom.cronToggleButton) {
+        dom.cronToggleButton.textContent = isCronRunning ? `⏹ Stop Cron` : `▶ Start Cron`;
+        dom.cronInput.disabled = isCronRunning;
+    }
 
     // Update auto-run toggle
     dom.autoRunToggle.checked = !!cfg.autoRun;
@@ -227,6 +240,21 @@ document.addEventListener("DOMContentLoaded", () => {
     dom.autoRunToggle?.addEventListener("change", () => {
         if (!selectedFile) return;
         scriptManager.updateConfig(selectedFile, { autoRun: dom.autoRunToggle.checked });
+    });
+
+    dom.cronToggleButton?.addEventListener("click", async () => {
+        if (!selectedFile) return;
+        const intervalMs = parseInt(dom.cronInput.value, 10);
+        if (!intervalMs || intervalMs < 1000) {
+            scriptManager._log("Cron interval must be at least 1000ms (1 second)");
+            return;
+        }
+        if (scriptManager.isCronRunning(selectedFile)) {
+            await scriptManager.stopCronScript(selectedFile);
+        } else {
+            await scriptManager.startCronScript(selectedFile, intervalMs);
+        }
+        selectScript(selectedFile);
     });
 
     dom.scriptManager = scriptManager; // expose for external updates

@@ -135,7 +135,33 @@ function stopCronJob(file) {
 }
 
 // ==================== AUTO HOTKEY DETECTION ====================
+function getAhkConfigPath() {
+    return path.join(app.getPath('userData'), 'config.json');
+}
+
+function getConfiguredAhkPath() {
+    try {
+        const configPath = getAhkConfigPath();
+        if (existsSync(configPath)) {
+            const config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+            if (config.ahkPath && existsSync(config.ahkPath)) {
+                console.log(`[AHK] Using configured path: ${config.ahkPath}`);
+                return config.ahkPath;
+            }
+        }
+    } catch (e) {
+        // Ignore config read errors, fall back to auto-detect
+    }
+    return null;
+}
+
 function findAutoHotkey() {
+    // First check if user has configured a custom path
+    const configuredPath = getConfiguredAhkPath();
+    if (configuredPath) {
+        return configuredPath;
+    }
+
     const commonPaths = [
         'C:\\Program Files\\AutoHotkey\\AutoHotkey.exe',
         'C:\\Program Files (x86)\\AutoHotkey\\AutoHotkey.exe',
@@ -187,7 +213,7 @@ function getScriptCommand(file, scriptPath) {
 }
 
 // ==================== START SCRIPT (CRITICAL FIX) ====================
-function startScript(file, scriptPath) {
+function startScript(file, scriptPath, options = {}) {
     const commandInfo = getScriptCommand(file, scriptPath);
     if (!commandInfo) {
         pushScriptLog('Unsupported script type or missing AutoHotkey.');
@@ -201,18 +227,36 @@ function startScript(file, scriptPath) {
         ? `"${commandInfo.command}"`
         : commandInfo.command;
 
-    const child = spawn(command, commandInfo.args, {
+    const spawnOptions = {
         shell: isWindows,
         windowsVerbatimArguments: true,   // Important for paths with spaces
         cwd: path.dirname(scriptPath)     // Run from script's directory
-    });
+    };
+
+    // If hidden mode is enabled, detach the process and hide the window
+    if (options.hidden) {
+        if (isWindows) {
+            spawnOptions.detached = true;
+            spawnOptions.windowsHide = true;
+            spawnOptions.stdio = 'ignore';
+        } else {
+            spawnOptions.detached = true;
+            spawnOptions.stdio = 'ignore';
+        }
+    }
+
+    const child = spawn(command, commandInfo.args, spawnOptions);
 
     scriptRunners.set(file, child);
     setScriptRunning(file, true);
     pushScriptLog(`Started ${file}`);
 
-    child.stdout.on('data', data => logProcessOutput(data));
-    child.stderr.on('data', data => logProcessOutput(data, 'ERR: '));
+    if (child.stdout) {
+        child.stdout.on('data', data => logProcessOutput(data));
+    }
+    if (child.stderr) {
+        child.stderr.on('data', data => logProcessOutput(data, 'ERR: '));
+    }
 
     child.on('error', err => {
         pushScriptLog(`${file} error: ${err.message}`);
@@ -228,7 +272,7 @@ function startScript(file, scriptPath) {
     return { ok: true, running: true };
 }
 
-function startCronScript(file, scriptPath, intervalMs) {
+function startCronScript(file, scriptPath, intervalMs, options = {}) {
     const commandInfo = getScriptCommand(file, scriptPath);
     if (!commandInfo) {
         pushScriptLog('Unsupported type for cron');
@@ -248,11 +292,26 @@ function startCronScript(file, scriptPath, intervalMs) {
         : commandInfo.command;
 
     const timer = setInterval(() => {
-        const child = spawn(command, commandInfo.args, { shell: isWindows });
+        const spawnOptions = { shell: isWindows };
+        if (options.hidden) {
+            if (isWindows) {
+                spawnOptions.detached = true;
+                spawnOptions.windowsHide = true;
+                spawnOptions.stdio = 'ignore';
+            } else {
+                spawnOptions.detached = true;
+                spawnOptions.stdio = 'ignore';
+            }
+        }
+        const child = spawn(command, commandInfo.args, spawnOptions);
         pushScriptLog(`[CRON] Running ${file}`);
 
-        child.stdout.on('data', data => logProcessOutput(data, '[CRON] '));
-        child.stderr.on('data', data => logProcessOutput(data, '[CRON ERR] '));
+        if (child.stdout) {
+            child.stdout.on('data', data => logProcessOutput(data, '[CRON] '));
+        }
+        if (child.stderr) {
+            child.stderr.on('data', data => logProcessOutput(data, '[CRON ERR] '));
+        }
         child.on('error', err => {
             pushScriptLog(`[CRON] ${file} error: ${err.message}`);
         });
@@ -366,8 +425,8 @@ ipcMain.on('log', (event, message) => {
     console.log('Renderer log:', message);
 });
 
-ipcMain.handle('run-script', async (event, { file, scriptPath }) => {
-    return startScript(file, scriptPath);
+ipcMain.handle('run-script', async (event, { file, scriptPath, hidden }) => {
+    return startScript(file, scriptPath, { hidden });
 });
 
 ipcMain.handle('stop-script', (event, { file }) => {
@@ -401,8 +460,8 @@ ipcMain.handle('stop-script', (event, { file }) => {
     return { ok: true };
 });
 
-ipcMain.handle('start-cron-script', async (event, { file, scriptPath, intervalMs }) => {
-    return startCronScript(file, scriptPath, intervalMs);
+ipcMain.handle('start-cron-script', async (event, { file, scriptPath, intervalMs, hidden }) => {
+    return startCronScript(file, scriptPath, intervalMs, { hidden });
 });
 
 ipcMain.handle('stop-cron-script', (event, { file }) => {
@@ -431,7 +490,51 @@ ipcMain.handle('select-directory', async () => {
     return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle('select-file', async (event, options = {}) => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: options.title || 'Select File',
+            filters: options.filters || [],
+            properties: options.properties || ['openFile']
+        });
+        return result;
+    } catch (err) {
+        console.error('File select error:', err);
+        return { canceled: true };
+    }
+});
+
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
+
+ipcMain.handle('get-ahk-path', async () => {
+    try {
+        const configPath = path.join(app.getPath('userData'), 'config.json');
+        if (existsSync(configPath)) {
+            const config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+            return config.ahkPath || null;
+        }
+    } catch (e) {
+        // Ignore errors
+    }
+    return null;
+});
+
+ipcMain.handle('set-ahk-path', async (event, ahkPath) => {
+    try {
+        const configPath = path.join(app.getPath('userData'), 'config.json');
+        let config = { scripts: [], customScriptsPath: null, ahkPath: null };
+        if (existsSync(configPath)) {
+            config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+        }
+        config.ahkPath = ahkPath;
+        require('fs').writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        console.log(`[AHK] Path updated to: ${ahkPath || 'auto-detect'}`);
+        return { ok: true };
+    } catch (e) {
+        console.error('[AHK] Failed to save path:', e);
+        return { ok: false, error: e.message };
+    }
+});
 
 module.exports = {
     PRODUCTION

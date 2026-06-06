@@ -120,6 +120,23 @@
     gap: 0.25rem;
 }
 
+.detailRow.ahkPathRow {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.detailRow.ahkPathRow input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.detailRow.ahkPathRow button {
+    flex-shrink: 0;
+    padding: 0.3rem 0.6rem;
+    font-size: clamp(0.8rem, 1vw, 0.9rem);
+}
+
 .detailRow label {
     font-size: clamp(0.9rem, 1.2vw, 1.2rem);
     color: #ccc;

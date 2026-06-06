@@ -48,6 +48,12 @@
 
                     <div class="detailRow">
                         <label>
+                            <input type="checkbox" id="hiddenModeToggle"> Hidden mode (spawn scripts invisibly)
+                        </label>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>
                             <input type="checkbox" id="autoRunToggle"> Auto-run on startup
                         </label>
                     </div>
@@ -63,6 +69,14 @@
                         <input type="number" id="cronInput" placeholder="e.g. 5000 for 5 seconds" min="1000"
                             step="1000">
                         <button id="cronToggleButton">Start Cron</button>
+                    </div>
+
+                    <div class="detailRow ahkPathRow">
+                        <label>AutoHotkey Path:</label>
+                        <input id="ahkPathInput" type="text"
+                            placeholder="e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe">
+                        <button id="ahkBrowseButton">Browse</button>
+                        <button id="ahkResetButton">Reset</button>
                     </div>
 
                     <div class="detailRow">

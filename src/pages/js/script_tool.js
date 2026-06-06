@@ -28,7 +28,11 @@ function getDom() {
         terminalOutput: document.getElementById('terminalOutput'),
         terminalToggleButton: document.getElementById('terminalToggleButton'),
         chooseScriptLocationButton: document.getElementById('chooseScriptLocationButton'),
-        aboutButton: document.getElementById('aboutButton')
+        aboutButton: document.getElementById('aboutButton'),
+        hiddenModeToggle: document.getElementById('hiddenModeToggle'),
+        ahkPathInput: document.getElementById('ahkPathInput'),
+        ahkBrowseButton: document.getElementById('ahkBrowseButton'),
+        ahkResetButton: document.getElementById('ahkResetButton')
     };
 }
 
@@ -276,6 +280,10 @@ document.addEventListener("DOMContentLoaded", () => {
         scriptManager.viewScript(selectedFile);
     });
 
+    dom.hiddenModeToggle?.addEventListener("change", async () => {
+        await scriptManager.setHiddenMode(dom.hiddenModeToggle.checked);
+    });
+
     dom.autoRunToggle?.addEventListener("change", () => {
         if (!selectedFile) return;
         scriptManager.updateConfig(selectedFile, { autoRun: dom.autoRunToggle.checked });
@@ -304,6 +312,59 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         selectScript(selectedFile);
     });
+
+    /* ---------------- HIDDEN MODE ---------------- */
+
+    async function loadHiddenMode() {
+        if (!dom.hiddenModeToggle) return;
+        try {
+            const hidden = await scriptManager.getHiddenMode();
+            dom.hiddenModeToggle.checked = hidden;
+        } catch (e) {
+            dom.hiddenModeToggle.checked = false;
+        }
+    }
+
+    /* ---------------- AHK PATH CONFIG ---------------- */
+
+    async function loadAhkPath() {
+        if (!dom.ahkPathInput) return;
+        try {
+            const ahkPath = await window.electronAPI.invoke('get-ahk-path');
+            dom.ahkPathInput.value = ahkPath || '';
+        } catch (e) {
+            dom.ahkPathInput.value = '';
+        }
+    }
+
+    dom.ahkBrowseButton?.addEventListener("click", async () => {
+        const result = await window.electronAPI.invoke('select-file', {
+            title: 'Select AutoHotkey.exe',
+            filters: [{ name: 'Executable', extensions: ['exe'] }],
+            properties: ['openFile']
+        });
+        if (result && !result.canceled && result.filePaths.length > 0) {
+            dom.ahkPathInput.value = result.filePaths[0];
+            await window.electronAPI.invoke('set-ahk-path', result.filePaths[0]);
+            scriptManager._log(`[AHK] Path set to: ${result.filePaths[0]}`);
+        }
+    });
+
+    dom.ahkResetButton?.addEventListener("click", async () => {
+        dom.ahkPathInput.value = '';
+        await window.electronAPI.invoke('set-ahk-path', null);
+        scriptManager._log('[AHK] Path reset to auto-detect');
+    });
+
+    dom.ahkPathInput?.addEventListener("change", async () => {
+        const val = dom.ahkPathInput.value.trim();
+        await window.electronAPI.invoke('set-ahk-path', val || null);
+        scriptManager._log(`[AHK] Path set to: ${val || 'auto-detect'}`);
+    });
+
+    // Load settings on init
+    loadHiddenMode();
+    loadAhkPath();
 
     dom.scriptManager = scriptManager; // expose for external updates
 });

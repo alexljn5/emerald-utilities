@@ -97,8 +97,7 @@ function renderScripts(files, configScripts) {
         const cfg = configScripts.find(s => s.file === file) || {
             file,
             displayName: `Run ${file}`,
-            autoRun: false,
-            persistent: false
+            autoRun: false
         };
 
         const div = document.createElement("div");
@@ -116,19 +115,11 @@ function renderScripts(files, configScripts) {
             scriptManager.updateConfig(file, { autoRun: toggle.checked });
         };
 
-        const persistentToggle = document.createElement("input");
-        persistentToggle.type = "checkbox";
-        persistentToggle.checked = !!cfg.persistent;
-        persistentToggle.title = "Keep running";
-        persistentToggle.onchange = () => {
-            scriptManager.updateConfig(file, { persistent: persistentToggle.checked });
-        };
-
         const viewBtn = document.createElement("button");
         viewBtn.textContent = `View ${file}`;
         viewBtn.onclick = () => scriptManager.viewScript(file);   // ← FIXED!
 
-        div.append(runBtn, toggle, persistentToggle, viewBtn);
+        div.append(runBtn, toggle, viewBtn);
         dom.scriptList.appendChild(div);
     }
 }

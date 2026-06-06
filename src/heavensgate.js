@@ -1,6 +1,21 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const { existsSync } = require('fs');
+const { execSync } = require('child_process');
+
+function commandExists(command) {
+    try {
+        if (process.platform === 'win32') {
+            execSync(`where ${command}`, { stdio: 'ignore' });
+        } else {
+            execSync(`which ${command}`, { stdio: 'ignore' });
+        }
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 // ==================== GLOBAL FLAGS ====================
 const PRODUCTION = true;   // Change to false for development
@@ -119,8 +134,35 @@ function stopCronJob(file) {
     return true;
 }
 
+// ==================== AUTO HOTKEY DETECTION ====================
+function findAutoHotkey() {
+    const commonPaths = [
+        'C:\\Program Files\\AutoHotkey\\AutoHotkey.exe',
+        'C:\\Program Files (x86)\\AutoHotkey\\AutoHotkey.exe',
+        path.join(process.env.LOCALAPPDATA || '', 'Programs\\AutoHotkey\\AutoHotkey.exe'),
+        path.join(process.env.ProgramFiles || '', 'AutoHotkey\\AutoHotkey.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || '', 'AutoHotkey\\AutoHotkey.exe'),
+    ];
+
+    for (const p of commonPaths) {
+        if (existsSync(p)) {
+            console.log(`[AHK] Found at: ${p}`);
+            return p;
+        }
+    }
+
+    if (commandExists('AutoHotkey.exe')) {
+        console.log('[AHK] Found in PATH');
+        return 'AutoHotkey.exe';
+    }
+
+    console.warn('[AHK] AutoHotkey.exe not found');
+    return null;
+}
+
+// ==================== GET SCRIPT COMMAND (Fixed) ====================
 function getScriptCommand(file, scriptPath) {
-    const ext = file.split('.').pop();
+    const ext = file.split('.').pop().toLowerCase();
 
     switch (ext) {
         case 'js':
@@ -131,31 +173,52 @@ function getScriptCommand(file, scriptPath) {
             return { command: 'cmd.exe', args: ['/c', scriptPath] };
         case 'exe':
             return { command: scriptPath, args: [] };
+        case 'ahk': {
+            const ahkPath = findAutoHotkey();
+            if (!ahkPath) {
+                pushScriptLog('AutoHotkey.exe not found. Please install AutoHotkey.');
+                return null;
+            }
+            return { command: ahkPath, args: [scriptPath] };
+        }
         default:
             return null;
     }
 }
 
+// ==================== START SCRIPT (CRITICAL FIX) ====================
 function startScript(file, scriptPath) {
     const commandInfo = getScriptCommand(file, scriptPath);
     if (!commandInfo) {
-        pushScriptLog('Unsupported type');
+        pushScriptLog('Unsupported script type or missing AutoHotkey.');
         return { ok: false, running: false };
     }
 
     const isWindows = process.platform === 'win32';
-    const child = spawn(commandInfo.command, commandInfo.args, { shell: isWindows });
+
+    // Quote the command if it contains spaces (required when shell: true on Windows)
+    const command = isWindows && commandInfo.command.includes(' ')
+        ? `"${commandInfo.command}"`
+        : commandInfo.command;
+
+    const child = spawn(command, commandInfo.args, {
+        shell: isWindows,
+        windowsVerbatimArguments: true,   // Important for paths with spaces
+        cwd: path.dirname(scriptPath)     // Run from script's directory
+    });
+
     scriptRunners.set(file, child);
     setScriptRunning(file, true);
     pushScriptLog(`Started ${file}`);
 
     child.stdout.on('data', data => logProcessOutput(data));
     child.stderr.on('data', data => logProcessOutput(data, 'ERR: '));
+
     child.on('error', err => {
         pushScriptLog(`${file} error: ${err.message}`);
     });
+
     child.on('exit', (code, signal) => {
-        // Only process if still tracked (prevents duplicate handling on intentional stop)
         if (!scriptRunners.has(file)) return;
         pushScriptLog(`${file} exited (${signal || code})`);
         scriptRunners.delete(file);
@@ -178,8 +241,14 @@ function startCronScript(file, scriptPath, intervalMs) {
     }
 
     const isWindows = process.platform === 'win32';
+
+    // Quote the command if it contains spaces (required when shell: true on Windows)
+    const command = isWindows && commandInfo.command.includes(' ')
+        ? `"${commandInfo.command}"`
+        : commandInfo.command;
+
     const timer = setInterval(() => {
-        const child = spawn(commandInfo.command, commandInfo.args, { shell: isWindows });
+        const child = spawn(command, commandInfo.args, { shell: isWindows });
         pushScriptLog(`[CRON] Running ${file}`);
 
         child.stdout.on('data', data => logProcessOutput(data, '[CRON] '));

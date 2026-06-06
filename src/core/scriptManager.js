@@ -285,7 +285,7 @@ export class ScriptManager {
             }
 
             const files = (await fs.readdir(scriptsDir))
-                .filter(f => f.match(/\.(js|sh|bat|exe)$/));
+                .filter(f => f.match(/\.(js|sh|bat|exe|ahk)$/));
 
             this.state.config._files = files;
 
@@ -436,7 +436,7 @@ export class ScriptManager {
     async hasAllDependencies(file) {
         const scriptPath = path.join(this.getScriptsDir(), file);
         const ext = file.split('.').pop();
-        if (!['bat', 'sh', 'js'].includes(ext)) return true;
+        if (!['bat', 'sh', 'js', 'ahk'].includes(ext)) return true;
 
         const content = await fs.readFile(scriptPath, 'utf8');
         const matches = content.match(/\b[\w\-.]+\.exe\b/gi) || [];

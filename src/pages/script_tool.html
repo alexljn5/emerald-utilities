@@ -34,45 +34,51 @@
 
         <!-- RIGHT PANEL: Detail + Terminal -->
         <div class="rightPanel">
+            <button id="terminalToggleButton" class="terminalToggle" title="Toggle Terminal">Terminal</button>
             <!-- Detail Panel (hidden until script selected) -->
             <div id="detailPanel" class="detailPanel hidden">
                 <h2 id="detailScriptName">Select a script</h2>
 
-                <div class="detailActions">
-                    <button id="runButton">Run</button>
-                    <button id="runStartupButton">Run Startup</button>
-                    <button id="viewButton">View</button>
+                <div class="detailPanelContent">
+                    <div class="detailActions">
+                        <button id="runButton">Run</button>
+                        <button id="runStartupButton">Run Startup</button>
+                        <button id="viewButton">View</button>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>
+                            <input type="checkbox" id="autoRunToggle"> Auto-run on startup
+                        </label>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>
+                            <input type="checkbox" id="cronEnabledToggle"> Auto-start cron on startup
+                        </label>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>Cron / Interval (ms):</label>
+                        <input type="number" id="cronInput" placeholder="e.g. 5000 for 5 seconds" min="1000"
+                            step="1000">
+                        <button id="cronToggleButton">Start Cron</button>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>Arguments:</label>
+                        <input id="argsInput" type="text" placeholder="Enter arguments">
+                    </div>
+
+                    <div class="detailRow">
+                        <label>Script Content:</label>
+                        <textarea id="scriptContent"></textarea>
+                    </div>
                 </div>
 
-                <div class="detailRow">
-                    <label>
-                        <input type="checkbox" id="autoRunToggle"> Auto-run on startup
-                    </label>
+                <div class="detailPanelActions">
+                    <button id="saveScriptButton">Save Script</button>
                 </div>
-
-                <div class="detailRow">
-                    <label>
-                        <input type="checkbox" id="cronEnabledToggle"> Auto-start cron on startup
-                    </label>
-                </div>
-
-                <div class="detailRow">
-                    <label>Cron / Interval (ms):</label>
-                    <input type="number" id="cronInput" placeholder="e.g. 5000 for 5 seconds" min="1000" step="1000">
-                    <button id="cronToggleButton">Start Cron</button>
-                </div>
-
-                <div class="detailRow">
-                    <label>Arguments:</label>
-                    <input id="argsInput" type="text" placeholder="Enter arguments">
-                </div>
-
-                <div class="detailRow">
-                    <label>Script Content:</label>
-                    <textarea id="scriptContent"></textarea>
-                </div>
-
-                <button id="saveScriptButton">Save Script</button>
             </div>
 
             <!-- Terminal -->

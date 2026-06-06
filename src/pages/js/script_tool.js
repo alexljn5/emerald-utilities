@@ -26,6 +26,7 @@ function getDom() {
         argsInput: document.getElementById('argsInput'),
         scriptContent: document.getElementById('scriptContent'),
         terminalOutput: document.getElementById('terminalOutput'),
+        terminalToggleButton: document.getElementById('terminalToggleButton'),
         chooseScriptLocationButton: document.getElementById('chooseScriptLocationButton'),
         aboutButton: document.getElementById('aboutButton')
     };
@@ -94,6 +95,13 @@ function renderTerminal(log) {
         dom.terminalOutput.appendChild(div);
     }
     dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
+}
+
+function toggleTerminal() {
+    if (!dom?.terminalOutput || !dom?.terminalToggleButton) return;
+    const isHidden = dom.terminalOutput.classList.toggle('terminalHidden');
+    dom.terminalToggleButton.classList.toggle('terminalHidden', isHidden);
+    dom.terminalToggleButton.textContent = isHidden ? 'Show Terminal' : 'Terminal';
 }
 
 /* ---------------- SCRIPT LIST ---------------- */
@@ -246,6 +254,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     dom.aboutButton?.addEventListener("click", () => {
         window.location.href = "./pages/about.html";
+    });
+
+    dom.terminalToggleButton?.addEventListener("click", () => {
+        toggleTerminal();
     });
 
     // Detail panel events

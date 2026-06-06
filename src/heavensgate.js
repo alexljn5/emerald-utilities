@@ -221,55 +221,55 @@ function startScript(file, scriptPath, options = {}) {
     }
 
     const isWindows = process.platform === 'win32';
+    const hidden = options.hidden ?? false;
 
-    // Quote the command if it contains spaces (required when shell: true on Windows)
-    const command = isWindows && commandInfo.command.includes(' ')
-        ? `"${commandInfo.command}"`
-        : commandInfo.command;
+    let child;
 
-    const spawnOptions = {
-        shell: isWindows,
-        windowsVerbatimArguments: true,   // Important for paths with spaces
-        cwd: path.dirname(scriptPath)     // Run from script's directory
-    };
+    if (hidden && isWindows) {
+        // === AGGRESSIVE HIDDEN MODE FOR WINDOWS ===
+        // Use 'start' command to truly hide the console window
+        const quotedAhk = `"${commandInfo.command}"`;
+        const quotedScript = `"${scriptPath}"`;
 
-    // If hidden mode is enabled, detach the process and hide the window
-    if (options.hidden) {
-        if (isWindows) {
-            spawnOptions.detached = true;
-            spawnOptions.windowsHide = true;
-            spawnOptions.stdio = 'ignore';
-        } else {
-            spawnOptions.detached = true;
-            spawnOptions.stdio = 'ignore';
-        }
+        child = spawn('cmd.exe', ['/c', 'start', '/b', '/min', quotedAhk, quotedScript], {
+            detached: true,
+            windowsHide: true,
+            stdio: 'ignore'
+        });
+    } else {
+        // Normal visible mode
+        const command = isWindows && commandInfo.command.includes(' ')
+            ? `"${commandInfo.command}"`
+            : commandInfo.command;
+
+        child = spawn(command, commandInfo.args, {
+            shell: isWindows,
+            windowsVerbatimArguments: true,
+            cwd: path.dirname(scriptPath)
+        });
     }
 
-    const child = spawn(command, commandInfo.args, spawnOptions);
-
-    scriptRunners.set(file, child);
-    setScriptRunning(file, true);
-    pushScriptLog(`Started ${file}`);
-
-    if (child.stdout) {
-        child.stdout.on('data', data => logProcessOutput(data));
-    }
-    if (child.stderr) {
-        child.stderr.on('data', data => logProcessOutput(data, 'ERR: '));
+    if (!hidden) {
+        scriptRunners.set(file, child);
+        setScriptRunning(file, true);
     }
 
-    child.on('error', err => {
-        pushScriptLog(`${file} error: ${err.message}`);
-    });
+    pushScriptLog(`Started ${file}${hidden ? ' (hidden)' : ''}`);
 
-    child.on('exit', (code, signal) => {
-        if (!scriptRunners.has(file)) return;
-        pushScriptLog(`${file} exited (${signal || code})`);
-        scriptRunners.delete(file);
-        setScriptRunning(file, false);
-    });
+    if (!hidden) {
+        if (child.stdout) child.stdout.on('data', data => logProcessOutput(data));
+        if (child.stderr) child.stderr.on('data', data => logProcessOutput(data, 'ERR: '));
 
-    return { ok: true, running: true };
+        child.on('error', err => pushScriptLog(`${file} error: ${err.message}`));
+        child.on('exit', (code, signal) => {
+            if (!scriptRunners.has(file)) return;
+            pushScriptLog(`${file} exited (${signal || code})`);
+            scriptRunners.delete(file);
+            setScriptRunning(file, false);
+        });
+    }
+
+    return { ok: true, running: !hidden };
 }
 
 function startCronScript(file, scriptPath, intervalMs, options = {}) {
@@ -491,17 +491,15 @@ ipcMain.handle('select-directory', async () => {
 });
 
 ipcMain.handle('select-file', async (event, options = {}) => {
-    try {
-        const result = await dialog.showOpenDialog(mainWindow, {
-            title: options.title || 'Select File',
-            filters: options.filters || [],
-            properties: options.properties || ['openFile']
-        });
-        return result;
-    } catch (err) {
-        console.error('File select error:', err);
-        return { canceled: true };
-    }
+    const win = BrowserWindow.getFocusedWindow() || mainWindow;
+
+    const result = await dialog.showOpenDialog(win, {
+        title: options.title || 'Select File',
+        filters: options.filters || [{ name: 'All Files', extensions: ['*'] }],
+        properties: options.properties || ['openFile']
+    });
+
+    return result;
 });
 
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));

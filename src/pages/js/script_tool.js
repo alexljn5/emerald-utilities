@@ -30,6 +30,7 @@ function getDom() {
         chooseScriptLocationButton: document.getElementById('chooseScriptLocationButton'),
         aboutButton: document.getElementById('aboutButton'),
         hiddenModeToggle: document.getElementById('hiddenModeToggle'),
+        ahkPathRow: document.querySelector('.ahkPathRow'),
         ahkPathInput: document.getElementById('ahkPathInput'),
         ahkBrowseButton: document.getElementById('ahkBrowseButton'),
         ahkResetButton: document.getElementById('ahkResetButton')
@@ -180,6 +181,11 @@ function selectScript(file) {
     // Show detail panel
     dom.detailPanel.classList.remove("hidden");
     dom.detailScriptName.textContent = file;
+
+    // Show AHK path row only for .ahk files
+    if (dom.ahkPathRow) {
+        dom.ahkPathRow.style.display = file.toLowerCase().endsWith('.ahk') ? '' : 'none';
+    }
 
     // Update run button text
     const isRunning = scriptManager.isScriptRunning(file);

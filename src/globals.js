@@ -2,7 +2,8 @@
 const versionNumber = "0.0.5";
 
 window.versionNumber = versionNumber;
-window.PRODUCTION = true;   // ← Hardcode for now or pass via IPC later
+//Later make that flag in here, this didnt work
+//window.PRODUCTION = true;   // ← Hardcode for now or pass via IPC later
 
 document.addEventListener('DOMContentLoaded', () => {
     const versionDisplay = document.getElementById('versionDisplay');

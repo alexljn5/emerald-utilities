@@ -3,7 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 // ==================== GLOBAL FLAGS ====================
-const PRODUCTION = false;   // Change to false for development
+const PRODUCTION = true;   // Change to false for development
 
 // ==================== PROCESS KILLING HELPERS ====================
 function killProcessTree(pid) {

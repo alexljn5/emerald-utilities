@@ -104,7 +104,10 @@ function renderScripts(files, configScripts) {
 
         const runBtn = document.createElement("button");
         const isRunning = scriptManager.isScriptRunning(file);
-        runBtn.textContent = isRunning ? `Stop ${file}` : cfg.displayName;
+
+        runBtn.textContent = isRunning ? `⏹ Stop ${file}` : `▶ Run ${file}`;
+        runBtn.style.background = isRunning ? "#8B0000" : "#1a1a1a"; // red when running
+
         runBtn.onclick = () => scriptManager.runScript(file);
 
         const toggle = document.createElement("input");
@@ -127,6 +130,11 @@ function renderScripts(files, configScripts) {
 /* ---------------- LOG ---------------- */
 
 function logToTerminal(msg) {
+    if (typeof msg === 'string') {
+        // Clean any remaining garbage
+        msg = msg.replace(/[\u2500-\u257F]/g, '-')
+            .replace(/[^\x20-\x7E\n]/g, '');
+    }
     appendTerminalLog(msg);
 }
 

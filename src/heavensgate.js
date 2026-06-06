@@ -5,6 +5,27 @@ const { spawn } = require('child_process');
 // ==================== GLOBAL FLAGS ====================
 const PRODUCTION = false;   // Change to false for development
 
+// ==================== PROCESS KILLING HELPERS ====================
+function killProcessTree(pid) {
+    if (process.platform === 'win32') {
+        // On Windows, use taskkill to kill the process tree
+        try {
+            spawn('taskkill', ['/F', '/T', '/PID', pid]);
+        } catch (e) {
+            // Fallback to regular kill
+            try { process.kill(pid); } catch { }
+        }
+    } else {
+        // On Unix, kill the process group
+        try {
+            process.kill(-pid, 'SIGTERM');
+        } catch (e) {
+            // Process may already be dead or not in a group
+            try { process.kill(pid, 'SIGTERM'); } catch { }
+        }
+    }
+}
+
 // ==================== WINDOW CREATION ====================
 let tray = null;
 let mainWindow = null;
@@ -33,11 +54,22 @@ function pushScriptLog(message) {
 }
 
 function logProcessOutput(data, prefix = '') {
-    const text = data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd();
+    let text = data.toString()
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .trimEnd();
+
+    // Clean ANSI escape codes and weird box characters
+    text = text.replace(/\u001B\[[0-9;]*[a-zA-Z]/g, '')   // ANSI codes
+        .replace(/[\u2500-\u257F]/g, '-')           // Box drawing
+        .replace(/[^\x20-\x7E\n]/g, '');            // Keep only printable ASCII + newline
+
     if (!text) return;
 
     for (const line of text.split('\n')) {
-        pushScriptLog(`${prefix}${line}`);
+        if (line.trim()) {
+            pushScriptLog(`${prefix}${line}`);
+        }
     }
 }
 
@@ -49,7 +81,28 @@ function stopScript(file) {
     const child = scriptRunners.get(file);
     if (!child) return false;
 
-    child.kill();
+    pushScriptLog(`Stopping ${file}...`);
+
+    // Immediately destroy streams to prevent further output
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+
+    // Remove from map immediately to prevent duplicate exit handling
+    scriptRunners.delete(file);
+    setScriptRunning(file, false);
+
+    // Kill the process (and its tree on Windows)
+    if (child.pid) {
+        killProcessTree(child.pid);
+    } else {
+        child.kill();
+    }
+
+    // Log when process actually exits (one-time handler)
+    child.once('exit', (code, signal) => {
+        pushScriptLog(`${file} stopped (${signal || code})`);
+    });
+
     return true;
 }
 
@@ -88,8 +141,10 @@ function startScript(file, scriptPath) {
     child.on('error', err => {
         pushScriptLog(`${file} error: ${err.message}`);
     });
-    child.on('exit', code => {
-        pushScriptLog(`${file} exited (${code})`);
+    child.on('exit', (code, signal) => {
+        // Only process if still tracked (prevents duplicate handling on intentional stop)
+        if (!scriptRunners.has(file)) return;
+        pushScriptLog(`${file} exited (${signal || code})`);
         scriptRunners.delete(file);
         setScriptRunning(file, false);
     });
@@ -188,18 +243,39 @@ ipcMain.on('log', (event, message) => {
     console.log('Renderer log:', message);
 });
 
-ipcMain.handle('run-script', async (event, { file, scriptPath, startOnly = false }) => {
-    if (scriptRunners.has(file)) {
-        if (startOnly) {
-            return { ok: true, running: true };
-        }
+ipcMain.handle('run-script', async (event, { file, scriptPath }) => {
+    return startScript(file, scriptPath);
+});
 
-        stopScript(file);
-        pushScriptLog(`Stopping ${file}`);
-        return { ok: true, running: false };
+ipcMain.handle('stop-script', (event, { file }) => {
+    const child = scriptRunners.get(file);
+    if (!child) {
+        return { ok: false, reason: 'not running' };
     }
 
-    return startScript(file, scriptPath);
+    pushScriptLog(`Stopping ${file}...`);
+
+    // Immediately destroy streams to prevent further output
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+
+    // Remove from map immediately to prevent duplicate exit handling
+    scriptRunners.delete(file);
+    setScriptRunning(file, false);
+
+    // Kill the process (and its tree on Windows)
+    if (child.pid) {
+        killProcessTree(child.pid);
+    } else {
+        child.kill();
+    }
+
+    // Log when process actually exits (one-time handler)
+    child.once('exit', (code, signal) => {
+        pushScriptLog(`${file} stopped (${signal || code})`);
+    });
+
+    return { ok: true };
 });
 
 ipcMain.handle('get-running-scripts', () => Array.from(scriptRunners.keys()));

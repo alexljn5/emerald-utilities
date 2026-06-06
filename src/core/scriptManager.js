@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 
+
 export class ScriptManager {
     constructor() {
         this.initialized = false;
@@ -309,23 +310,43 @@ export class ScriptManager {
         }
     }
 
-    async runScript(file, options = {}) {
-        const scriptPath = path.join(this.getScriptsDir(), file);
-        if (!fsSync.existsSync(scriptPath)) return this._log(`Missing: ${file}`);
+    async runScript(file) {
+        if (this.isScriptRunning(file)) {
+            await this.stopScript(file);
+            return;
+        }
 
         try {
-            const result = await ipcRenderer.invoke('run-script', {
-                file,
-                scriptPath,
-                startOnly: !!options.startOnly
-            });
+            const scriptPath = path.join(this.getScriptsDir(), file);
+            if (!fsSync.existsSync(scriptPath)) {
+                return this._log(`Missing: ${file}`);
+            }
 
+            const result = await ipcRenderer.invoke('run-script', { file, scriptPath });
             if (result?.ok) {
-                this.setScriptRunning(file, !!result.running);
+                this.setScriptRunning(file, true);
                 this.renderScripts();
+                this._log(`Started ${file}`);
             }
         } catch (err) {
             this._log(`Run error: ${err.message}`);
+        }
+    }
+
+    async stopScript(file) {
+        try {
+            this._log(`Attempting to stop ${file}...`);
+            const result = await ipcRenderer.invoke('stop-script', { file });
+
+            if (result?.ok) {
+                this.setScriptRunning(file, false);
+                this.renderScripts();
+                this._log(`Stopped ${file}`);
+            } else {
+                this._log(`Stop failed: ${result?.reason || 'unknown'}`);
+            }
+        } catch (err) {
+            this._log(`Stop error: ${err.message}`);
         }
     }
 

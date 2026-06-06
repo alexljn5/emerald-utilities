@@ -29,8 +29,32 @@ function loadTerminalLog() {
     }
 }
 
+function normalizeLogEntry(entry) {
+    if (typeof entry === "string") {
+        return { id: null, message: entry };
+    }
+    return {
+        id: entry?.id ?? null,
+        message: entry?.message ?? ""
+    };
+}
+
 function saveTerminalLog(log) {
     localStorage.setItem(TERMINAL_KEY, JSON.stringify(log.slice(-MAX_TERMINAL_LINES)));
+}
+
+function appendTerminalLog(entry) {
+    const normalized = normalizeLogEntry(entry);
+    if (!normalized.message) return;
+
+    const log = loadTerminalLog().map(normalizeLogEntry);
+    if (normalized.id !== null && log.some(item => item.id === normalized.id)) {
+        return;
+    }
+
+    log.push(normalized);
+    saveTerminalLog(log);
+    renderTerminal(log);
 }
 
 function renderTerminal(log) {
@@ -38,9 +62,9 @@ function renderTerminal(log) {
 
     dom.terminalOutput.innerHTML = "";
 
-    for (const msg of log.slice(-MAX_TERMINAL_LINES)) {
+    for (const entry of log.map(normalizeLogEntry).slice(-MAX_TERMINAL_LINES)) {
         const div = document.createElement("div");
-        div.textContent = msg;
+        div.textContent = entry.message;
         dom.terminalOutput.appendChild(div);
     }
     dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
@@ -62,7 +86,8 @@ function renderScripts(files, configScripts) {
         const div = document.createElement("div");
 
         const runBtn = document.createElement("button");
-        runBtn.textContent = cfg.displayName;
+        const isRunning = scriptManager.isScriptRunning(file);
+        runBtn.textContent = isRunning ? `Stop ${file}` : cfg.displayName;
         runBtn.onclick = () => scriptManager.runScript(file);
 
         const toggle = document.createElement("input");
@@ -84,10 +109,7 @@ function renderScripts(files, configScripts) {
 /* ---------------- LOG ---------------- */
 
 function logToTerminal(msg) {
-    const log = loadTerminalLog();
-    log.push(msg);
-    saveTerminalLog(log);
-    renderTerminal(log);
+    appendTerminalLog(msg);
 }
 
 /* ---------------- INIT ---------------- */
@@ -99,10 +121,10 @@ document.addEventListener("DOMContentLoaded", () => {
     scriptManager.bindLogger(logToTerminal);
     scriptManager.bindDom(dom);
     scriptManager.bindRenderer(renderScripts);
-    scriptManager.replayStartupLogToTerminal(40);
 
     // restore terminal
     renderTerminal(loadTerminalLog());
+    scriptManager.replayMainProcessLogToTerminal(MAX_TERMINAL_LINES);
 
     scriptManager.init();
 

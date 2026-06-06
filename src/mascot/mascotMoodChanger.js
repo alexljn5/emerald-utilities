@@ -11,6 +11,7 @@ const dashboardMascotMoods = {
 
 let logSpamCounter = 0;
 let lastLogTime = Date.now();
+let calmTimer = null;
 
 function setMascotMood(moodKey) {
     if (dashboardMascot && dashboardMascotMoods[moodKey]) {
@@ -32,6 +33,12 @@ function reactToDashboardLog() {
     } else if (logSpamCounter > 5) {
         setMascotMood('dashboardMascotNervous');
     }
+
+    clearTimeout(calmTimer);
+    calmTimer = setTimeout(() => {
+        logSpamCounter = 0;
+        setMascotMood('dashboardMascotNeutral');
+    }, 3000);
 }
 
 window.dashboardMascotReactToLog = reactToDashboardLog;

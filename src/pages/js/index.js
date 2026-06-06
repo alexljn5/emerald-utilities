@@ -12,8 +12,32 @@ function loadTerminalLog() {
     }
 }
 
+function normalizeLogEntry(entry) {
+    if (typeof entry === "string") {
+        return { id: null, message: entry };
+    }
+    return {
+        id: entry?.id ?? null,
+        message: entry?.message ?? ""
+    };
+}
+
 function saveTerminalLog(log) {
     localStorage.setItem(TERMINAL_KEY, JSON.stringify(log.slice(-MAX_TERMINAL_LINES)));
+}
+
+function appendTerminalLog(entry) {
+    const normalized = normalizeLogEntry(entry);
+    if (!normalized.message) return;
+
+    const log = loadTerminalLog().map(normalizeLogEntry);
+    if (normalized.id !== null && log.some(item => item.id === normalized.id)) {
+        return;
+    }
+
+    log.push(normalized);
+    saveTerminalLog(log);
+    renderTerminal(log);
 }
 
 function renderTerminal(log) {
@@ -21,9 +45,9 @@ function renderTerminal(log) {
     if (!term) return;
 
     term.innerHTML = "";
-    for (const msg of log.slice(-MAX_TERMINAL_LINES)) {
+    for (const entry of log.map(normalizeLogEntry).slice(-MAX_TERMINAL_LINES)) {
         const line = document.createElement('div');
-        line.textContent = msg;
+        line.textContent = entry.message;
         term.appendChild(line);
     }
     term.scrollTop = term.scrollHeight;
@@ -66,14 +90,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Simple logger for dashboard terminal
 function dashboardLog(msg) {
-    const log = loadTerminalLog();
-    log.push(msg);
-    saveTerminalLog(log);
-    renderTerminal(log);
+    appendTerminalLog(msg);
 }
 
 // Bind it so background scripts appear on the main dashboard too
 scriptManager.bindLogger(dashboardLog);
 
 // Replay previous startup logs into the dashboard terminal
-scriptManager.replayStartupLogToTerminal(25);
+scriptManager.replayMainProcessLogToTerminal(MAX_TERMINAL_LINES);

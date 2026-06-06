@@ -2,14 +2,13 @@ const { ipcRenderer } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
-const { spawn } = require('child_process');
 
 export class ScriptManager {
     constructor() {
         this.initialized = false;
         this.state = {
             currentScript: null,
-            scriptRunners: new Map(),
+            runningScripts: new Set(),
             config: { scripts: [], customScriptsPath: null },
             autoRunExecuted: false
         };
@@ -17,17 +16,90 @@ export class ScriptManager {
         this.log = null;
         this.renderFn = null;
         this.logFilePath = null; // will be set on first use
+        this.bindMainProcessEvents();
     }
 
     bindLogger(fn) { this.log = fn; }
     bindDom(dom) { this.dom = dom; }
     bindRenderer(fn) { this.renderFn = fn; }
 
-    emitLogEvent(msg) {
+    normalizeLogEntry(entry) {
+        if (typeof entry === 'string') {
+            return { id: null, message: entry };
+        }
+        return {
+            id: entry?.id ?? null,
+            message: entry?.message ?? ''
+        };
+    }
+
+    emitLogEvent(entry) {
         if (typeof window === 'undefined') return;
+        const normalized = this.normalizeLogEntry(entry);
         window.dispatchEvent(new CustomEvent('emerald-script-log', {
-            detail: { message: msg }
+            detail: normalized
         }));
+    }
+
+    bindMainProcessEvents() {
+        ipcRenderer.on('script-log', (event, entry) => {
+            this.showExternalLog(entry);
+        });
+
+        ipcRenderer.on('script-running-changed', (event, { file, isRunning }) => {
+            this.setScriptRunning(file, isRunning);
+            this.renderScripts();
+        });
+    }
+
+    showExternalLog(entry) {
+        const normalized = this.normalizeLogEntry(entry);
+        const msg = normalized.message;
+        if (!msg) return;
+
+        console.log('[ScriptManager]', msg);
+        if (this.log) {
+            this.log(normalized);
+        }
+        this.emitLogEvent(normalized);
+    }
+
+    setScriptRunning(file, isRunning) {
+        if (isRunning) {
+            this.state.runningScripts.add(file);
+        } else {
+            this.state.runningScripts.delete(file);
+        }
+    }
+
+    isScriptRunning(file) {
+        return this.state.runningScripts.has(file);
+    }
+
+    renderScripts() {
+        if (this.renderFn) {
+            this.renderFn(this.state.config._files || [], this.state.config.scripts);
+        }
+    }
+
+    async syncRunningScripts() {
+        try {
+            const running = await ipcRenderer.invoke('get-running-scripts');
+            this.state.runningScripts = new Set(running);
+        } catch (err) {
+            this._log(`Running state error: ${err.message}`);
+        }
+    }
+
+    async replayMainProcessLogToTerminal(maxLines = 500) {
+        try {
+            const lines = await ipcRenderer.invoke('get-script-log-history', maxLines);
+            for (const line of lines) {
+                this.showExternalLog(line);
+            }
+        } catch (err) {
+            this._log(`Log history error: ${err.message}`);
+        }
     }
 
     async replayStartupLogToTerminal(maxLines = 30) {
@@ -194,10 +266,9 @@ export class ScriptManager {
             }
 
             this._log(`Scripts loaded: ${files.length}`);
+            await this.syncRunningScripts();
 
-            if (this.renderFn) {
-                this.renderFn(files, this.state.config.scripts);
-            }
+            this.renderScripts();
         } catch (err) {
             this._log(`Load error: ${err.message}`);
         }
@@ -224,7 +295,7 @@ export class ScriptManager {
             const cfg = this.state.config.scripts.find(s => s.file === file);
             if (!cfg?.autoRun) continue;
             const ok = await this.hasAllDependencies(file);
-            if (ok) this.runScript(file);
+            if (ok) this.runScript(file, { startOnly: true });
             else {
                 await this.updateConfig(file, { autoRun: false });
                 this._log(`Auto-run disabled: ${file}`);
@@ -232,33 +303,24 @@ export class ScriptManager {
         }
     }
 
-    runScript(file) { /* same as before - unchanged */
-        if (this.state.scriptRunners.has(file)) {
-            this.state.scriptRunners.get(file)();
-            return;
-        }
+    async runScript(file, options = {}) {
         const scriptPath = path.join(this.getScriptsDir(), file);
         if (!fsSync.existsSync(scriptPath)) return this._log(`Missing: ${file}`);
 
-        const isWindows = process.platform === 'win32';
-        let command, args = [];
-        const ext = file.split('.').pop();
-        switch (ext) {
-            case 'js': command = 'node'; args = [scriptPath]; break;
-            case 'sh': command = 'bash'; args = [scriptPath]; break;
-            case 'bat': command = 'cmd.exe'; args = ['/c', scriptPath]; break;
-            case 'exe': command = scriptPath; break;
-            default: return this._log('Unsupported type');
-        }
+        try {
+            const result = await ipcRenderer.invoke('run-script', {
+                file,
+                scriptPath,
+                startOnly: !!options.startOnly
+            });
 
-        const child = spawn(command, args, { shell: isWindows });
-        child.stdout.on('data', d => this._logProcessOutput(d));
-        child.stderr.on('data', d => this._logProcessOutput(d, 'ERR: '));
-        child.on('exit', code => {
-            this._log(`${file} exited (${code})`);
-            this.state.scriptRunners.delete(file);
-        });
-        this.state.scriptRunners.set(file, () => child.kill());
+            if (result?.ok) {
+                this.setScriptRunning(file, !!result.running);
+                this.renderScripts();
+            }
+        } catch (err) {
+            this._log(`Run error: ${err.message}`);
+        }
     }
 
     async hasAllDependencies(file) {

@@ -1,5 +1,5 @@
 // src/globals.js
-const versionNumber = "0.0.5";
+const versionNumber = "0.0.6";
 
 window.versionNumber = versionNumber;
 //Later make that flag in here, this didnt work

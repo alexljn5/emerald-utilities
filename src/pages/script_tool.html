@@ -11,9 +11,8 @@
 
     <div class="app">
 
-        <!-- LEFT PANEL -->
+        <!-- LEFT PANEL: Script List -->
         <div class="leftPanel">
-
             <div id="friedEggs">
                 <h1>Emerald Utilities</h1>
                 <span id="versionDisplay"></span>
@@ -27,22 +26,49 @@
             </a>
 
             <button id="chooseScriptLocationButton">Choose Custom Scripts Folder</button>
-
-            <div id="scriptList"></div>
-
             <button id="loadScriptsButton">Load Scripts</button>
-            <button id="saveScriptButton">Save Script</button>
 
-            <h3>Run with Arguments:</h3>
-            <input id="argsInput" type="text" placeholder="Enter arguments">
-
-            <h3>Script Content:</h3>
-            <textarea id="scriptContent"></textarea>
-
+            <h3>Scripts:</h3>
+            <div id="scriptList"></div>
         </div>
 
-        <!-- RIGHT PANEL -->
+        <!-- RIGHT PANEL: Detail + Terminal -->
         <div class="rightPanel">
+            <!-- Detail Panel (hidden until script selected) -->
+            <div id="detailPanel" class="detailPanel hidden">
+                <h2 id="detailScriptName">Select a script</h2>
+
+                <div class="detailActions">
+                    <button id="runButton">Run</button>
+                    <button id="runStartupButton">Run Startup</button>
+                    <button id="viewButton">View</button>
+                </div>
+
+                <div class="detailRow">
+                    <label>
+                        <input type="checkbox" id="autoRunToggle"> Auto-run on startup
+                    </label>
+                </div>
+
+                <div class="detailRow">
+                    <label>Cron Tasks (coming soon):</label>
+                    <input type="text" id="cronInput" placeholder="e.g. */5 * * * *" disabled>
+                </div>
+
+                <div class="detailRow">
+                    <label>Arguments:</label>
+                    <input id="argsInput" type="text" placeholder="Enter arguments">
+                </div>
+
+                <div class="detailRow">
+                    <label>Script Content:</label>
+                    <textarea id="scriptContent"></textarea>
+                </div>
+
+                <button id="saveScriptButton">Save Script</button>
+            </div>
+
+            <!-- Terminal -->
             <div id="terminalOutput"></div>
         </div>
 

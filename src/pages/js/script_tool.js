@@ -7,18 +7,25 @@ let dom = null;
 let terminalLog = [];
 let renderQueued = false;
 let saveTimer = null;
+let selectedFile = null;
 
 function getDom() {
     return {
         loadScriptsButton: document.getElementById('loadScriptsButton'),
         saveScriptButton: document.getElementById('saveScriptButton'),
         scriptList: document.getElementById('scriptList'),
+        detailPanel: document.getElementById('detailPanel'),
+        detailScriptName: document.getElementById('detailScriptName'),
+        runButton: document.getElementById('runButton'),
+        runStartupButton: document.getElementById('runStartupButton'),
+        viewButton: document.getElementById('viewButton'),
+        autoRunToggle: document.getElementById('autoRunToggle'),
+        cronInput: document.getElementById('cronInput'),
+        argsInput: document.getElementById('argsInput'),
         scriptContent: document.getElementById('scriptContent'),
         terminalOutput: document.getElementById('terminalOutput'),
         chooseScriptLocationButton: document.getElementById('chooseScriptLocationButton'),
-        aboutButton: document.getElementById('aboutButton'),
-        scriptButtons: new Map(),
-        autoRunToggles: new Map()
+        aboutButton: document.getElementById('aboutButton')
     };
 }
 
@@ -87,11 +94,11 @@ function renderTerminal(log) {
     dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
 }
 
+/* ---------------- SCRIPT LIST ---------------- */
+
 function renderScripts(files, configScripts) {
     if (!dom?.scriptList) return;
     dom.scriptList.innerHTML = "";
-    dom.scriptButtons?.clear?.();
-    dom.autoRunToggles?.clear?.();
 
     for (const file of files) {
         const cfg = configScripts.find(s => s.file === file) || {
@@ -100,31 +107,59 @@ function renderScripts(files, configScripts) {
             autoRun: false
         };
 
-        const div = document.createElement("div");
+        const item = document.createElement("div");
+        item.className = "scriptListItem";
+        if (file === selectedFile) {
+            item.classList.add("active");
+        }
 
-        const runBtn = document.createElement("button");
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "scriptName";
+        nameSpan.textContent = cfg.displayName || file;
+
+        const badge = document.createElement("span");
+        badge.className = "scriptBadge";
         const isRunning = scriptManager.isScriptRunning(file);
+        badge.textContent = isRunning ? "Running" : (cfg.autoRun ? "Auto" : "");
 
-        runBtn.textContent = isRunning ? `⏹ Stop ${file}` : `▶ Run ${file}`;
-        runBtn.style.background = isRunning ? "#8B0000" : "#1a1a1a"; // red when running
+        item.append(nameSpan, badge);
 
-        runBtn.onclick = () => scriptManager.runScript(file);
+        item.addEventListener("click", () => {
+            selectScript(file);
+        });
 
-        const toggle = document.createElement("input");
-        toggle.type = "checkbox";
-        toggle.checked = !!cfg.autoRun;
-        toggle.title = "Auto-run";
-        toggle.onchange = () => {
-            scriptManager.updateConfig(file, { autoRun: toggle.checked });
-        };
-
-        const viewBtn = document.createElement("button");
-        viewBtn.textContent = `View ${file}`;
-        viewBtn.onclick = () => scriptManager.viewScript(file);   // ← FIXED!
-
-        div.append(runBtn, toggle, viewBtn);
-        dom.scriptList.appendChild(div);
+        dom.scriptList.appendChild(item);
     }
+}
+
+function selectScript(file) {
+    selectedFile = file;
+    const cfg = scriptManager.state.config.scripts.find(s => s.file === file) || { autoRun: false };
+
+    // Update list active state
+    const items = dom.scriptList.querySelectorAll(".scriptListItem");
+    items.forEach((el, idx) => {
+        const files = scriptManager.state.config._files || [];
+        if (files[idx] === file) {
+            el.classList.add("active");
+        } else {
+            el.classList.remove("active");
+        }
+    });
+
+    // Show detail panel
+    dom.detailPanel.classList.remove("hidden");
+    dom.detailScriptName.textContent = file;
+
+    // Update run button text
+    const isRunning = scriptManager.isScriptRunning(file);
+    dom.runButton.textContent = isRunning ? `⏹ Stop ${file}` : `▶ Run ${file}`;
+
+    // Update auto-run toggle
+    dom.autoRunToggle.checked = !!cfg.autoRun;
+
+    // Load script content
+    scriptManager.viewScript(file);
 }
 
 /* ---------------- LOG ---------------- */
@@ -162,17 +197,39 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     dom.saveScriptButton?.addEventListener("click", () => {
-        scriptManager.saveScript();     // ← FIXED!
+        scriptManager.saveScript();
+    });
+
+    dom.chooseScriptLocationButton?.addEventListener("click", () => {
+        scriptManager.chooseCustomScriptFolder();
     });
 
     dom.aboutButton?.addEventListener("click", () => {
         window.location.href = "./pages/about.html";
     });
-    dom.chooseScriptLocationButton?.addEventListener("click", () => {
-        scriptManager.chooseCustomScriptFolder();
+
+    // Detail panel events
+    dom.runButton?.addEventListener("click", () => {
+        if (!selectedFile) return;
+        scriptManager.runScript(selectedFile);
     });
 
-    scriptManager.bindUI = () => { }; // reserved hook if needed
+    dom.runStartupButton?.addEventListener("click", async () => {
+        if (!selectedFile) return;
+        await scriptManager.runScript(selectedFile);
+    });
+
+    dom.viewButton?.addEventListener("click", () => {
+        if (!selectedFile) return;
+        scriptManager.viewScript(selectedFile);
+    });
+
+    dom.autoRunToggle?.addEventListener("change", () => {
+        if (!selectedFile) return;
+        scriptManager.updateConfig(selectedFile, { autoRun: dom.autoRunToggle.checked });
+    });
+
+    dom.scriptManager = scriptManager; // expose for external updates
 });
 
 window.addEventListener("beforeunload", () => {

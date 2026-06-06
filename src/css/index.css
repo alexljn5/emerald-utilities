@@ -61,7 +61,7 @@ body {
 .navBox h2 {
     font-size: 1.1rem;
     margin-bottom: 0.75rem;
-    color: #ff4444;
+    color: #ff2222;
 }
 
 .navButtons {
@@ -94,7 +94,7 @@ body {
 .rightPanel {
     position: relative;
     background: #111;
-    border: 2px solid #333;
+    border: 2px solid #ff2222;
     border-radius: 10px;
     overflow: hidden;
 }
@@ -109,7 +109,7 @@ body {
     height: 240px;
     /* smaller height */
     background: #0f0f0f;
-    color: #ff4444;
+    color: #ff2222;
     border: 2px solid #ff2222;
     padding: 0.8rem;
     overflow-y: auto;

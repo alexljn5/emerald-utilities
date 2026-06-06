@@ -1,5 +1,5 @@
 // src/globals.js
-const versionNumber = "0.0.4";
+const versionNumber = "0.0.5";
 
 window.versionNumber = versionNumber;
 window.PRODUCTION = true;   // ← Hardcode for now or pass via IPC later

@@ -16,27 +16,27 @@
     background-color: #111;
     margin: 10% auto;
     padding: 20px;
-    border: 2px solid red;
+    border: 2px solid #ff2222;
     border-radius: 8px;
     width: 80%;
     max-width: 600px;
     color: white;
     font-family: 'pixelSans', monospace;
-    box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+    box-shadow: 0 0 20px rgba(255, 34, 34, 0.3);
 }
 
 .modal-content code {
     background: #222;
     padding: 2px 6px;
     border-radius: 4px;
-    color: #ff8888;
+    color: #ff2222;
 }
 
 .modal-content pre {
     background: #1a1a1a;
     padding: 10px;
     overflow-x: auto;
-    border-left: 3px solid red;
+    border-left: 3px solid #ff2222;
 }
 
 .modal {
@@ -44,7 +44,7 @@
 }
 
 .close {
-    color: red;
+    color: #ff2222;
     float: right;
     font-size: 28px;
     font-weight: bold;
@@ -62,7 +62,7 @@
 .aboutContent pre {
     background: #1a1a1a;
     padding: 10px;
-    border-left: 3px solid red;
+    border-left: 3px solid #ff2222;
     overflow-x: auto;
 }
 
@@ -70,7 +70,7 @@
     background: #222;
     padding: 2px 6px;
     border-radius: 4px;
-    color: #ff8888;
+    color: #ff2222;
 }
 
 .close:hover {
@@ -92,7 +92,7 @@
 .aboutCreepyImage img {
     width: 85%;
     max-width: 85%;
-    border: 6px solid #ff0000;
+    border: 6px solid #ff2222;
     outline: 2px solid white;
     filter: contrast(1.2) brightness(0.7) saturate(0.8);
 }

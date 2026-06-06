@@ -46,7 +46,7 @@ body {
 /* DETAIL PANEL */
 .detailPanel {
     background: #111;
-    border: 1px solid #ff0000;
+    border: 1px solid #ff2222;
     padding: 1rem;
     display: flex;
     flex-direction: column;
@@ -61,7 +61,7 @@ body {
 .detailPanel h2 {
     margin: 0;
     font-size: 1.6rem;
-    color: #ff0000;
+    color: #ff2222;
 }
 
 .detailActions {
@@ -86,7 +86,7 @@ body {
     padding: 0.4rem;
     background: #0a0a0a;
     color: white;
-    border: 1px solid #ff0000;
+    border: 1px solid #ff2222;
     font-family: inherit;
     font-size: 1.2rem;
     resize: vertical;
@@ -101,8 +101,8 @@ body {
     flex: 1;
     min-height: 0;
     background: #0f0f0f;
-    color: #ff0000;
-    border: 1px solid #ff0000;
+    color: #ff2222;
+    border: 1px solid #ff2222;
     padding: 0.5rem;
     overflow-y: auto;
     white-space: pre-wrap;
@@ -146,12 +146,12 @@ body {
 
 .scriptListItem:hover {
     background: #2a2a2a;
-    border-color: #ff0000;
+    border-color: #ff2222;
 }
 
 .scriptListItem.active {
     background: #330000;
-    border-color: #ff0000;
+    border-color: #ff2222;
 }
 
 .scriptListItem .scriptName {
@@ -170,8 +170,8 @@ body {
 }
 
 .scriptListItem.active .scriptBadge {
-    border-color: #ff0000;
-    color: #ff0000;
+    border-color: #ff2222;
+    color: #ff2222;
 }
 
 /* INPUTS */
@@ -179,14 +179,14 @@ button {
     padding: 0.5rem;
     background: #222;
     color: white;
-    border: 1px solid red;
+    border: 1px solid #ff2222;
     cursor: pointer;
     font-family: inherit;
     font-size: 1.2rem;
 }
 
 button:hover {
-    background: red;
+    background: #ff2222;
 }
 
 button:disabled {
@@ -198,7 +198,7 @@ button:disabled {
     height: 200px;
     background: #111;
     color: white;
-    border: 1px solid red;
+    border: 1px solid #ff2222;
     font-family: inherit;
     font-size: 1.2rem;
 }
@@ -207,7 +207,7 @@ button:disabled {
     padding: 0.4rem;
     background: #111;
     color: white;
-    border: 1px solid red;
+    border: 1px solid #ff2222;
     font-family: inherit;
     font-size: 1.2rem;
 }

@@ -60,10 +60,10 @@ button {
     padding: 0.5rem;
     background: #222;
     color: white;
-    border: 1px solid red;
+    border: 1px solid #ff2222;
     cursor: pointer;
 }
 
 button:hover {
-    background: red;
+    background: #ff2222;
 }

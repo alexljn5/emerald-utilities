@@ -9,48 +9,62 @@
     src: url('../fonts/fs-pixel-sans-unicode-regular.ttf') format('truetype');
 }
 
+:root {
+    /* Color tokens (Tailwind-style custom properties) */
+    --color-bg: #0a0a0a;
+    --color-surface: #111;
+    --color-surface-hover: #1a1a1a;
+    --color-border: #333;
+    --color-accent: #ff2222;
+    --color-accent-hover: #ff2222;
+    --color-text: #ffffff;
+    --color-terminal-bg: #0f0f0f;
+    --color-terminal-text: #ff2222;
+}
+
 body {
     font-family: 'pixelSans', Arial, sans-serif;
-    font-size: 1.4rem;
-    color: white;
-    background: black;
+    font-size: clamp(0.85rem, 1.2vw, 1.4rem);
+    color: var(--color-text);
+    background: var(--color-bg);
     height: 100vh;
 }
 
 /* MAIN LAYOUT */
 .app {
     display: grid;
-    grid-template-columns: 35% 65%;
+    grid-template-columns: minmax(220px, 35%) 1fr;
     height: 100vh;
-    gap: 1rem;
-    padding: 1rem;
+    gap: clamp(0.5rem, 1vw, 1rem);
+    padding: clamp(0.5rem, 1vw, 1rem);
 }
 
 /* LEFT SIDE */
 .leftPanel {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: clamp(0.5rem, 1vw, 0.75rem);
     overflow: hidden;
+    min-height: 0;
 }
 
 /* RIGHT SIDE */
 .rightPanel {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: clamp(0.5rem, 1vw, 1rem);
     min-height: 0;
     overflow: hidden;
 }
 
 /* DETAIL PANEL */
 .detailPanel {
-    background: #111;
-    border: 1px solid #ff2222;
-    padding: 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-accent);
+    padding: clamp(0.6rem, 1vw, 1rem);
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: clamp(0.5rem, 1vw, 0.75rem);
     overflow-y: auto;
 }
 
@@ -60,8 +74,8 @@ body {
 
 .detailPanel h2 {
     margin: 0;
-    font-size: 1.6rem;
-    color: #ff2222;
+    font-size: clamp(1rem, 1.6vw, 1.6rem);
+    color: var(--color-accent);
 }
 
 .detailActions {
@@ -77,18 +91,18 @@ body {
 }
 
 .detailRow label {
-    font-size: 1.2rem;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
     color: #ccc;
 }
 
 .detailRow input[type="text"],
 .detailRow textarea {
     padding: 0.4rem;
-    background: #0a0a0a;
-    color: white;
-    border: 1px solid #ff2222;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
     font-family: inherit;
-    font-size: 1.2rem;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
     resize: vertical;
 }
 
@@ -100,10 +114,10 @@ body {
 #terminalOutput {
     flex: 1;
     min-height: 0;
-    background: #0f0f0f;
-    color: #ff2222;
-    border: 1px solid #ff2222;
-    padding: 0.5rem;
+    background: var(--color-terminal-bg);
+    color: var(--color-terminal-text);
+    border: 1px solid var(--color-accent);
+    padding: clamp(0.4rem, 1vw, 0.5rem);
     overflow-y: auto;
     white-space: pre-wrap;
 }
@@ -112,12 +126,12 @@ body {
 #friedEggs {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: clamp(0.3rem, 0.8vw, 0.5rem);
 }
 
 #logo img {
-    width: 48px;
-    height: 48px;
+    width: clamp(36px, 5vw, 48px);
+    height: clamp(36px, 5vw, 48px);
 }
 
 /* SCRIPT LIST */
@@ -128,7 +142,7 @@ body {
     flex-direction: column;
     gap: 0.25rem;
     overflow-y: auto;
-    border: 1px solid #333;
+    border: 1px solid var(--color-border);
     padding: 0.5rem;
 }
 
@@ -138,55 +152,58 @@ body {
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.4rem 0.5rem;
-    background: #1a1a1a;
-    border: 1px solid #333;
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-border);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
 
 .scriptListItem:hover {
     background: #2a2a2a;
-    border-color: #ff2222;
+    border-color: var(--color-accent);
 }
 
 .scriptListItem.active {
     background: #330000;
-    border-color: #ff2222;
+    border-color: var(--color-accent);
 }
 
 .scriptListItem .scriptName {
     flex: 1;
-    font-size: 1.2rem;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .scriptListItem .scriptBadge {
-    font-size: 1rem;
+    font-size: clamp(0.8rem, 1vw, 1rem);
     padding: 0.1rem 0.4rem;
     border: 1px solid #555;
     color: #aaa;
 }
 
 .scriptListItem.active .scriptBadge {
-    border-color: #ff2222;
-    color: #ff2222;
+    border-color: var(--color-accent);
+    color: var(--color-accent);
 }
 
 /* INPUTS */
 button {
     padding: 0.5rem;
-    background: #222;
-    color: white;
-    border: 1px solid #ff2222;
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
     cursor: pointer;
     font-family: inherit;
-    font-size: 1.2rem;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
+    border-radius: 4px;
+    transition: all 0.1s ease;
 }
 
 button:hover {
-    background: #ff2222;
+    background: var(--color-accent);
+    color: #000;
 }
 
 button:disabled {
@@ -196,20 +213,20 @@ button:disabled {
 
 #scriptContent {
     height: 200px;
-    background: #111;
-    color: white;
-    border: 1px solid #ff2222;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
     font-family: inherit;
-    font-size: 1.2rem;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
 }
 
 #argsInput {
     padding: 0.4rem;
-    background: #111;
-    color: white;
-    border: 1px solid #ff2222;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
     font-family: inherit;
-    font-size: 1.2rem;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
 }
 
 #cronInput:disabled {

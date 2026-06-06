@@ -11,30 +11,44 @@
     src: url('../../fonts/fs-pixel-sans-unicode-regular.ttf') format('truetype');
 }
 
+:root {
+    /* Color tokens (Tailwind-style custom properties) */
+    --color-bg: #0a0a0a;
+    --color-surface: #111;
+    --color-surface-hover: #1a1a1a;
+    --color-border: #333;
+    --color-accent: #ff2222;
+    --color-accent-hover: #ff2222;
+    --color-text: #ffffff;
+    --color-terminal-bg: #0f0f0f;
+    --color-terminal-text: #ff2222;
+}
+
 /* BASE LAYOUT */
 html,
 body {
     font-family: 'pixelSans', sans-serif;
-    background: black;
-    color: white;
+    background: var(--color-bg);
+    color: var(--color-text);
     height: 100vh;
 }
 
 /* APP GRID (shared structure) */
 .app {
     display: grid;
-    grid-template-columns: 40% 60%;
+    grid-template-columns: minmax(220px, 30%) 1fr;
     height: 100vh;
-    gap: 1rem;
-    padding: 1rem;
+    gap: clamp(0.5rem, 1vw, 1rem);
+    padding: clamp(0.5rem, 1vw, 1rem);
 }
 
 /* PANELS (shared) */
 .leftPanel {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: clamp(0.5rem, 1vw, 0.75rem);
     overflow: hidden;
+    min-height: 0;
 }
 
 .rightPanel {
@@ -46,24 +60,29 @@ body {
 #friedEggs {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: clamp(0.3rem, 0.8vw, 0.5rem);
+    flex-wrap: wrap;
 }
 
 /* LOGO (shared) */
 #logo img {
-    width: 48px;
-    height: 48px;
+    width: clamp(36px, 5vw, 48px);
+    height: clamp(36px, 5vw, 48px);
 }
 
 /* BUTTON SYSTEM (shared) */
 button {
     padding: 0.5rem;
-    background: #222;
-    color: white;
-    border: 1px solid #ff2222;
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
     cursor: pointer;
+    border-radius: 4px;
+    font-family: 'pixelSans', sans-serif;
+    transition: all 0.1s ease;
 }
 
 button:hover {
-    background: #ff2222;
+    background: var(--color-accent);
+    color: #000;
 }

@@ -22,11 +22,16 @@ function setMascotMood(moodKey) {
     }
 }
 
+function pruneOldLogs() {
+    const now = Date.now();
+    recentLogTimes = recentLogTimes.filter(time => now - time < SPAM_WINDOW_MS);
+    logSpamCounter = recentLogTimes.length;
+}
+
 function reactToDashboardLog() {
     const now = Date.now();
     recentLogTimes.push(now);
-    recentLogTimes = recentLogTimes.filter(time => now - time < SPAM_WINDOW_MS);
-    logSpamCounter = recentLogTimes.length;
+    pruneOldLogs();
 
     if (logSpamCounter >= MANIC_LINE_THRESHOLD) {
         setMascotMood('dashboardMascotManic');
@@ -44,12 +49,3 @@ function reactToDashboardLog() {
 
 window.dashboardMascotReactToLog = reactToDashboardLog;
 window.addEventListener('emerald-script-log', reactToDashboardLog);
-
-setInterval(() => {
-    const now = Date.now();
-    recentLogTimes = recentLogTimes.filter(time => now - time < SPAM_WINDOW_MS);
-    logSpamCounter = recentLogTimes.length;
-    if (logSpamCounter === 0) {
-        setMascotMood('dashboardMascotNeutral');
-    }
-}, 1000);

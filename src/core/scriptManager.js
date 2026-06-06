@@ -240,6 +240,8 @@ export class ScriptManager {
                     file,
                     type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
                     autoRun: false,
+                    cronEnabled: false,
+                    cronInterval: 0,
                     displayName: `Run ${file}`
                 });
                 changed = true;
@@ -247,6 +249,15 @@ export class ScriptManager {
                 const scriptConfig = cfg.scripts.find(s => s.file === file);
                 if (Object.prototype.hasOwnProperty.call(scriptConfig, 'persistent')) {
                     delete scriptConfig.persistent;
+                    changed = true;
+                }
+                // Add missing cron fields
+                if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronEnabled')) {
+                    scriptConfig.cronEnabled = false;
+                    changed = true;
+                }
+                if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronInterval')) {
+                    scriptConfig.cronInterval = 0;
                     changed = true;
                 }
             }
@@ -313,12 +324,26 @@ export class ScriptManager {
 
         for (const file of this.state.config._files || []) {
             const cfg = this.state.config.scripts.find(s => s.file === file);
-            if (!cfg?.autoRun) continue;
-            const ok = await this.hasAllDependencies(file);
-            if (ok) this.runScript(file, { startOnly: true });
-            else {
-                await this.updateConfig(file, { autoRun: false });
-                this._log(`Auto-run disabled: ${file}`);
+            if (!cfg) continue;
+
+            // Auto-run regular scripts
+            if (cfg.autoRun) {
+                const ok = await this.hasAllDependencies(file);
+                if (ok) this.runScript(file, { startOnly: true });
+                else {
+                    await this.updateConfig(file, { autoRun: false });
+                    this._log(`Auto-run disabled: ${file}`);
+                }
+            }
+
+            // Auto-start cron jobs
+            if (cfg.cronEnabled && cfg.cronInterval > 0) {
+                const ok = await this.hasAllDependencies(file);
+                if (ok) this.startCronScript(file, cfg.cronInterval);
+                else {
+                    await this.updateConfig(file, { cronEnabled: false });
+                    this._log(`Cron auto-start disabled: ${file}`);
+                }
             }
         }
     }
@@ -367,6 +392,13 @@ export class ScriptManager {
         } catch (err) {
             this._log(`Cron start error: ${err.message}`);
         }
+    }
+
+    async saveCronConfig(file, intervalMs, enabled) {
+        await this.updateConfig(file, {
+            cronInterval: intervalMs,
+            cronEnabled: enabled
+        });
     }
 
     async stopCronScript(file) {

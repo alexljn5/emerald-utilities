@@ -20,6 +20,7 @@ function getDom() {
         runStartupButton: document.getElementById('runStartupButton'),
         viewButton: document.getElementById('viewButton'),
         autoRunToggle: document.getElementById('autoRunToggle'),
+        cronEnabledToggle: document.getElementById('cronEnabledToggle'),
         cronInput: document.getElementById('cronInput'),
         cronToggleButton: document.getElementById('cronToggleButton'),
         argsInput: document.getElementById('argsInput'),
@@ -140,7 +141,7 @@ function renderScripts(files, configScripts) {
 
 function selectScript(file) {
     selectedFile = file;
-    const cfg = scriptManager.state.config.scripts.find(s => s.file === file) || { autoRun: false };
+    const cfg = scriptManager.state.config.scripts.find(s => s.file === file) || { autoRun: false, cronEnabled: false, cronInterval: 0 };
 
     // Update list active state
     const items = dom.scriptList.querySelectorAll(".scriptListItem");
@@ -170,6 +171,16 @@ function selectScript(file) {
 
     // Update auto-run toggle
     dom.autoRunToggle.checked = !!cfg.autoRun;
+
+    // Update cron enabled toggle
+    if (dom.cronEnabledToggle) {
+        dom.cronEnabledToggle.checked = !!cfg.cronEnabled;
+    }
+
+    // Update cron interval input
+    if (dom.cronInput && cfg.cronInterval > 0) {
+        dom.cronInput.value = cfg.cronInterval;
+    }
 
     // Load script content
     scriptManager.viewScript(file);
@@ -242,6 +253,13 @@ document.addEventListener("DOMContentLoaded", () => {
         scriptManager.updateConfig(selectedFile, { autoRun: dom.autoRunToggle.checked });
     });
 
+    dom.cronEnabledToggle?.addEventListener("change", () => {
+        if (!selectedFile) return;
+        const intervalMs = parseInt(dom.cronInput.value, 10) || 0;
+        scriptManager.saveCronConfig(selectedFile, intervalMs, dom.cronEnabledToggle.checked);
+        scriptManager._log(`Cron auto-start ${dom.cronEnabledToggle.checked ? 'enabled' : 'disabled'} for ${selectedFile}`);
+    });
+
     dom.cronToggleButton?.addEventListener("click", async () => {
         if (!selectedFile) return;
         const intervalMs = parseInt(dom.cronInput.value, 10);
@@ -251,8 +269,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (scriptManager.isCronRunning(selectedFile)) {
             await scriptManager.stopCronScript(selectedFile);
+            await scriptManager.saveCronConfig(selectedFile, intervalMs, false);
         } else {
             await scriptManager.startCronScript(selectedFile, intervalMs);
+            await scriptManager.saveCronConfig(selectedFile, intervalMs, true);
         }
         selectScript(selectedFile);
     });

@@ -107,6 +107,25 @@
     color: var(--color-accent);
 }
 
+.scriptListItem .scriptBadge.cronBadge {
+    border-color: #00ff88;
+    color: #00ff88;
+    background: rgba(0, 255, 136, 0.1);
+    animation: cronPulse 2s infinite;
+}
+
+@keyframes cronPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
 /* INPUTS */
 #scriptContent {
     height: 200px;
@@ -151,4 +170,15 @@
 #cronToggleButton:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+#cronToggleButton.cronActive {
+    background: #00ff88;
+    color: #000;
+    border-color: #00ff88;
+    animation: cronPulse 2s infinite;
+}
+
+#cronEnabledToggle {
+    accent-color: #00ff88;
 }

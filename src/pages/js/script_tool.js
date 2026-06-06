@@ -124,9 +124,14 @@ function renderScripts(files, configScripts) {
         const isRunning = scriptManager.isScriptRunning(file);
         const isCronRunning = scriptManager.isCronRunning(file);
         let badgeText = "";
-        if (isCronRunning) badgeText = "Cron";
-        else if (isRunning) badgeText = "Running";
-        else if (cfg.autoRun) badgeText = "Auto";
+        if (isCronRunning) {
+            badgeText = "Cron";
+            badge.classList.add("cronBadge");
+        } else if (isRunning) {
+            badgeText = "Running";
+        } else if (cfg.autoRun) {
+            badgeText = "Auto";
+        }
         badge.textContent = badgeText;
 
         item.append(nameSpan, badge);
@@ -167,6 +172,11 @@ function selectScript(file) {
     if (dom.cronToggleButton) {
         dom.cronToggleButton.textContent = isCronRunning ? `⏹ Stop Cron` : `▶ Start Cron`;
         dom.cronInput.disabled = isCronRunning;
+        if (isCronRunning) {
+            dom.cronToggleButton.classList.add("cronActive");
+        } else {
+            dom.cronToggleButton.classList.remove("cronActive");
+        }
     }
 
     // Update auto-run toggle

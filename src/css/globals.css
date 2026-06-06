@@ -1,18 +1,18 @@
-/* RESET */
+/* ==================== RESET ==================== */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
-/* FONT */
+/* ==================== FONT ==================== */
 @font-face {
     font-family: 'pixelSans';
     src: url('../../fonts/fs-pixel-sans-unicode-regular.ttf') format('truetype');
 }
 
+/* ==================== COLOR TOKENS ==================== */
 :root {
-    /* Color tokens (Tailwind-style custom properties) */
     --color-bg: #0a0a0a;
     --color-surface: #111;
     --color-surface-hover: #1a1a1a;
@@ -22,31 +22,37 @@
     --color-text: #ffffff;
     --color-terminal-bg: #0f0f0f;
     --color-terminal-text: #ff2222;
+    --color-code-bg: #222;
+    --color-code-text: #ff2222;
+    --color-modal-bg: rgba(0, 0, 0, 0.8);
+    --color-shadow: rgba(255, 34, 34, 0.3);
 }
 
-/* BASE LAYOUT */
+/* ==================== BASE LAYOUT ==================== */
 html,
 body {
-    font-family: 'pixelSans', sans-serif;
-    background: var(--color-bg);
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(1.3rem, 1.9vw, 2rem);
     color: var(--color-text);
+    background: var(--color-bg);
     height: 100vh;
+    overflow: hidden;
 }
 
-/* APP GRID (shared structure) */
+/* ==================== APP GRID ==================== */
 .app {
     display: grid;
-    grid-template-columns: minmax(220px, 30%) 1fr;
+    grid-template-columns: minmax(240px, 30%) 1fr;
     height: 100vh;
-    gap: clamp(0.5rem, 1vw, 1rem);
-    padding: clamp(0.5rem, 1vw, 1rem);
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+    padding: clamp(0.75rem, 1.2vw, 1.25rem);
 }
 
-/* PANELS (shared) */
+/* ==================== PANELS ==================== */
 .leftPanel {
     display: flex;
     flex-direction: column;
-    gap: clamp(0.5rem, 1vw, 0.75rem);
+    gap: clamp(0.6rem, 1vw, 1rem);
     overflow: hidden;
     min-height: 0;
 }
@@ -54,35 +60,203 @@ body {
 .rightPanel {
     display: flex;
     min-height: 0;
+    overflow: hidden;
 }
 
-/* HEADER BLOCK (shared) */
+/* ==================== HEADER ==================== */
 #friedEggs {
     display: flex;
     align-items: center;
-    gap: clamp(0.3rem, 0.8vw, 0.5rem);
+    gap: clamp(0.5rem, 0.8vw, 0.75rem);
+    padding-bottom: clamp(0.4rem, 0.6vw, 0.5rem);
+    border-bottom: 1px solid var(--color-border);
     flex-wrap: wrap;
 }
 
-/* LOGO (shared) */
 #logo img {
-    width: clamp(36px, 5vw, 48px);
-    height: clamp(36px, 5vw, 48px);
+    width: clamp(40px, 5vw, 52px);
+    height: clamp(40px, 5vw, 52px);
 }
 
-/* BUTTON SYSTEM (shared) */
+/* ==================== BUTTONS ==================== */
 button {
-    padding: 0.5rem;
+    padding: clamp(0.5rem, 1vw, 0.9rem) clamp(0.6rem, 1.2vw, 1.2rem);
     background: var(--color-surface-hover);
     color: var(--color-text);
     border: 1px solid var(--color-accent);
     cursor: pointer;
-    border-radius: 4px;
     font-family: 'pixelSans', sans-serif;
     transition: all 0.1s ease;
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+    border-radius: 4px;
 }
 
 button:hover {
     background: var(--color-accent);
     color: #000;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button.full {
+    width: 100%;
+}
+
+/* ==================== TERMINAL ==================== */
+.dashboardTerminal,
+#terminalOutput {
+    background: var(--color-terminal-bg);
+    color: var(--color-terminal-text);
+    border: 2px solid var(--color-accent);
+    padding: clamp(0.5rem, 1vw, 0.8rem);
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: 'pixelSans', monospace;
+    font-size: clamp(0.75rem, 1vw, 1rem);
+    border-radius: 6px;
+}
+
+/* Hide scrollbar */
+.dashboardTerminal::-webkit-scrollbar,
+#terminalOutput::-webkit-scrollbar {
+    display: none;
+}
+
+.dashboardTerminal,
+#terminalOutput {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+/* ==================== MASCOT ==================== */
+#dashboardMascotImage {
+    position: absolute;
+    bottom: clamp(10px, 3vw, 90px);
+    right: clamp(10px, 2vw, 30px);
+    width: min(480px, 50%);
+    aspect-ratio: 1 / 1;
+    z-index: 2;
+    pointer-events: none;
+}
+
+#dashboardMascot {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center bottom;
+    filter: drop-shadow(0 25px 50px rgba(0, 0, 0, 0.9));
+    transition: transform 0.3s ease;
+}
+
+#dashboardMascot:hover {
+    transform: scale(1.06);
+}
+
+/* ==================== MODAL ==================== */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--color-modal-bg);
+    backdrop-filter: blur(3px);
+}
+
+.modal-content {
+    background-color: var(--color-surface);
+    margin: 10% auto;
+    padding: 20px;
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    width: 80%;
+    max-width: 600px;
+    color: var(--color-text);
+    font-family: 'pixelSans', monospace;
+    box-shadow: 0 0 20px var(--color-shadow);
+}
+
+.modal-content code {
+    background: var(--color-surface-hover);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--color-accent);
+}
+
+.modal-content pre {
+    background: var(--color-surface-hover);
+    padding: 10px;
+    overflow-x: auto;
+    border-left: 3px solid var(--color-accent);
+}
+
+.close {
+    color: var(--color-accent);
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: var(--color-text);
+}
+
+/* ==================== CODE BLOCKS ==================== */
+code {
+    background: var(--color-code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--color-code-text);
+}
+
+pre {
+    background: var(--color-surface-hover);
+    padding: 10px;
+    overflow-x: auto;
+    border-left: 3px solid var(--color-accent);
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 900px) {
+    .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    .dashboardTerminal {
+        width: calc(100% - 40px);
+        height: 200px;
+        right: 20px;
+        top: 20px;
+        left: 20px;
+    }
+
+    #dashboardMascotImage {
+        width: min(360px, 45%);
+        height: auto;
+        bottom: 20px;
+        right: 20px;
+    }
+}
+
+@media (max-width: 600px) {
+    .dashboardTerminal {
+        top: 10px;
+        left: 10px;
+        width: calc(100% - 20px);
+        height: 150px;
+    }
+
+    #dashboardMascotImage {
+        width: min(260px, 50%);
+        bottom: 10px;
+        right: 10px;
+    }
 }

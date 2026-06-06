@@ -1,61 +1,4 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-@font-face {
-    font-family: 'pixelSans';
-    src: url('../fonts/fs-pixel-sans-unicode-regular.ttf') format('truetype');
-}
-
-:root {
-    /* Color tokens (Tailwind-style custom properties) */
-    --color-bg: #0a0a0a;
-    --color-surface: #111;
-    --color-surface-hover: #1a1a1a;
-    --color-border: #333;
-    --color-accent: #ff2222;
-    --color-accent-hover: #ff2222;
-    --color-text: #ffffff;
-    --color-terminal-bg: #0f0f0f;
-    --color-terminal-text: #ff2222;
-}
-
-body {
-    font-family: 'pixelSans', Arial, sans-serif;
-    font-size: clamp(0.85rem, 1.2vw, 1.4rem);
-    color: var(--color-text);
-    background: var(--color-bg);
-    height: 100vh;
-}
-
-/* MAIN LAYOUT */
-.app {
-    display: grid;
-    grid-template-columns: minmax(220px, 35%) 1fr;
-    height: 100vh;
-    gap: clamp(0.5rem, 1vw, 1rem);
-    padding: clamp(0.5rem, 1vw, 1rem);
-}
-
-/* LEFT SIDE */
-.leftPanel {
-    display: flex;
-    flex-direction: column;
-    gap: clamp(0.5rem, 1vw, 0.75rem);
-    overflow: hidden;
-    min-height: 0;
-}
-
-/* RIGHT SIDE */
-.rightPanel {
-    display: flex;
-    flex-direction: column;
-    gap: clamp(0.5rem, 1vw, 1rem);
-    min-height: 0;
-    overflow: hidden;
-}
+/* ==================== PAGE-SPECIFIC: SCRIPT TOOL ==================== */
 
 /* DETAIL PANEL */
 .detailPanel {
@@ -108,30 +51,6 @@ body {
 
 .detailRow textarea {
     min-height: 120px;
-}
-
-/* TERMINAL */
-#terminalOutput {
-    flex: 1;
-    min-height: 0;
-    background: var(--color-terminal-bg);
-    color: var(--color-terminal-text);
-    border: 1px solid var(--color-accent);
-    padding: clamp(0.4rem, 1vw, 0.5rem);
-    overflow-y: auto;
-    white-space: pre-wrap;
-}
-
-/* HEADER AREA */
-#friedEggs {
-    display: flex;
-    align-items: center;
-    gap: clamp(0.3rem, 0.8vw, 0.5rem);
-}
-
-#logo img {
-    width: clamp(36px, 5vw, 48px);
-    height: clamp(36px, 5vw, 48px);
 }
 
 /* SCRIPT LIST */
@@ -189,28 +108,6 @@ body {
 }
 
 /* INPUTS */
-button {
-    padding: 0.5rem;
-    background: var(--color-surface-hover);
-    color: var(--color-text);
-    border: 1px solid var(--color-accent);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
-    border-radius: 4px;
-    transition: all 0.1s ease;
-}
-
-button:hover {
-    background: var(--color-accent);
-    color: #000;
-}
-
-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 #scriptContent {
     height: 200px;
     background: var(--color-surface);
@@ -231,20 +128,4 @@ button:disabled {
 
 #cronInput:disabled {
     opacity: 0.5;
-}
-
-/* RESPONSIVE */
-@media (max-width: 800px) {
-    .app {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-    }
-
-    .leftPanel {
-        max-height: 40vh;
-    }
-
-    #terminalOutput {
-        height: 40vh;
-    }
 }

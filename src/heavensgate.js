@@ -193,8 +193,29 @@ function getScriptCommand(file, scriptPath) {
     switch (ext) {
         case 'js':
             return { command: 'node', args: [scriptPath] };
-        case 'sh':
-            return { command: 'bash', args: [scriptPath] };
+        case 'sh': {
+            if (process.platform === 'win32') {
+                // === WINDOWS: Use WSL ===
+                let wslPath = scriptPath.replace(/\\/g, '/');
+                const driveMatch = wslPath.match(/^([A-Za-z]):\/(.*)$/);
+                if (driveMatch) {
+                    wslPath = `/mnt/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`;
+                }
+
+                return {
+                    command: 'wsl',
+                    args: ['bash', wslPath],
+                    useShell: false
+                };
+            } else {
+                // === Linux / macOS: Use native bash ===
+                return {
+                    command: 'bash',
+                    args: [scriptPath],
+                    useShell: false
+                };
+            }
+        }
         case 'bat':
             return { command: 'cmd.exe', args: ['/c', scriptPath] };
         case 'exe':
@@ -227,10 +248,13 @@ function startScript(file, scriptPath) {
         ? `"${commandInfo.command}"`
         : commandInfo.command;
 
+    // Convert cwd to forward slashes on Windows for bash compatibility
+    const cwd = isWindows ? path.dirname(scriptPath).replace(/\\/g, '/') : path.dirname(scriptPath);
+
     const child = spawn(command, commandInfo.args, {
-        shell: isWindows,
+        shell: commandInfo.useShell !== false && isWindows,
         windowsVerbatimArguments: true,   // Important for paths with spaces
-        cwd: path.dirname(scriptPath)     // Run from script's directory
+        cwd: cwd     // Run from script's directory
     });
 
     scriptRunners.set(file, child);
@@ -271,7 +295,7 @@ function startCronScript(file, scriptPath, intervalMs) {
         : commandInfo.command;
 
     const timer = setInterval(() => {
-        const child = spawn(command, commandInfo.args, { shell: isWindows });
+        const child = spawn(command, commandInfo.args, { shell: commandInfo.useShell !== false && isWindows });
         pushScriptLog(`[CRON] Running ${file}`);
 
         if (child.stdout) {

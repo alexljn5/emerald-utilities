@@ -10,7 +10,7 @@ const dashboardMascotMoods = {
 };
 
 let logSpamCounter = 0;
-let lastLogTime = Date.now();
+let recentLogTimes = [];
 let calmTimer = null;
 
 function setMascotMood(moodKey) {
@@ -21,22 +21,20 @@ function setMascotMood(moodKey) {
 
 function reactToDashboardLog() {
     const now = Date.now();
-    if (now - lastLogTime < 300) {
-        logSpamCounter++;
-    } else {
-        logSpamCounter = 0;
-    }
-    lastLogTime = now;
+    recentLogTimes.push(now);
+    recentLogTimes = recentLogTimes.filter(time => now - time < 1000);
+    logSpamCounter = recentLogTimes.length;
 
-    if (logSpamCounter > 12) {
+    if (logSpamCounter >= 6) {
         setMascotMood('dashboardMascotManic');
-    } else if (logSpamCounter > 5) {
+    } else if (logSpamCounter >= 3) {
         setMascotMood('dashboardMascotNervous');
     }
 
     clearTimeout(calmTimer);
     calmTimer = setTimeout(() => {
         logSpamCounter = 0;
+        recentLogTimes = [];
         setMascotMood('dashboardMascotNeutral');
     }, 3000);
 }
@@ -45,8 +43,10 @@ window.dashboardMascotReactToLog = reactToDashboardLog;
 window.addEventListener('emerald-script-log', reactToDashboardLog);
 
 setInterval(() => {
-    if (logSpamCounter > 0) logSpamCounter--;
+    const now = Date.now();
+    recentLogTimes = recentLogTimes.filter(time => now - time < 1000);
+    logSpamCounter = recentLogTimes.length;
     if (logSpamCounter === 0) {
         setMascotMood('dashboardMascotNeutral');
     }
-}, 4000);
+}, 1000);

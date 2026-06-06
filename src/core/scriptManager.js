@@ -193,6 +193,7 @@ export class ScriptManager {
                     file,
                     type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
                     autoRun: false,
+                    persistent: false,
                     displayName: `Run ${file}`,
                     ...updates
                 });
@@ -201,6 +202,16 @@ export class ScriptManager {
             }
 
             await fs.writeFile(configPath, JSON.stringify(cfg, null, 2), 'utf8');
+            if (Object.prototype.hasOwnProperty.call(updates, 'persistent')) {
+                const result = await ipcRenderer.invoke('set-script-persistent', {
+                    file,
+                    persistent: !!updates.persistent
+                });
+                if (result?.ok) {
+                    this.setScriptRunning(file, !!result.running);
+                    this.renderScripts();
+                }
+            }
             this._log(`[config] ${idx === -1 ? 'added' : 'updated'} ${file}`);
         } catch (err) {
             this._log(`Config error: ${err.message}`);
@@ -226,9 +237,16 @@ export class ScriptManager {
                     file,
                     type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
                     autoRun: false,
+                    persistent: false,
                     displayName: `Run ${file}`
                 });
                 changed = true;
+            } else {
+                const scriptConfig = cfg.scripts.find(s => s.file === file);
+                if (scriptConfig.persistent === undefined) {
+                    scriptConfig.persistent = false;
+                    changed = true;
+                }
             }
         }
         return changed;
@@ -311,7 +329,8 @@ export class ScriptManager {
             const result = await ipcRenderer.invoke('run-script', {
                 file,
                 scriptPath,
-                startOnly: !!options.startOnly
+                startOnly: !!options.startOnly,
+                persistent: !!this.state.config.scripts.find(s => s.file === file)?.persistent
             });
 
             if (result?.ok) {

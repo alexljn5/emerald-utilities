@@ -3,6 +3,9 @@ import { scriptManager } from "../../core/scriptManager.js";
 
 const TERMINAL_KEY = "emerald_terminal_log";
 const MAX_TERMINAL_LINES = 500;
+let terminalLog = [];
+let renderQueued = false;
+let saveTimer = null;
 
 function loadTerminalLog() {
     try {
@@ -26,18 +29,32 @@ function saveTerminalLog(log) {
     localStorage.setItem(TERMINAL_KEY, JSON.stringify(log.slice(-MAX_TERMINAL_LINES)));
 }
 
+function queueTerminalSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveTerminalLog(terminalLog), 200);
+}
+
+function queueTerminalRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => {
+        renderQueued = false;
+        renderTerminal(terminalLog);
+    });
+}
+
 function appendTerminalLog(entry) {
     const normalized = normalizeLogEntry(entry);
     if (!normalized.message) return;
 
-    const log = loadTerminalLog().map(normalizeLogEntry);
-    if (normalized.id !== null && log.some(item => item.id === normalized.id)) {
+    if (normalized.id !== null && terminalLog.some(item => item.id === normalized.id)) {
         return;
     }
 
-    log.push(normalized);
-    saveTerminalLog(log);
-    renderTerminal(log);
+    terminalLog.push(normalized);
+    terminalLog = terminalLog.slice(-MAX_TERMINAL_LINES);
+    queueTerminalSave();
+    queueTerminalRender();
 }
 
 function renderTerminal(log) {
@@ -78,7 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Background auto-run scripts (this is what prints the creepy message)
     scriptManager.init({ bindUI: false });
-    renderTerminal(loadTerminalLog());
+    renderTerminal(terminalLog);
 
     // Expose for console debugging
     window.scriptManager = scriptManager;
@@ -94,7 +111,15 @@ function dashboardLog(msg) {
 }
 
 // Bind it so background scripts appear on the main dashboard too
+terminalLog = loadTerminalLog().map(normalizeLogEntry);
 scriptManager.bindLogger(dashboardLog);
 
 // Replay previous startup logs into the dashboard terminal
 scriptManager.replayMainProcessLogToTerminal(MAX_TERMINAL_LINES);
+
+window.addEventListener("beforeunload", () => {
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTerminalLog(terminalLog);
+    }
+});

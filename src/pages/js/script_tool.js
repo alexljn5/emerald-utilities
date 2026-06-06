@@ -4,6 +4,9 @@ const TERMINAL_KEY = "emerald_terminal_log";
 const MAX_TERMINAL_LINES = 500;
 
 let dom = null;
+let terminalLog = [];
+let renderQueued = false;
+let saveTimer = null;
 
 function getDom() {
     return {
@@ -43,18 +46,32 @@ function saveTerminalLog(log) {
     localStorage.setItem(TERMINAL_KEY, JSON.stringify(log.slice(-MAX_TERMINAL_LINES)));
 }
 
+function queueTerminalSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveTerminalLog(terminalLog), 200);
+}
+
+function queueTerminalRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => {
+        renderQueued = false;
+        renderTerminal(terminalLog);
+    });
+}
+
 function appendTerminalLog(entry) {
     const normalized = normalizeLogEntry(entry);
     if (!normalized.message) return;
 
-    const log = loadTerminalLog().map(normalizeLogEntry);
-    if (normalized.id !== null && log.some(item => item.id === normalized.id)) {
+    if (normalized.id !== null && terminalLog.some(item => item.id === normalized.id)) {
         return;
     }
 
-    log.push(normalized);
-    saveTerminalLog(log);
-    renderTerminal(log);
+    terminalLog.push(normalized);
+    terminalLog = terminalLog.slice(-MAX_TERMINAL_LINES);
+    queueTerminalSave();
+    queueTerminalRender();
 }
 
 function renderTerminal(log) {
@@ -80,7 +97,8 @@ function renderScripts(files, configScripts) {
         const cfg = configScripts.find(s => s.file === file) || {
             file,
             displayName: `Run ${file}`,
-            autoRun: false
+            autoRun: false,
+            persistent: false
         };
 
         const div = document.createElement("div");
@@ -93,15 +111,24 @@ function renderScripts(files, configScripts) {
         const toggle = document.createElement("input");
         toggle.type = "checkbox";
         toggle.checked = !!cfg.autoRun;
+        toggle.title = "Auto-run";
         toggle.onchange = () => {
             scriptManager.updateConfig(file, { autoRun: toggle.checked });
+        };
+
+        const persistentToggle = document.createElement("input");
+        persistentToggle.type = "checkbox";
+        persistentToggle.checked = !!cfg.persistent;
+        persistentToggle.title = "Keep running";
+        persistentToggle.onchange = () => {
+            scriptManager.updateConfig(file, { persistent: persistentToggle.checked });
         };
 
         const viewBtn = document.createElement("button");
         viewBtn.textContent = `View ${file}`;
         viewBtn.onclick = () => scriptManager.viewScript(file);   // ← FIXED!
 
-        div.append(runBtn, toggle, viewBtn);
+        div.append(runBtn, toggle, persistentToggle, viewBtn);
         dom.scriptList.appendChild(div);
     }
 }
@@ -116,6 +143,7 @@ function logToTerminal(msg) {
 
 document.addEventListener("DOMContentLoaded", () => {
     dom = getDom();
+    terminalLog = loadTerminalLog().map(normalizeLogEntry);
 
     // bind engine
     scriptManager.bindLogger(logToTerminal);
@@ -123,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
     scriptManager.bindRenderer(renderScripts);
 
     // restore terminal
-    renderTerminal(loadTerminalLog());
+    renderTerminal(terminalLog);
     scriptManager.replayMainProcessLogToTerminal(MAX_TERMINAL_LINES);
 
     scriptManager.init();
@@ -146,4 +174,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     scriptManager.bindUI = () => { }; // reserved hook if needed
+});
+
+window.addEventListener("beforeunload", () => {
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTerminalLog(terminalLog);
+    }
 });

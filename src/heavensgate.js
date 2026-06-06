@@ -13,6 +13,7 @@ const scriptLogHistory = [];
 const MAX_SCRIPT_LOG_LINES = 500;
 const SCRIPT_LOG_SESSION_ID = Date.now().toString(36);
 let nextScriptLogId = 1;
+const RESTART_DELAY_MS = 1000;
 
 function broadcast(channel, ...args) {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -46,11 +47,82 @@ function setScriptRunning(file, isRunning) {
 }
 
 function stopScript(file) {
-    const child = scriptRunners.get(file);
-    if (!child) return false;
+    const runner = scriptRunners.get(file);
+    if (!runner) return false;
 
-    child.kill();
+    runner.manuallyStopped = true;
+    if (runner.restartTimer) {
+        clearTimeout(runner.restartTimer);
+    }
+    runner.child?.kill();
     return true;
+}
+
+function getScriptCommand(file, scriptPath) {
+    const ext = file.split('.').pop();
+
+    switch (ext) {
+        case 'js':
+            return { command: 'node', args: [scriptPath] };
+        case 'sh':
+            return { command: 'bash', args: [scriptPath] };
+        case 'bat':
+            return { command: 'cmd.exe', args: ['/c', scriptPath] };
+        case 'exe':
+            return { command: scriptPath, args: [] };
+        default:
+            return null;
+    }
+}
+
+function startScript(file, scriptPath, options = {}) {
+    const commandInfo = getScriptCommand(file, scriptPath);
+    if (!commandInfo) {
+        pushScriptLog('Unsupported type');
+        return { ok: false, running: false };
+    }
+
+    const isWindows = process.platform === 'win32';
+    const child = spawn(commandInfo.command, commandInfo.args, { shell: isWindows });
+    const runner = {
+        child,
+        scriptPath,
+        persistent: !!options.persistent,
+        manuallyStopped: false,
+        restartTimer: null
+    };
+
+    scriptRunners.set(file, runner);
+    setScriptRunning(file, true);
+    pushScriptLog(`Started ${file}${runner.persistent ? ' (persistent)' : ''}`);
+
+    child.stdout.on('data', data => logProcessOutput(data));
+    child.stderr.on('data', data => logProcessOutput(data, 'ERR: '));
+    child.on('error', err => {
+        pushScriptLog(`${file} error: ${err.message}`);
+    });
+    child.on('exit', code => {
+        const shouldRestart = runner.persistent && !runner.manuallyStopped;
+
+        if (!shouldRestart) {
+            pushScriptLog(`${file} exited (${code})`);
+            scriptRunners.delete(file);
+            setScriptRunning(file, false);
+            return;
+        }
+
+        pushScriptLog(`${file} exited (${code}); restarting`);
+        runner.restartTimer = setTimeout(() => {
+            if (runner.manuallyStopped || !runner.persistent) {
+                scriptRunners.delete(file);
+                setScriptRunning(file, false);
+                return;
+            }
+            startScript(file, scriptPath, { persistent: true });
+        }, RESTART_DELAY_MS);
+    });
+
+    return { ok: true, running: true };
 }
 
 function createWindow() {
@@ -144,7 +216,7 @@ ipcMain.on('log', (event, message) => {
     console.log('Renderer log:', message);
 });
 
-ipcMain.handle('run-script', async (event, { file, scriptPath, startOnly = false }) => {
+ipcMain.handle('run-script', async (event, { file, scriptPath, startOnly = false, persistent = false }) => {
     if (scriptRunners.has(file)) {
         if (startOnly) {
             return { ok: true, running: true };
@@ -155,57 +227,27 @@ ipcMain.handle('run-script', async (event, { file, scriptPath, startOnly = false
         return { ok: true, running: false };
     }
 
-    const isWindows = process.platform === 'win32';
-    let command;
-    let args = [];
-    const ext = file.split('.').pop();
-
-    switch (ext) {
-        case 'js':
-            command = 'node';
-            args = [scriptPath];
-            break;
-        case 'sh':
-            command = 'bash';
-            args = [scriptPath];
-            break;
-        case 'bat':
-            command = 'cmd.exe';
-            args = ['/c', scriptPath];
-            break;
-        case 'exe':
-            command = scriptPath;
-            break;
-        default:
-            pushScriptLog('Unsupported type');
-            return { ok: false, running: false };
-    }
-
-    const child = spawn(command, args, { shell: isWindows });
-    scriptRunners.set(file, child);
-    setScriptRunning(file, true);
-    pushScriptLog(`Started ${file}`);
-
-    child.stdout.on('data', data => logProcessOutput(data));
-    child.stderr.on('data', data => logProcessOutput(data, 'ERR: '));
-    child.on('error', err => {
-        pushScriptLog(`${file} error: ${err.message}`);
-        scriptRunners.delete(file);
-        setScriptRunning(file, false);
-    });
-    child.on('exit', code => {
-        pushScriptLog(`${file} exited (${code})`);
-        scriptRunners.delete(file);
-        setScriptRunning(file, false);
-    });
-
-    return { ok: true, running: true };
+    return startScript(file, scriptPath, { persistent });
 });
 
 ipcMain.handle('get-running-scripts', () => Array.from(scriptRunners.keys()));
 
 ipcMain.handle('get-script-log-history', (event, maxLines = MAX_SCRIPT_LOG_LINES) => {
     return scriptLogHistory.slice(-maxLines);
+});
+
+ipcMain.handle('set-script-persistent', (event, { file, persistent }) => {
+    const runner = scriptRunners.get(file);
+    if (!runner) return { ok: true, running: false };
+
+    runner.persistent = !!persistent;
+    if (!runner.persistent && runner.restartTimer) {
+        clearTimeout(runner.restartTimer);
+        scriptRunners.delete(file);
+        setScriptRunning(file, false);
+    }
+    pushScriptLog(`${file} persistent ${runner.persistent ? 'enabled' : 'disabled'}`);
+    return { ok: true, running: scriptRunners.has(file) };
 });
 
 ipcMain.handle('select-directory', async () => {

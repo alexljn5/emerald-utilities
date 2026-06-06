@@ -1,6 +1,7 @@
 import { scriptManager } from "../../core/scriptManager.js";
 
 const TERMINAL_KEY = "emerald_terminal_log";
+const MAX_TERMINAL_LINES = 500;
 
 let dom = null;
 
@@ -22,14 +23,14 @@ function getDom() {
 
 function loadTerminalLog() {
     try {
-        return JSON.parse(sessionStorage.getItem(TERMINAL_KEY) || "[]");
+        return JSON.parse(localStorage.getItem(TERMINAL_KEY) || "[]");
     } catch {
         return [];
     }
 }
 
 function saveTerminalLog(log) {
-    sessionStorage.setItem(TERMINAL_KEY, JSON.stringify(log.slice(-200)));
+    localStorage.setItem(TERMINAL_KEY, JSON.stringify(log.slice(-MAX_TERMINAL_LINES)));
 }
 
 function renderTerminal(log) {
@@ -37,11 +38,12 @@ function renderTerminal(log) {
 
     dom.terminalOutput.innerHTML = "";
 
-    for (const msg of log.slice(-20)) {
+    for (const msg of log.slice(-MAX_TERMINAL_LINES)) {
         const div = document.createElement("div");
         div.textContent = msg;
         dom.terminalOutput.appendChild(div);
     }
+    dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
 }
 
 function renderScripts(files, configScripts) {

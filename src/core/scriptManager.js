@@ -23,6 +23,13 @@ export class ScriptManager {
     bindDom(dom) { this.dom = dom; }
     bindRenderer(fn) { this.renderFn = fn; }
 
+    emitLogEvent(msg) {
+        if (typeof window === 'undefined') return;
+        window.dispatchEvent(new CustomEvent('emerald-script-log', {
+            detail: { message: msg }
+        }));
+    }
+
     async replayStartupLogToTerminal(maxLines = 30) {
         try {
             const logPath = await this.getLogFilePath();
@@ -36,6 +43,7 @@ export class ScriptManager {
                 if (this.log) {
                     this.log(line);
                 }
+                this.emitLogEvent(line);
             }
         } catch (err) {
             console.error('Failed to replay startup log:', err);
@@ -75,6 +83,17 @@ export class ScriptManager {
         // If UI logger is bound, also show in internal terminal
         if (this.log) {
             this.log(msg);
+        }
+
+        this.emitLogEvent(msg);
+    }
+
+    _logProcessOutput(data, prefix = '') {
+        const text = data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd();
+        if (!text) return;
+
+        for (const line of text.split('\n')) {
+            this._log(`${prefix}${line}`);
         }
     }
 
@@ -233,8 +252,8 @@ export class ScriptManager {
         }
 
         const child = spawn(command, args, { shell: isWindows });
-        child.stdout.on('data', d => this._log(d.toString().trim()));
-        child.stderr.on('data', d => this._log(`ERR: ${d}`));
+        child.stdout.on('data', d => this._logProcessOutput(d));
+        child.stderr.on('data', d => this._logProcessOutput(d, 'ERR: '));
         child.on('exit', code => {
             this._log(`${file} exited (${code})`);
             this.state.scriptRunners.delete(file);

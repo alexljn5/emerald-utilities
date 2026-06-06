@@ -1,4 +1,4 @@
-import { scriptManager } from "../core/scriptManager.js";
+import { scriptManager } from "../../core/scriptManager.js";
 
 const TERMINAL_KEY = "emerald_terminal_log";
 

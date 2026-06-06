@@ -2,7 +2,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 
 // ==================== GLOBAL FLAGS ====================
-const PRODUCTION = true;   // Change to false for development
+const PRODUCTION = false;   // Change to false for development
 
 // ==================== WINDOW CREATION ====================
 let tray = null;

@@ -1,5 +1,5 @@
 // src/pages/index.js
-import { scriptManager } from "../core/scriptManager.js";
+import { scriptManager } from "../../core/scriptManager.js";
 
 document.addEventListener("DOMContentLoaded", () => {
     // Version display

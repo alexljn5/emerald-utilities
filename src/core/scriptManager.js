@@ -11,7 +11,7 @@ export class ScriptManager {
             currentScript: null,
             runningScripts: new Set(),
             cronScripts: new Map(),
-            config: { scripts: [], customScriptsPath: null, ahkPath: null, hiddenMode: false },
+            config: { scripts: [], customScriptsPath: null, ahkPath: null },
             autoRunExecuted: false
         };
         this.dom = null;
@@ -275,7 +275,7 @@ export class ScriptManager {
             try {
                 this.state.config = JSON.parse(await fs.readFile(configPath, 'utf8'));
             } catch {
-                this.state.config = { scripts: [], customScriptsPath: null, ahkPath: null, hiddenMode: false };
+                this.state.config = { scripts: [], customScriptsPath: null, ahkPath: null };
                 await fs.writeFile(configPath, JSON.stringify(this.state.config, null, 2));
             }
 
@@ -319,20 +319,6 @@ export class ScriptManager {
         this._log(`[config] AHK path set to: ${ahkPath || 'auto-detect'}`);
     }
 
-    async getHiddenMode() {
-        return !!this.state.config.hiddenMode;
-    }
-
-    async setHiddenMode(enabled) {
-        this.state.config.hiddenMode = !!enabled;
-        const configPath = path.join(
-            await ipcRenderer.invoke('get-user-data-path'),
-            'config.json'
-        );
-        await fs.writeFile(configPath, JSON.stringify(this.state.config, null, 2), 'utf8');
-        this._log(`[config] Hidden mode ${enabled ? 'enabled' : 'disabled'}`);
-    }
-
     async chooseCustomScriptFolder() {
         const customPath = await ipcRenderer.invoke('select-directory');
         if (!customPath) return;
@@ -357,7 +343,7 @@ export class ScriptManager {
             // Auto-run regular scripts
             if (cfg.autoRun) {
                 const ok = await this.hasAllDependencies(file);
-                if (ok) this.runScript(file, { startOnly: true });
+                if (ok) this.runScript(file);
                 else {
                     await this.updateConfig(file, { autoRun: false });
                     this._log(`Auto-run disabled: ${file}`);
@@ -367,7 +353,7 @@ export class ScriptManager {
             // Auto-start cron jobs
             if (cfg.cronEnabled && cfg.cronInterval > 0) {
                 const ok = await this.hasAllDependencies(file);
-                if (ok) this.startCronScript(file, cfg.cronInterval, { hidden: !!this.state.config.hiddenMode });
+                if (ok) this.startCronScript(file, cfg.cronInterval);
                 else {
                     await this.updateConfig(file, { cronEnabled: false });
                     this._log(`Cron auto-start disabled: ${file}`);
@@ -376,7 +362,7 @@ export class ScriptManager {
         }
     }
 
-    async runScript(file, options = {}) {
+    async runScript(file) {
         if (this.isScriptRunning(file)) {
             await this.stopScript(file);
             return;
@@ -388,19 +374,18 @@ export class ScriptManager {
                 return this._log(`Missing: ${file}`);
             }
 
-            const hidden = options.hidden ?? await this.getHiddenMode();
-            const result = await ipcRenderer.invoke('run-script', { file, scriptPath, hidden });
+            const result = await ipcRenderer.invoke('run-script', { file, scriptPath });
             if (result?.ok) {
                 this.setScriptRunning(file, true);
                 this.renderScripts();
-                this._log(`Started ${file}${hidden ? ' (hidden)' : ''}`);
+                this._log(`Started ${file}`);
             }
         } catch (err) {
             this._log(`Run error: ${err.message}`);
         }
     }
 
-    async startCronScript(file, intervalMs, options = {}) {
+    async startCronScript(file, intervalMs) {
         if (this.isCronRunning(file)) {
             await this.stopCronScript(file);
             return;
@@ -412,12 +397,11 @@ export class ScriptManager {
                 return this._log(`Missing: ${file}`);
             }
 
-            const hidden = options.hidden ?? await this.getHiddenMode();
-            const result = await ipcRenderer.invoke('start-cron-script', { file, scriptPath, intervalMs, hidden });
+            const result = await ipcRenderer.invoke('start-cron-script', { file, scriptPath, intervalMs });
             if (result?.ok) {
                 this.setCronRunning(file, true);
                 this.renderScripts();
-                this._log(`Cron started for ${file} (every ${intervalMs}ms)${hidden ? ' (hidden)' : ''}`);
+                this._log(`Cron started for ${file} (every ${intervalMs}ms)`);
             }
         } catch (err) {
             this._log(`Cron start error: ${err.message}`);

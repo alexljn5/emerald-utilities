@@ -29,7 +29,6 @@ function getDom() {
         terminalToggleButton: document.getElementById('terminalToggleButton'),
         chooseScriptLocationButton: document.getElementById('chooseScriptLocationButton'),
         aboutButton: document.getElementById('aboutButton'),
-        hiddenModeToggle: document.getElementById('hiddenModeToggle'),
         ahkPathRow: document.querySelector('.ahkPathRow'),
         ahkPathInput: document.getElementById('ahkPathInput'),
         ahkBrowseButton: document.getElementById('ahkBrowseButton'),
@@ -286,10 +285,6 @@ document.addEventListener("DOMContentLoaded", () => {
         scriptManager.viewScript(selectedFile);
     });
 
-    dom.hiddenModeToggle?.addEventListener("change", async () => {
-        await scriptManager.setHiddenMode(dom.hiddenModeToggle.checked);
-    });
-
     dom.autoRunToggle?.addEventListener("change", () => {
         if (!selectedFile) return;
         scriptManager.updateConfig(selectedFile, { autoRun: dom.autoRunToggle.checked });
@@ -318,18 +313,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         selectScript(selectedFile);
     });
-
-    /* ---------------- HIDDEN MODE ---------------- */
-
-    async function loadHiddenMode() {
-        if (!dom.hiddenModeToggle) return;
-        try {
-            const hidden = await scriptManager.getHiddenMode();
-            dom.hiddenModeToggle.checked = hidden;
-        } catch (e) {
-            dom.hiddenModeToggle.checked = false;
-        }
-    }
 
     /* ---------------- AHK PATH CONFIG ---------------- */
 
@@ -369,7 +352,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Load settings on init
-    loadHiddenMode();
     loadAhkPath();
 
     dom.scriptManager = scriptManager; // expose for external updates

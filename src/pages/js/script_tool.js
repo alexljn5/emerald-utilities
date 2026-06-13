@@ -160,6 +160,30 @@ function renderScripts(files, configScripts) {
 
         dom.scriptList.appendChild(item);
     }
+
+    updateRunButton();
+    updateCronButton();
+}
+
+function updateRunButton(file = selectedFile) {
+    if (!file || !dom?.runButton) return;
+
+    const isRunning = scriptManager.isScriptRunning(file);
+    dom.runButton.textContent = isRunning ? `⏹ Stop ${file}` : `▶ Run ${file}`;
+}
+
+function updateCronButton(file = selectedFile) {
+    if (!file || !dom?.cronToggleButton) return;
+
+    const isCronRunning = scriptManager.isCronRunning(file);
+    dom.cronToggleButton.textContent = isCronRunning ? `⏹ Stop Cron` : `▶ Start Cron`;
+    dom.cronInput.disabled = isCronRunning;
+
+    if (isCronRunning) {
+        dom.cronToggleButton.classList.add("cronActive");
+    } else {
+        dom.cronToggleButton.classList.remove("cronActive");
+    }
 }
 
 function selectScript(file) {
@@ -186,21 +210,8 @@ function selectScript(file) {
         dom.ahkPathRow.style.display = file.toLowerCase().endsWith('.ahk') ? '' : 'none';
     }
 
-    // Update run button text
-    const isRunning = scriptManager.isScriptRunning(file);
-    const isCronRunning = scriptManager.isCronRunning(file);
-    dom.runButton.textContent = isRunning ? `⏹ Stop ${file}` : `▶ Run ${file}`;
-
-    // Update cron toggle button
-    if (dom.cronToggleButton) {
-        dom.cronToggleButton.textContent = isCronRunning ? `⏹ Stop Cron` : `▶ Start Cron`;
-        dom.cronInput.disabled = isCronRunning;
-        if (isCronRunning) {
-            dom.cronToggleButton.classList.add("cronActive");
-        } else {
-            dom.cronToggleButton.classList.remove("cronActive");
-        }
-    }
+    updateRunButton(file);
+    updateCronButton(file);
 
     // Update auto-run toggle
     dom.autoRunToggle.checked = !!cfg.autoRun;

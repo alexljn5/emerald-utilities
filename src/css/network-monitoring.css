@@ -73,10 +73,10 @@
 .redBox {
     flex: 0 0 auto;
     width: clamp(150px, 16vw, 280px);
-    aspect-ratio: 1 / 1.05;
+    aspect-ratio: 1 / 1;
     background: var(--color-bg);
     border: 2px solid #ff2222;
-    border-radius: 16px;
+    border-radius: 0;
 
     box-shadow:
         0 0 10px rgba(255, 34, 34, 0.6),

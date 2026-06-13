@@ -35,15 +35,17 @@ body {
     font-size: clamp(1.3rem, 1.9vw, 2rem);
     color: var(--color-text);
     background: var(--color-bg);
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 /* ==================== APP GRID ==================== */
 .app {
     display: grid;
     grid-template-columns: minmax(240px, 30%) 1fr;
-    height: 100vh;
+    min-height: 100vh;
+    height: auto;
     gap: clamp(0.75rem, 1.2vw, 1.25rem);
     padding: clamp(0.75rem, 1.2vw, 1.25rem);
 }
@@ -53,7 +55,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: clamp(0.6rem, 1vw, 1rem);
-    overflow: hidden;
+    overflow-y: auto;
     min-height: 0;
 }
 
@@ -107,6 +109,7 @@ button.full {
     width: 100%;
 }
 
+
 /* ==================== TERMINAL ==================== */
 .dashboardTerminal,
 #terminalOutput {
@@ -127,7 +130,9 @@ button.full {
 .detailPanel::-webkit-scrollbar,
 #scriptList::-webkit-scrollbar,
 .leftPanel::-webkit-scrollbar,
-.rightPanel::-webkit-scrollbar {
+.rightPanel::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
     display: none;
 }
 
@@ -136,7 +141,9 @@ button.full {
 .detailPanel,
 #scriptList,
 .leftPanel,
-.rightPanel {
+.rightPanel,
+html,
+body {
     scrollbar-width: none;
     -ms-overflow-style: none;
 }

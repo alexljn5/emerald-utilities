@@ -82,15 +82,24 @@ body {
 #friedEggs {
     display: flex;
     align-items: center;
-    gap: clamp(0.5rem, 0.8vw, 0.75rem);
+    gap: clamp(0.2rem, 0.8vw, 0.75rem);
+    border: 2px solid var(--color-border);
     padding-bottom: clamp(0.4rem, 0.6vw, 0.5rem);
     border-bottom: 1px solid var(--color-border);
-    flex-wrap: wrap;
+
+    flex-wrap: nowrap;
+    /* key change */
+    justify-content: space-between;
+}
+
+#friedEggs h1 {
+    white-space: nowrap;
+    flex: 1 1 auto;
 }
 
 #logo img {
-    width: clamp(40px, 5vw, 52px);
-    height: clamp(40px, 5vw, 52px);
+    width: clamp(64px, 4vw, 64px);
+    height: clamp(64px, 4vw, 64px);
 }
 
 /* ==================== BUTTONS ==================== */

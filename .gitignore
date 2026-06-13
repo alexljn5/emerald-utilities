@@ -8,9 +8,13 @@ scripts/tests.js
 src/renderer.js
 package-lock.json
 TODO.md
-
+output/
+public/
 
 #Unpushed Scripts
 start_build_emerald_utilities_windows.sh
 start_build_emerald_utilities_linux.sh
 start_build_emerald_utilities_all.sh
+out_put_files.sh
+DOCUMENTATION.md
+start_prod.sh

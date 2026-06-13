@@ -73,8 +73,8 @@ function renderTerminal(log) {
 document.addEventListener("DOMContentLoaded", () => {
     // Version display
     const versionEl = document.getElementById("versionDisplay");
-    if (versionEl && typeof versionNumber !== "undefined") {
-        versionEl.textContent = `v${versionNumber}`;
+    if (versionEl && window.versionNumber) {
+        versionEl.textContent = `v${window.versionNumber}`;
     }
 
     // About button
@@ -90,6 +90,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (scriptToolBtn) {
         scriptToolBtn.addEventListener("click", () => {
             window.location.href = "./pages/script_tool.html";
+        });
+    }
+
+    // Network Manager button
+    const networkManagerBtn = document.getElementById("networkMonitorButton");
+    if (networkManagerBtn) {
+        networkManagerBtn.addEventListener("click", () => {
+            window.location.href = "./pages/network-monitoring.html";
         });
     }
 

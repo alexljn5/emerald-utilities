@@ -50,6 +50,7 @@ const scriptLogHistory = [];
 const MAX_SCRIPT_LOG_LINES = 500;
 const SCRIPT_LOG_SESSION_ID = Date.now().toString(36);
 let nextScriptLogId = 1;
+let networkCaptureProcess = null;
 
 function broadcast(channel, ...args) {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -67,6 +68,27 @@ function pushScriptLog(message) {
     }
     console.log('Script log:', message);
     broadcast('script-log', entry);
+}
+function toWslPath(windowsPath) {
+    const normalized = windowsPath.replace(/\\/g, '/');
+    const driveMatch = normalized.match(/^([A-Za-z]):\/(.*)$/);
+
+    if (driveMatch) {
+        return `/mnt/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`;
+    }
+
+    return normalized;
+}
+
+function getNetworkCaptureScriptPath() {
+    return path.join(__dirname, 'internal-scripts', 'network-capture.sh');
+}
+
+function broadcastNetworkLog(line) {
+    const trimmed = String(line || '').trimEnd();
+    if (!trimmed) return;
+
+    broadcast('network-log', trimmed);
 }
 
 function logProcessOutput(data, prefix = '') {
@@ -415,6 +437,90 @@ app.on('before-quit', () => {
 // IPC Handlers
 ipcMain.on('log', (event, message) => {
     console.log('Renderer log:', message);
+});
+ipcMain.handle('network-start-capture', async () => {
+    if (networkCaptureProcess) {
+        return { ok: true, alreadyRunning: true };
+    }
+
+    if (process.platform !== 'win32') {
+        const error = 'Network capture currently requires Windows with WSL.';
+        pushScriptLog(`[Network] ${error}`);
+        return { ok: false, error };
+    }
+
+    if (!commandExists('wsl')) {
+        const error = 'WSL is not installed or unavailable.';
+        pushScriptLog(`[Network] ${error}`);
+        return { ok: false, error };
+    }
+
+    const scriptPath = getNetworkCaptureScriptPath();
+    if (!existsSync(scriptPath)) {
+        const error = `Network capture script not found: ${scriptPath}`;
+        pushScriptLog(`[Network] ${error}`);
+        return { ok: false, error };
+    }
+
+    try {
+        const wslScriptDir = toWslPath(path.dirname(scriptPath));
+
+        networkCaptureProcess = spawn('wsl', ['bash', '-c', `cd "${wslScriptDir}" && bash ./network-capture.sh`], {
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        pushScriptLog('[Network] Started capture via WSL');
+
+        networkCaptureProcess.stdout.on('data', (data) => {
+            const lines = data.toString().split(/\r?\n/);
+            for (const line of lines) {
+                broadcastNetworkLog(line);
+            }
+        });
+
+        networkCaptureProcess.stderr.on('data', (data) => {
+            const lines = data.toString().split(/\r?\n/);
+            for (const line of lines) {
+                broadcastNetworkLog(`WSL: ${line}`);
+            }
+        });
+
+        networkCaptureProcess.on('error', (err) => {
+            networkCaptureProcess = null;
+            broadcastNetworkLog(`[Network] Capture error: ${err.message}`);
+            pushScriptLog(`[Network] Capture error: ${err.message}`);
+        });
+
+        networkCaptureProcess.on('exit', (code) => {
+            networkCaptureProcess = null;
+            broadcastNetworkLog(`[Network] Capture stopped (code ${code})`);
+        });
+
+        return { ok: true };
+    } catch (err) {
+        networkCaptureProcess = null;
+        pushScriptLog(`[Network] Failed to start WSL capture: ${err.message}`);
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('network-stop-capture', () => {
+    const process = networkCaptureProcess;
+
+    if (!process) {
+        return { ok: true, alreadyStopped: true };
+    }
+
+    networkCaptureProcess = null;
+    pushScriptLog('[Network] Capture stopped by user');
+
+    if (process.pid) {
+        killProcessTree(process.pid);
+    } else {
+        process.kill('SIGTERM');
+    }
+
+    return { ok: true };
 });
 
 ipcMain.handle('run-script', async (event, { file, scriptPath }) => {

@@ -1,4 +1,4 @@
-const { versionNumber } = require("../globals");
+const versionNumber = window.versionNumber || "0.0.7";
 
 document.addEventListener('DOMContentLoaded', () => {
 

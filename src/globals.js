@@ -1,9 +1,7 @@
 // src/globals.js
-const versionNumber = "0.0.6";
+const versionNumber = "0.0.7";
 
 window.versionNumber = versionNumber;
-//Later make that flag in here, this didnt work
-//window.PRODUCTION = true;   // ← Hardcode for now or pass via IPC later
 
 document.addEventListener('DOMContentLoaded', () => {
     const versionDisplay = document.getElementById('versionDisplay');

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' file: data:; font-src 'self'; connect-src 'self'" />
+    <title>Network Monitoring - Emerald Utilities</title>
+    <link rel="stylesheet" href="css/globals.css" />
+    <link rel="stylesheet" href="css/network_manager.css" />
+</head>
+
+<body data-page="network-monitoring">
+    <main class="app">
+        <aside class="leftPanel">
+            <div id="friedEggs" class="headerBlock">
+                <h1>Network Monitoring</h1>
+                <span id="versionDisplay" class="versionDisplay">v0.0.7</span>
+                <div id="logo">
+                    <img src="../img/favicons/favicon.png" alt="Logo" width="64" height="64" />
+                </div>
+            </div>
+
+            <a class="pageLink full" href="index.html">← Back to Dashboard</a>
+
+            <div class="navBox">
+                <h3>Controls</h3>
+                <button id="networkToggle" class="full" type="button">▶ Start Capture</button>
+                <button id="clearNetworkLogs" class="full" type="button">Clear Logs</button>
+                <div id="networkStatus">Idle</div>
+            </div>
+        </aside>
+
+        <section class="rightPanel">
+            <div class="networkOverseer">
+                <div class="overseerGraphic">
+                    <img src="../../img/network-overseer/network-overseer-eye.png" alt="Overseer Eye"
+                        class="overseerEye" />
+
+                    <div class="overseerBoxes">
+                        <div class="redBox logBox">
+                            <div class="logBoxHeader">User Traffic Log</div>
+                            <div class="logBoxContent">
+                                <div class="logPlaceholder">Reserved for future filtered/user-specific
+                                    traffic.<br />Currently unused.</div>
+                            </div>
+                        </div>
+
+                        <div class="redBox logBox">
+                            <div class="logBoxHeader">Full Packet Capture</div>
+                            <div id="fullPacketCaptureLog" class="logBoxContent"></div>
+                        </div>
+                    </div>
+
+                    <img src="../../img/network-overseer/network-overseer-hand.png" alt="Left hand"
+                        class="overseerHand left" />
+                    <img src="../../img/network-overseer/network-overseer-hand.png" alt="Right hand"
+                        class="overseerHand right" />
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script type="module" src="network-monitoring.js"></script>
+</body>
+
+</html>

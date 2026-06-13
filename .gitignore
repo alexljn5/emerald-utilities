@@ -10,6 +10,7 @@ package-lock.json
 TODO.md
 output/
 public/
+out/
 
 #Unpushed Scripts
 start_build_emerald_utilities_windows.sh

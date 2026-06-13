@@ -1,5 +1,5 @@
-import { versionNumber } from './version.js';
-import { networkManager } from './core/networkManager.js';
+import { versionNumber } from '../../globals.js';
+import { networkManager } from '../core/networkManager.js';
 
 const toggleButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('networkToggle'));
 const clearLogsButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('clearNetworkLogs'));

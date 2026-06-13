@@ -46,6 +46,7 @@ function renderLogBox() {
     }
 
     logBox.appendChild(fragment);
+    logBox.scrollTop = logBox.scrollHeight;
     requestAnimationFrame(() => {
         logBox.scrollTop = logBox.scrollHeight;
     });

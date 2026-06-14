@@ -138,7 +138,8 @@ export default function NetworkMonitoring({ route, setRoute }) {
                                 {state.latestPacket ? (
                                     <div>
                                         <strong>Summary:</strong> {state.latestPacket.packet?.summary || 'Packet received'}<br />
-                                        <strong>Binary:</strong> {state.latestPacket.binary}
+                                        <strong>Binary:</strong>
+                                        <div className="parserBinary">{state.latestPacket.binary}</div>
                                     </div>
                                 ) : (
                                     <div className="logPlaceholder">No parsed packets yet. Start capture.</div>

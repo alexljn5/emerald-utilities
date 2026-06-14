@@ -285,6 +285,16 @@
 .parserLogContent {
     font-size: clamp(0.58rem, 0.72vw, 0.75rem);
     line-height: 1.15;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.parserBinary {
+    margin-top: 0.35rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .statusCapturing {

@@ -1,5 +1,5 @@
 import logo from '../../img/favicons/favicon.png';
-import { versionNumber } from '../js/version.js';
+import { versionNumber } from '../globals.js';
 
 export default function PageShell({
     title,

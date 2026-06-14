@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import PageShell from './PageShell.jsx';
-import { versionNumber } from '../js/version.js';
+import { versionNumber } from '../globals.js';
 import creepyImage from '../../img/creepy.png';
 import '../css/about.css';
 

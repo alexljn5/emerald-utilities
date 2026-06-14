@@ -1,5 +1,6 @@
 // src/pages/index.js
 import { scriptManager } from "../../core/scriptManager.js";
+import { versionNumber } from "../../globals.js";
 
 const TERMINAL_KEY = "emerald_terminal_log";
 const MAX_TERMINAL_LINES = 500;
@@ -73,8 +74,8 @@ function renderTerminal(log) {
 document.addEventListener("DOMContentLoaded", () => {
     // Version display
     const versionEl = document.getElementById("versionDisplay");
-    if (versionEl && window.versionNumber) {
-        versionEl.textContent = `v${window.versionNumber}`;
+    if (versionEl) {
+        versionEl.textContent = `v${versionNumber}`;
     }
 
     // About button

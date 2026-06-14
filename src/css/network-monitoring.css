@@ -63,8 +63,8 @@
     --tunnel-gap: clamp(0.75rem, 3vw, 3.5rem);
 
     position: relative;
-    width: min(100%, 980px);
-    min-width: 680px;
+    width: min(100%, 1040px);
+    min-width: 700px;
     height: calc(var(--log-size) + var(--log-size) + var(--tunnel-gap) + 2rem);
     margin: clamp(2.5rem, 5vh, 4.25rem) auto 0;
     z-index: 2;
@@ -78,7 +78,6 @@
     width: var(--log-size);
     height: var(--log-size);
     padding: 0;
-    margin-top: 11%;
     overflow: hidden;
     border-radius: 8px;
     background: var(--color-bg);
@@ -192,19 +191,19 @@
 }
 
 .leftTunnel {
-    left: calc(var(--log-size) + var(--tunnel-gap));
+    left: var(--log-size);
     right: calc(50% - var(--parser-half));
 }
 
 .rightTunnel {
     left: calc(50% + var(--parser-half));
-    right: calc(var(--log-size) + var(--tunnel-gap));
+    right: var(--log-size);
 }
 
 .verticalTunnel {
     left: calc(50% - 7px);
     top: calc(var(--log-half) + var(--parser-half));
-    bottom: calc(var(--log-size) + var(--tunnel-gap) + 0.5rem);
+    bottom: calc(var(--log-size) + var(--tunnel-gap) - 7px);
     width: 14px;
     border-radius: 999px;
 }
@@ -218,8 +217,8 @@
     justify-content: center;
     color: #ff3333;
     font-family: 'pixelSans', monospace;
-    font-size: clamp(8px, 0.65vw, 11px);
-    letter-spacing: 0.12em;
+    font-size: clamp(6px, 0.42vw, 8px);
+    letter-spacing: 0.08em;
     white-space: nowrap;
     text-shadow: 0 0 5px rgba(255, 34, 34, 0.9), 0 0 12px rgba(255, 34, 34, 0.75);
 }

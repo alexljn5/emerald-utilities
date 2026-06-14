@@ -80,6 +80,34 @@
     font-size: clamp(1rem, 1.4vw, 1.4rem);
 }
 
+.packetLogViewerToolbar {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.packetLogViewerToolbar label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    color: #ccc;
+    font-size: clamp(0.75rem, 0.95vw, 0.95rem);
+}
+
+.packetLogViewerToolbar select,
+.packetLogViewerToolbar input,
+.packetLogViewerToolbar textarea {
+    width: 100%;
+    padding: 0.4rem;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: clamp(0.75rem, 0.95vw, 0.95rem);
+}
+
 .packetLogViewerContent {
     flex: 1;
     min-height: 0;
@@ -99,6 +127,18 @@
 .packetLogViewerLine {
     padding: 0.12rem 0;
     border-bottom: 1px solid rgba(255, 34, 34, 0.12);
+}
+
+.packetLogViewerRaw {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.packetLogViewerError {
+    color: #ff8888;
+    padding: 0.5rem 0;
 }
 
 .packetLogViewerEmpty {

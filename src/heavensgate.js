@@ -55,6 +55,8 @@ const cronJobs = new Map();
 const scriptLogHistory = [];
 const MAX_SCRIPT_LOG_LINES = 500;
 const SCRIPT_LOG_SESSION_ID = Date.now().toString(36);
+const NETWORK_LOG_DIR = path.join(process.cwd(), 'src/logs/logs-network');
+const NETWORK_LOG_FOLDERS = new Set(['ALL', 'FILTERED']);
 let nextScriptLogId = 1;
 let networkCaptureProcess = null;
 
@@ -104,6 +106,19 @@ function getDefaultScriptsDir() {
 
 function getScriptsDir(config) {
     return config?.customScriptsPath || getDefaultScriptsDir();
+}
+
+function getNetworkLogFolder(folder = 'ALL') {
+    const safeFolder = NETWORK_LOG_FOLDERS.has(folder) ? folder : 'ALL';
+    return path.join(NETWORK_LOG_DIR, safeFolder);
+}
+
+function sanitizeNetworkLogFile(file) {
+    if (!file || typeof file !== 'string') return null;
+    const normalized = file.replace(/\\/g, '/');
+    if (normalized.includes('/') || normalized.includes('..')) return null;
+    if (!/\.(json|jsonl|txt)$/i.test(normalized)) return null;
+    return normalized;
 }
 
 function sanitizeScriptFile(file) {
@@ -724,6 +739,37 @@ ipcMain.handle('get-cron-scripts', () => {
 
 ipcMain.handle('get-script-log-history', (_event, maxLines = MAX_SCRIPT_LOG_LINES) => {
     return scriptLogHistory.slice(-maxLines);
+});
+
+ipcMain.handle('network-logs:list', async (_event, { folder = 'ALL' } = {}) => {
+    try {
+        const safeFolder = NETWORK_LOG_FOLDERS.has(folder) ? folder : 'ALL';
+        const logFolder = getNetworkLogFolder(safeFolder);
+        await fsPromises.mkdir(logFolder, { recursive: true });
+
+        const files = (await fsPromises.readdir(logFolder))
+            .filter((file) => /\.(json|jsonl|txt)$/i.test(file))
+            .sort((a, b) => b.localeCompare(a));
+
+        return { ok: true, folder: safeFolder, files, dir: logFolder };
+    } catch (err) {
+        console.error('[Network Logs] List error:', err);
+        return { ok: false, error: err.message, files: [] };
+    }
+});
+
+ipcMain.handle('network-logs:read', async (_event, { folder = 'ALL', file } = {}) => {
+    try {
+        const safeFolder = NETWORK_LOG_FOLDERS.has(folder) ? folder : 'ALL';
+        const safeFile = sanitizeNetworkLogFile(file);
+        if (!safeFile) return { ok: false, error: 'Invalid network log file' };
+
+        const content = await fsPromises.readFile(path.join(getNetworkLogFolder(safeFolder), safeFile), 'utf8');
+        return { ok: true, folder: safeFolder, file: safeFile, content };
+    } catch (err) {
+        console.error('[Network Logs] Read error:', err);
+        return { ok: false, error: err.message };
+    }
 });
 
 ipcMain.handle('select-directory', async () => {

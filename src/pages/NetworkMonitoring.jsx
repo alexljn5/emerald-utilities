@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { networkManager } from '../core/networkManager.js';
+import { invoke } from '../js/electronApi.js';
 import eye from '../../img/network-overseer/network-overseer-eye.png';
 import hand from '../../img/network-overseer/network-overseer-hand.png';
 import wing from '../../img/network-overseer/network-overseer-wing.png';
@@ -28,6 +29,12 @@ export default function NetworkMonitoring({ route, setRoute }) {
 
     const [busy, setBusy] = useState(false);
     const [showPacketLogs, setShowPacketLogs] = useState(false);
+    const [packetLogFolder, setPacketLogFolder] = useState('ALL');
+    const [packetLogFiles, setPacketLogFiles] = useState([]);
+    const [selectedPacketLogFile, setSelectedPacketLogFile] = useState(null);
+    const [packetLogContent, setPacketLogContent] = useState('');
+    const [packetLogLoading, setPacketLogLoading] = useState(false);
+    const [packetLogError, setPacketLogError] = useState('');
     const logBoxRef = useRef(null);
     const parserLogsRef = useRef(null);
     const packetLogViewerRef = useRef(null);
@@ -50,10 +57,91 @@ export default function NetworkMonitoring({ route, setRoute }) {
     }, [state.logs, state.parserLogs]);
 
     useEffect(() => {
+        if (!showPacketLogs) return;
+
+        let cancelled = false;
+
+        async function loadPacketLogFiles() {
+            setPacketLogLoading(true);
+            setPacketLogError('');
+            try {
+                const result = await invoke('network-logs:list', { folder: packetLogFolder });
+                if (cancelled) return;
+
+                if (!result?.ok) {
+                    setPacketLogFiles([]);
+                    setSelectedPacketLogFile(null);
+                    setPacketLogContent('');
+                    setPacketLogError(result?.error || 'Unable to list packet logs');
+                    return;
+                }
+
+                setPacketLogFiles(result.files || []);
+                setSelectedPacketLogFile(result.files?.[0] || null);
+                setPacketLogContent('');
+            } catch (err) {
+                if (cancelled) return;
+                setPacketLogFiles([]);
+                setSelectedPacketLogFile(null);
+                setPacketLogContent('');
+                setPacketLogError(err?.message || 'Unable to list packet logs');
+            } finally {
+                if (!cancelled) setPacketLogLoading(false);
+            }
+        }
+
+        loadPacketLogFiles();
+        return () => {
+            cancelled = true;
+        };
+    }, [showPacketLogs, packetLogFolder]);
+
+    useEffect(() => {
+        if (!showPacketLogs || !selectedPacketLogFile) {
+            setPacketLogContent('');
+            return;
+        }
+
+        let cancelled = false;
+
+        async function loadPacketLogContent() {
+            setPacketLogLoading(true);
+            setPacketLogError('');
+            try {
+                const result = await invoke('network-logs:read', {
+                    folder: packetLogFolder,
+                    file: selectedPacketLogFile
+                });
+
+                if (cancelled) return;
+
+                if (!result?.ok) {
+                    setPacketLogContent('');
+                    setPacketLogError(result?.error || 'Unable to read packet log');
+                    return;
+                }
+
+                setPacketLogContent(result.content || '');
+            } catch (err) {
+                if (cancelled) return;
+                setPacketLogContent('');
+                setPacketLogError(err?.message || 'Unable to read packet log');
+            } finally {
+                if (!cancelled) setPacketLogLoading(false);
+            }
+        }
+
+        loadPacketLogContent();
+        return () => {
+            cancelled = true;
+        };
+    }, [showPacketLogs, packetLogFolder, selectedPacketLogFile]);
+
+    useEffect(() => {
         if (showPacketLogs && packetLogViewerRef.current) {
             packetLogViewerRef.current.scrollTop = packetLogViewerRef.current.scrollHeight;
         }
-    }, [showPacketLogs, state.logs]);
+    }, [showPacketLogs, packetLogContent, packetLogError]);
 
     async function toggleCapture() {
         if (busy) return;
@@ -76,7 +164,9 @@ export default function NetworkMonitoring({ route, setRoute }) {
     }
 
     const latestBinary = state.latestPacket?.binary || "01010101 10101010 11001010 11001100";
-    const recentPacketLogs = useMemo(() => state.logs.slice(-300), [state.logs]);
+    const packetLogSummary = packetLogFiles.length > 0
+        ? `${packetLogFiles.length} saved file${packetLogFiles.length === 1 ? '' : 's'} in ${packetLogFolder}`
+        : `No saved ${packetLogFolder} logs yet`;
     const statusClass = state.isCapturing ? 'statusCapturing' : state.status?.startsWith('Error') ? 'statusError' : 'statusIdle';
 
     return (
@@ -100,28 +190,52 @@ export default function NetworkMonitoring({ route, setRoute }) {
                     <button className="full" type="button" onClick={() => setShowPacketLogs(true)}>
                         View Packet Logs
                     </button>
-                    <div className="packetLogSummary">
-                        {state.logs.length > 0 ? `${state.logs.length} captured line${state.logs.length === 1 ? '' : 's'}` : 'No packet logs yet'}
-                    </div>
+                    <div className="packetLogSummary">{packetLogSummary}</div>
                 </div>
             </div>
         }>
             <div className="networkOverseer">
                 <div className={`packetLogViewer${showPacketLogs ? '' : ' hidden'}`}>
                     <div className="packetLogViewerHeader">
-                        <h3>Packet Log Viewer</h3>
+                        <h3>Packet Log Files</h3>
                         <button type="button" onClick={() => setShowPacketLogs(false)}>Close</button>
                     </div>
 
+                    <div className="packetLogViewerToolbar">
+                        <label>
+                            Log Folder
+                            <select value={packetLogFolder} onChange={(event) => setPacketLogFolder(event.target.value)}>
+                                <option value="ALL">ALL</option>
+                                <option value="FILTERED">FILTERED</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            File
+                            <select
+                                value={selectedPacketLogFile || ''}
+                                onChange={(event) => setSelectedPacketLogFile(event.target.value || null)}
+                                disabled={!packetLogFiles.length || packetLogLoading}
+                            >
+                                <option value="">
+                                    {packetLogLoading ? 'Loading...' : packetLogFiles.length ? 'Select file' : 'No files'}
+                                </option>
+                                {packetLogFiles.map((file) => (
+                                    <option key={file} value={file}>{file}</option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
+
                     <div className="packetLogViewerContent" ref={packetLogViewerRef}>
-                        {recentPacketLogs.length === 0 ? (
-                            <div className="packetLogViewerEmpty">No packet logs yet. Press Start Capture.</div>
+                        {packetLogError ? (
+                            <div className="packetLogViewerError">{packetLogError}</div>
+                        ) : packetLogLoading ? (
+                            <div className="packetLogViewerEmpty">Loading packet logs...</div>
+                        ) : packetLogContent ? (
+                            <pre className="packetLogViewerRaw">{packetLogContent}</pre>
                         ) : (
-                            recentPacketLogs.map((line, index) => (
-                                <div className="packetLogViewerLine" key={`${index}-${line}`}>
-                                    {line}
-                                </div>
-                            ))
+                            <div className="packetLogViewerEmpty">No packet log files in {packetLogFolder}. Start a capture to create logs.</div>
                         )}
                     </div>
                 </div>

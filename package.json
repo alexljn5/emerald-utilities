@@ -48,6 +48,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "src/internal-scripts/network-capture.sh",
+        "to": "internal-scripts/network-capture.sh"
       }
     ],
     "mac": {

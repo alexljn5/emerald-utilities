@@ -194,10 +194,13 @@ function toWslPath(windowsPath) {
 }
 
 export function startCapture(iface = 'any') {
-    const proc = spawn('bash', [
-        './src/internal-scripts/network-capture.sh',
-        iface
-    ]);
+    const scriptPath = getNetworkCaptureScriptPath();
+    const useWsl = process.platform === 'win32';
+    const proc = spawn(
+        useWsl ? 'wsl' : 'bash',
+        useWsl ? ['bash', toWslPath(scriptPath), iface] : ['bash', scriptPath, iface],
+        { stdio: ['ignore', 'pipe', 'pipe'] }
+    );
 
     proc.stdout.setEncoding('utf8');
 
@@ -226,6 +229,10 @@ export function startCapture(iface = 'any') {
 }
 
 function getNetworkCaptureScriptPath() {
+    if (app.isPackaged && process.resourcesPath) {
+        return path.join(process.resourcesPath, 'internal-scripts', 'network-capture.sh');
+    }
+
     return path.join(__dirname, 'internal-scripts', 'network-capture.sh');
 }
 
@@ -632,13 +639,9 @@ ipcMain.handle('network-start-capture', async () => {
     }
 
     try {
-        const wslScriptDir = toWslPath(path.dirname(scriptPath));
+        const wslScriptPath = toWslPath(scriptPath);
 
-        // Better WSL invocation that preserves stdout properly
-        networkCaptureProcess = spawn('wsl', [
-            'bash', '-c',
-            `cd "${wslScriptDir}" && exec bash ./network-capture.sh any`
-        ], {
+        networkCaptureProcess = spawn('wsl', ['bash', wslScriptPath, 'any'], {
             stdio: ['ignore', 'pipe', 'pipe']
         });
 

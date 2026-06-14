@@ -204,7 +204,7 @@
     overflow: hidden;
     border: 1px solid rgba(255, 34, 34, 0.75);
     background: linear-gradient(90deg, rgba(255, 34, 34, 0.16), rgba(255, 34, 34, 0.04), rgba(255, 34, 34, 0.16)), #050000;
-    box-shadow: 0 0 8px rgba(255, 34, 34, 0.65), inset 0 0 12px rgba(255, 34, 34, 0.28);
+
 }
 
 .horizontalTunnel {

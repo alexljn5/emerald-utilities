@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { networkManager } from '../core/networkManager.js';
 import eye from '../../img/network-overseer/network-overseer-eye.png';
@@ -27,8 +27,10 @@ export default function NetworkMonitoring({ route, setRoute }) {
     });
 
     const [busy, setBusy] = useState(false);
+    const [showPacketLogs, setShowPacketLogs] = useState(false);
     const logBoxRef = useRef(null);
     const parserLogsRef = useRef(null);
+    const packetLogViewerRef = useRef(null);
 
     useEffect(() => {
         return networkManager.onStateChange((next) => {
@@ -46,6 +48,12 @@ export default function NetworkMonitoring({ route, setRoute }) {
         if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
         if (parserLogsRef.current) parserLogsRef.current.scrollTop = parserLogsRef.current.scrollHeight;
     }, [state.logs, state.parserLogs]);
+
+    useEffect(() => {
+        if (showPacketLogs && packetLogViewerRef.current) {
+            packetLogViewerRef.current.scrollTop = packetLogViewerRef.current.scrollHeight;
+        }
+    }, [showPacketLogs, state.logs]);
 
     async function toggleCapture() {
         if (busy) return;
@@ -67,22 +75,56 @@ export default function NetworkMonitoring({ route, setRoute }) {
         networkManager.clearLogs();
     }
 
-    const latestBinary = state.latestPacket?.binary || "01010101 10101010 11001100";
+    const latestBinary = state.latestPacket?.binary || "01010101 10101010 11001010 11001100";
+    const recentPacketLogs = useMemo(() => state.logs.slice(-300), [state.logs]);
+    const statusClass = state.isCapturing ? 'statusCapturing' : state.status?.startsWith('Error') ? 'statusError' : 'statusIdle';
 
     return (
         <PageShell title="Network Monitoring" route={route} setRoute={setRoute} leftChildren={
-            <div className="navBox">
-                <h3>Controls</h3>
-                <button className="full" disabled={busy} onClick={toggleCapture}>
-                    {state.isCapturing ? '⏹ Stop Capture' : '▶ Start Capture'}
-                </button>
-                <button className="full" onClick={clearLogs}>Clear Logs</button>
-                <div className={state.isCapturing ? 'statusCapturing' : state.status?.startsWith('Error') ? 'statusError' : 'statusIdle'}>
-                    {state.status}
+            <div className="networkSidebar">
+                <div className="navBox">
+                    <h3>Controls</h3>
+                    <button className="full" disabled={busy} onClick={toggleCapture}>
+                        {state.isCapturing ? '⏹ Stop Capture' : '▶ Start Capture'}
+                    </button>
+                    <button className="full" onClick={clearLogs}>Clear Logs</button>
+                </div>
+
+                <div className="navBox">
+                    <h3>Capture Status</h3>
+                    <div className={statusClass}>{state.status}</div>
+                </div>
+
+                <div className="navBox packetLogsBox">
+                    <h3>Packet Logs</h3>
+                    <button className="full" type="button" onClick={() => setShowPacketLogs(true)}>
+                        View Packet Logs
+                    </button>
+                    <div className="packetLogSummary">
+                        {state.logs.length > 0 ? `${state.logs.length} captured line${state.logs.length === 1 ? '' : 's'}` : 'No packet logs yet'}
+                    </div>
                 </div>
             </div>
         }>
             <div className="networkOverseer">
+                <div className={`packetLogViewer${showPacketLogs ? '' : ' hidden'}`}>
+                    <div className="packetLogViewerHeader">
+                        <h3>Packet Log Viewer</h3>
+                        <button type="button" onClick={() => setShowPacketLogs(false)}>Close</button>
+                    </div>
+
+                    <div className="packetLogViewerContent" ref={packetLogViewerRef}>
+                        {recentPacketLogs.length === 0 ? (
+                            <div className="packetLogViewerEmpty">No packet logs yet. Press Start Capture.</div>
+                        ) : (
+                            recentPacketLogs.map((line, index) => (
+                                <div className="packetLogViewerLine" key={`${index}-${line}`}>
+                                    {line}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
                 <div className="overseerGraphic">
                     <img src={eye} alt="Overseer Eye" className="overseerEye" />
 
@@ -102,11 +144,11 @@ export default function NetworkMonitoring({ route, setRoute }) {
                             <BinaryStream text={latestBinary} vertical reverse />
                         </div>
 
-                        {/* Left box - unused */}
+                        {/* Left box - reserved for future user traffic parsing */}
                         <div className="redBox logBox userTrafficBox">
                             <div className="logBoxHeader">User Traffic Log</div>
                             <div className="logBoxContent">
-                                <div className="logPlaceholder">unused / empty</div>
+                                <div className="logPlaceholder">reserved / empty</div>
                             </div>
                         </div>
 
@@ -134,7 +176,7 @@ export default function NetworkMonitoring({ route, setRoute }) {
 
                         {/* Bottom - Parser logs */}
                         <div className="redBox logBox parserLogsBox">
-                            <div className="logBoxHeader">parser logs for fun</div>
+                            <div className="logBoxHeader">Parser Logs</div>
                             <div className="logBoxContent parserLogContent" ref={parserLogsRef}>
                                 {state.latestPacket ? (
                                     <div>

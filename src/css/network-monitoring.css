@@ -13,6 +13,100 @@
     min-height: 0;
 }
 
+.networkSidebar {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.6rem, 1vw, 1rem);
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.networkSidebar .navBox {
+    flex: 0 0 auto;
+}
+
+.navBox h3 {
+    margin-bottom: clamp(0.4rem, 0.8vw, 0.75rem);
+    color: var(--color-accent);
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+}
+
+.navBox .statusCapturing,
+.navBox .statusError,
+.navBox .statusIdle {
+    margin-top: 0;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+}
+
+.packetLogSummary {
+    margin-top: 0.5rem;
+    color: #aaa;
+    font-size: clamp(0.75rem, 0.95vw, 0.95rem);
+    line-height: 1.2;
+}
+
+.packetLogViewer {
+    position: absolute;
+    inset: clamp(0.75rem, 1.5vw, 1.5rem);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+    padding: clamp(0.75rem, 1.2vw, 1rem);
+    background: rgba(0, 0, 0, 0.94);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    box-shadow: 0 0 18px rgba(255, 34, 34, 0.55);
+}
+
+.packetLogViewer.hidden {
+    display: none;
+}
+
+.packetLogViewerHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-shrink: 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-accent);
+}
+
+.packetLogViewerHeader h3 {
+    margin: 0;
+    color: var(--color-accent);
+    font-size: clamp(1rem, 1.4vw, 1.4rem);
+}
+
+.packetLogViewerContent {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.5rem;
+    background: #050000;
+    border: 1px solid rgba(255, 34, 34, 0.55);
+    border-radius: 6px;
+    color: var(--color-terminal-text);
+    font-family: 'pixelSans', monospace;
+    font-size: clamp(0.62rem, 0.8vw, 0.82rem);
+    line-height: 1.25;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.packetLogViewerLine {
+    padding: 0.12rem 0;
+    border-bottom: 1px solid rgba(255, 34, 34, 0.12);
+}
+
+.packetLogViewerEmpty {
+    color: #888;
+    font-style: italic;
+    padding: 0.5rem 0;
+}
+
 .overseerGraphic {
     position: relative;
     flex: 1 1 auto;

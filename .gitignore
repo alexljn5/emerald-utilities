@@ -12,6 +12,8 @@ TODO.md
 output/
 public/
 out/
+src/logs/logs-network/ALL/*
+src/logs/logs-network/FILTERED/*
 
 #Unpushed Scripts
 start_build_emerald_utilities_windows.sh

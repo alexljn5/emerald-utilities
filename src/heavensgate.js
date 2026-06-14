@@ -1,9 +1,14 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, screen } = require('electron');
-const path = require('path');
-const { spawn } = require('child_process');
-const { existsSync } = require('fs');
-const fsPromises = require('fs').promises;
-const { execSync } = require('child_process');
+import { app, BrowserWindow, Tray, Menu, ipcMain, dialog, screen } from 'electron';
+import path from 'path';
+import { spawn, execSync } from 'child_process';
+import fs from 'fs';
+import { existsSync } from 'fs';
+import fsPromises from 'fs/promises';
+import { fileURLToPath } from 'url';
+import { writePacket } from './core/networkFileWriter.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function commandExists(command) {
     try {
@@ -171,6 +176,38 @@ function toWslPath(windowsPath) {
     }
 
     return normalized;
+}
+
+export function startCapture(iface = 'any') {
+    const proc = spawn('bash', [
+        './src/internal-scripts/network-capture.sh',
+        iface
+    ]);
+
+    proc.stdout.setEncoding('utf8');
+
+    proc.stdout.on('data', (chunk) => {
+        const lines = chunk.toString().split('\n');
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+
+            const packet = {
+                ts: new Date().toISOString(),
+                raw: line.trim(),
+                source: 'tcpdump',
+                interface: iface
+            };
+
+            writePacket(packet);
+        }
+    });
+
+    proc.stderr.on('data', (err) => {
+        console.error('[tcpdump error]', err.toString());
+    });
+
+    return proc;
 }
 
 function getNetworkCaptureScriptPath() {
@@ -561,13 +598,11 @@ ipcMain.handle('network-start-capture', async () => {
     if (networkCaptureProcess) {
         return { ok: true, alreadyRunning: true };
     }
-
     if (process.platform !== 'win32') {
         const error = 'Network capture currently requires Windows with WSL.';
         pushScriptLog(`[Network] ${error}`);
         return { ok: false, error };
     }
-
     if (!commandExists('wsl')) {
         const error = 'WSL is not installed or unavailable.';
         pushScriptLog(`[Network] ${error}`);
@@ -584,7 +619,11 @@ ipcMain.handle('network-start-capture', async () => {
     try {
         const wslScriptDir = toWslPath(path.dirname(scriptPath));
 
-        networkCaptureProcess = spawn('wsl', ['bash', '-c', `cd "${wslScriptDir}" && bash ./network-capture.sh`], {
+        // Better WSL invocation that preserves stdout properly
+        networkCaptureProcess = spawn('wsl', [
+            'bash', '-c',
+            `cd "${wslScriptDir}" && exec bash ./network-capture.sh any`
+        ], {
             stdio: ['ignore', 'pipe', 'pipe']
         });
 
@@ -593,32 +632,37 @@ ipcMain.handle('network-start-capture', async () => {
         networkCaptureProcess.stdout.on('data', (data) => {
             const lines = data.toString().split(/\r?\n/);
             for (const line of lines) {
-                broadcastNetworkLog(line);
+                if (line.trim()) {
+                    const packet = {
+                        ts: new Date().toISOString(),
+                        raw: line.trim(),
+                        source: 'tcpdump',
+                        interface: 'any'
+                    };
+                    writePacket(packet);           // ← This writes to JSON
+                    broadcastNetworkLog(line);     // ← This sends to UI
+                }
             }
         });
 
         networkCaptureProcess.stderr.on('data', (data) => {
-            const lines = data.toString().split(/\r?\n/);
-            for (const line of lines) {
-                broadcastNetworkLog(`WSL: ${line}`);
-            }
+            broadcastNetworkLog(`WSL ERR: ${data.toString().trim()}`);
         });
 
         networkCaptureProcess.on('error', (err) => {
             networkCaptureProcess = null;
-            broadcastNetworkLog(`[Network] Capture error: ${err.message}`);
             pushScriptLog(`[Network] Capture error: ${err.message}`);
         });
 
         networkCaptureProcess.on('exit', (code) => {
             networkCaptureProcess = null;
-            broadcastNetworkLog(`[Network] Capture stopped (code ${code})`);
+            pushScriptLog(`[Network] Capture stopped (code ${code})`);
         });
 
         return { ok: true };
     } catch (err) {
         networkCaptureProcess = null;
-        pushScriptLog(`[Network] Failed to start WSL capture: ${err.message}`);
+        pushScriptLog(`[Network] Failed to start: ${err.message}`);
         return { ok: false, error: err.message };
     }
 });
@@ -802,6 +846,4 @@ ipcMain.handle('set-ahk-path', async (_event, ahkPath) => {
     }
 });
 
-module.exports = {
-    PRODUCTION
-};
+export { PRODUCTION };

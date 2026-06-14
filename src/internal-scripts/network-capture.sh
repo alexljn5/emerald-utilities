@@ -1,7 +1,7 @@
 #!/bin/bash
-# scripts/network-capture.sh
+IFACE="${1:-any}"
+echo "[Network] Capture started on interface: $IFACE"
+echo "[Network] tcpdump PID: $$"
 
-echo "[Network] WSL capture started on interface eth0..."
-
-# Use eth0 (common WSL interface). Change if needed.
-tcpdump -i eth0 -nn -tttt -q 2>&1
+# Run tcpdump and ensure output is line-buffered
+exec stdbuf -oL tcpdump -i "$IFACE" -nn -tttt -l -q 2>&1

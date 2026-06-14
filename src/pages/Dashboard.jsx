@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { scriptManager } from '../core/scriptManager.js';
 import { useTerminalLog } from '../js/terminalHooks.js';
+import sigil from '../../img/backgrounds/sigil_1.png';
 import neutralMascot from '../../img/mascot/dashboardMascotNeutral.png';
 import happyMascot from '../../img/mascot/dashboardMascotHappy.png';
 import nervousMascot from '../../img/mascot/dashboardMascotNervous.png';
@@ -83,6 +84,9 @@ export default function Dashboard({ route, setRoute }) {
                 </div>
             </div>
         }>
+            <div className="backGroundSigil" aria-hidden="true">
+                <img id="backGroundSigil_1" src={sigil} alt="" />
+            </div>
             <TerminalLines terminalLog={terminalLog} terminalRef={terminalRef} />
             <div id="dashboardMascotImage">
                 <img id="dashboardMascot" src={moods[mascotMood]} alt="Dashboard mascot" />

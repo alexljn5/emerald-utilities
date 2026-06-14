@@ -538,8 +538,12 @@ app.on('before-quit', () => {
 });
 
 // IPC Handlers
-ipcMain.on('log', (event, message) => {
+ipcMain.on('log', (message) => {
     console.log('Renderer log:', message);
+});
+
+ipcMain.handle('log', async (_, msg) => {
+    console.log('[renderer log]', msg);
 });
 
 ipcMain.handle('write-startup-log', async (_event, message) => {

@@ -56,6 +56,8 @@
 
 /* Main diagram container */
 .overseerDiagram {
+    display: flex;
+    transform: translateY(3.2rem);
     --log-size: clamp(220px, 24vw, 320px);
     --parser-size: clamp(86px, 8vw, 120px);
     --parser-half: clamp(43px, 4vw, 60px);
@@ -187,7 +189,7 @@
 .horizontalTunnel {
     top: var(--log-half);
     height: clamp(14px, 1.4vw, 18px);
-    border-radius: 999px;
+
 }
 
 .leftTunnel {
@@ -205,7 +207,7 @@
     top: calc(var(--log-half) + var(--parser-half));
     bottom: calc(var(--log-size) + var(--tunnel-gap) - 7px);
     width: 14px;
-    border-radius: 999px;
+
 }
 
 /* Animated binary streams inside tunnels */

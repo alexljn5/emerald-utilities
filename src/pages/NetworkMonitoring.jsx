@@ -149,7 +149,6 @@ export default function NetworkMonitoring({ route, setRoute }) {
             <div className="networkOverseer">
                 <div className="overseerGraphic">
                     <img src={eye} alt="Overseer Eye" className="overseerEye" />
-
                     <div className="overseerDiagram">
                         {/* Binary tunnels */}
                         <div className="binaryTunnel horizontalTunnel leftTunnel">

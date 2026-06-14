@@ -14,7 +14,10 @@ function BinaryStream({ vertical = false, reverse = false }) {
     }).join('');
 
     return (
-        <div className={`binaryStream ${vertical ? 'vertical' : ''} ${reverse ? 'reverse' : ''}`} aria-hidden="true">
+        <div
+            className={`binaryStream ${vertical ? 'vertical' : ''} ${reverse ? 'reverse' : ''}`}
+            aria-hidden="true"
+        >
             {glyphs}
         </div>
     );
@@ -29,17 +32,14 @@ function PacketTransform({ entry }) {
                 <span className="transformLabel">JS input</span>
                 <pre className="packetRaw">{entry.raw}</pre>
             </div>
-
             <div className="transformArrow" aria-hidden="true">↓</div>
-
             <div className="transformSection">
                 <span className="transformLabel">JSON output</span>
-                <pre className="packetJson">{JSON.stringify(entry.packet, null, 2)}</pre>
+                <pre className="packetJson">{JSON.stringify(entry.packet || entry, null, 2)}</pre>
             </div>
-
             <div className="transformSection binarySection">
                 <span className="transformLabel">binary preview</span>
-                <code>{entry.binary}</code>
+                <code>{entry.binary || ''}</code>
             </div>
         </div>
     );
@@ -48,13 +48,13 @@ function PacketTransform({ entry }) {
 export default function NetworkMonitoring({ route, setRoute }) {
     const [state, setState] = useState({
         isCapturing: networkManager.state.isCapturing,
-        logs: [...networkManager.state.logs],
-        parserLogs: [...networkManager.state.parserLogs],
-        latestPacket: networkManager.state.latestPacket,
-        binaryPreview: networkManager.state.binaryPreview,
+        logs: [...(networkManager.state.logs || [])],
+        parserLogs: [...(networkManager.state.parserLogs || [])],
+        latestPacket: networkManager.state.latestPacket || null,
         status: networkManager.state.status
     });
     const [busy, setBusy] = useState(false);
+
     const logBoxRef = useRef(null);
     const parserLogsRef = useRef(null);
 
@@ -62,40 +62,27 @@ export default function NetworkMonitoring({ route, setRoute }) {
         return networkManager.onStateChange((nextState) => {
             setState({
                 isCapturing: nextState.isCapturing,
-                logs: [...nextState.logs],
-                parserLogs: [...nextState.parserLogs],
-                latestPacket: nextState.latestPacket,
-                binaryPreview: nextState.binaryPreview,
+                logs: [...(nextState.logs || [])],
+                parserLogs: [...(nextState.parserLogs || [])],
+                latestPacket: nextState.latestPacket || null,
                 status: nextState.status
             });
         });
     }, []);
 
+    // Auto-scroll both log areas
     useEffect(() => {
         if (logBoxRef.current) {
             logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
-            requestAnimationFrame(() => {
-                if (logBoxRef.current) {
-                    logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
-                }
-            });
         }
-
         if (parserLogsRef.current) {
             parserLogsRef.current.scrollTop = parserLogsRef.current.scrollHeight;
-            requestAnimationFrame(() => {
-                if (parserLogsRef.current) {
-                    parserLogsRef.current.scrollTop = parserLogsRef.current.scrollHeight;
-                }
-            });
         }
     }, [state.logs, state.parserLogs]);
 
     async function toggleCapture() {
         if (busy) return;
-
         setBusy(true);
-
         try {
             if (state.isCapturing) {
                 await networkManager.stopCapture();
@@ -120,23 +107,51 @@ export default function NetworkMonitoring({ route, setRoute }) {
     }
 
     return (
-        <PageShell title="Network Monitoring" route={route} setRoute={setRoute} leftChildren={
-            <div className="navBox">
-                <h3>Controls</h3>
-                <button id="networkToggle" className="full" type="button" disabled={busy} onClick={toggleCapture}>
-                    {state.isCapturing ? '⏹ Stop Capture' : '▶ Start Capture'}
-                </button>
-                <button id="clearNetworkLogs" className="full" type="button" onClick={clearLogs}>Clear Logs</button>
-                <div id="networkStatus" className={state.isCapturing ? 'statusCapturing' : state.status?.startsWith('Error') ? 'statusError' : 'statusIdle'}>
-                    {state.status}
+        <PageShell
+            title="Network Monitoring"
+            route={route}
+            setRoute={setRoute}
+            leftChildren={
+                <div className="navBox">
+                    <h3>Controls</h3>
+                    <button
+                        id="networkToggle"
+                        className="full"
+                        type="button"
+                        disabled={busy}
+                        onClick={toggleCapture}
+                    >
+                        {state.isCapturing ? '⏹ Stop Capture' : '▶ Start Capture'}
+                    </button>
+                    <button
+                        id="clearNetworkLogs"
+                        className="full"
+                        type="button"
+                        onClick={clearLogs}
+                    >
+                        Clear Logs
+                    </button>
+                    <div
+                        id="networkStatus"
+                        className={
+                            state.isCapturing
+                                ? 'statusCapturing'
+                                : state.status?.startsWith('Error')
+                                    ? 'statusError'
+                                    : 'statusIdle'
+                        }
+                    >
+                        {state.status}
+                    </div>
                 </div>
-            </div>
-        }>
+            }
+        >
             <div className="networkOverseer">
                 <div className="overseerGraphic">
                     <img src={eye} alt="Overseer Eye" className="overseerEye" />
 
                     <div className="overseerDiagram">
+                        {/* Binary tunnels */}
                         <div className="binaryTunnel horizontalTunnel leftTunnel">
                             <BinaryStream />
                         </div>
@@ -147,6 +162,7 @@ export default function NetworkMonitoring({ route, setRoute }) {
                             <BinaryStream vertical />
                         </div>
 
+                        {/* Left box - unused */}
                         <div className="redBox logBox userTrafficBox">
                             <div className="logBoxHeader">User Traffic Log</div>
                             <div className="logBoxContent">
@@ -154,6 +170,7 @@ export default function NetworkMonitoring({ route, setRoute }) {
                             </div>
                         </div>
 
+                        {/* Central Parser box */}
                         <div className="redBox parserBox">
                             <div className="parserBoxHeader">Parser</div>
                             <div className="parserCore">
@@ -161,38 +178,53 @@ export default function NetworkMonitoring({ route, setRoute }) {
                             </div>
                         </div>
 
+                        {/* Right box - Full Packet Capture */}
                         <div className="redBox logBox fullPacketBox">
                             <div className="logBoxHeader">Full Packet Capture</div>
-                            <div id="fullPacketCaptureLog" className="logBoxContent" ref={logBoxRef}>
+                            <div
+                                id="fullPacketCaptureLog"
+                                className="logBoxContent"
+                                ref={logBoxRef}
+                            >
                                 {state.logs.length === 0 ? (
                                     <div className="logPlaceholder">
-                                        {state.isCapturing ? 'Capturing... waiting for packets.' : 'No packets yet. Click Start Capture.'}
+                                        {state.isCapturing
+                                            ? 'Capturing... waiting for packets.'
+                                            : 'No packets yet. Click Start Capture.'}
                                     </div>
                                 ) : (
                                     state.logs.map((line, index) => (
-                                        <div className="logLine" key={`${line}-${index}`}>{line}</div>
+                                        <div className="logLine" key={`${line}-${index}`}>
+                                            {line}
+                                        </div>
                                     ))
                                 )}
                             </div>
                         </div>
 
+                        {/* Bottom - Parser logs for fun */}
                         <div className="redBox logBox parserLogsBox">
                             <div className="logBoxHeader">parser logs for fun</div>
-                            <div className="logBoxContent parserLogContent" ref={parserLogsRef}>
+                            <div
+                                className="logBoxContent parserLogContent"
+                                ref={parserLogsRef}
+                            >
                                 {state.latestPacket ? (
                                     <PacketTransform entry={state.latestPacket} />
                                 ) : (
                                     <div className="logPlaceholder">
-                                        {state.isCapturing ? 'Parser waiting for binary stream.' : 'No parsed packets yet. Start Full Packet Capture.'}
+                                        {state.isCapturing
+                                            ? 'Parser waiting for binary stream.'
+                                            : 'No parsed packets yet. Start Full Packet Capture.'}
                                     </div>
                                 )}
 
                                 {state.parserLogs.length > 0 && (
                                     <div className="parserHistory">
                                         <div className="historyLabel">recent parser logs</div>
-                                        {state.parserLogs.slice(-5).map((entry) => (
-                                            <div className="parserHistoryEntry" key={entry.id}>
-                                                <span>{entry.packet.summary || entry.packet.protocol}</span>
+                                        {state.parserLogs.slice(-5).map((entry, index) => (
+                                            <div className="parserHistoryEntry" key={entry.id || index}>
+                                                <span>{entry.packet?.summary || entry.packet?.protocol || 'packet'}</span>
                                                 <code>{entry.binary}</code>
                                             </div>
                                         ))}

@@ -1,4 +1,4 @@
-/* ==================== NETWORK OVERSEER VISUAL ==================== */
+/* ==================== NETWORK OVERSEER VISUAL (Wireframe exact) ==================== */
 .networkOverseer {
     background: #000;
     border: 2px solid var(--color-accent);
@@ -11,15 +11,8 @@
     overflow-y: auto;
     overflow-x: hidden;
     min-height: 0;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
 }
 
-.networkOverseer::-webkit-scrollbar {
-    display: none;
-}
-
-/* Graphic area */
 .overseerGraphic {
     position: relative;
     flex: 1 1 auto;
@@ -31,7 +24,6 @@
     overflow: visible;
 }
 
-/* Eye */
 .overseerEye {
     position: absolute;
     top: clamp(-1.75rem, -3%, -0.5rem);
@@ -40,20 +32,17 @@
     width: clamp(120px, 15vw, 280px);
     height: auto;
     z-index: 5;
-    filter:
-        brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(100%) contrast(107%) drop-shadow(0 0 25px rgba(255, 34, 34, 0.9));
+    filter: brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(100%) contrast(107%) drop-shadow(0 0 25px rgba(255, 34, 34, 0.9));
 }
 
-/* Hands */
 .overseerHand {
     position: absolute;
     width: clamp(60px, 11vw, 145px);
     height: auto;
-    top: calc(clamp(220px, 24vw, 320px) + 1rem);
+    top: calc(clamp(220px, 24vw, 320px) + 6.5rem);
     z-index: 1;
     opacity: 0.55;
-    filter:
-        brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(96%) contrast(107%);
+    filter: brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(96%) contrast(107%);
 }
 
 .overseerHand.right {
@@ -65,7 +54,7 @@
     left: 12%;
 }
 
-/* Main diagram grid */
+/* Main diagram container */
 .overseerDiagram {
     --log-size: clamp(220px, 24vw, 320px);
     --parser-size: clamp(86px, 8vw, 120px);
@@ -81,7 +70,7 @@
     z-index: 2;
 }
 
-/* Individual red box */
+/* Red boxes (absolute positioned) */
 .redBox {
     position: absolute;
     display: flex;
@@ -89,14 +78,12 @@
     width: var(--log-size);
     height: var(--log-size);
     padding: 0;
+    margin-top: 11%;
     overflow: hidden;
     border-radius: 8px;
     background: var(--color-bg);
     border: 2px solid #ff2222;
-    box-shadow:
-        0 0 10px rgba(255, 34, 34, 0.6),
-        0 0 20px rgba(255, 34, 34, 0.4),
-        0 0 40px rgba(255, 34, 34, 0.2);
+    box-shadow: 0 0 10px rgba(255, 34, 34, 0.6), 0 0 20px rgba(255, 34, 34, 0.4), 0 0 40px rgba(255, 34, 34, 0.2);
 }
 
 .userTrafficBox {
@@ -118,11 +105,7 @@
     z-index: 3;
 }
 
-/* === Logging boxes === */
-.logBox {
-    overflow: hidden;
-}
-
+/* Log box internals */
 .logBoxHeader {
     padding: clamp(0.45rem, 0.9vw, 0.7rem) clamp(0.5rem, 1vw, 0.9rem);
     background: #111;
@@ -132,14 +115,12 @@
     border-bottom: 2px solid #ff2222;
     flex-shrink: 0;
     text-align: center;
-    overflow-wrap: anywhere;
 }
 
 .logBoxContent {
-    flex: 1 1 auto;
+    flex: 1;
     min-height: 0;
     overflow-y: auto;
-    overflow-x: hidden;
     padding: clamp(0.45rem, 0.9vw, 0.75rem);
     background: #0a0a0a;
     color: var(--color-terminal-text);
@@ -147,31 +128,17 @@
     font-size: clamp(0.62rem, 0.8vw, 0.85rem);
     line-height: 1.2;
     white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.logBoxContent::-webkit-scrollbar {
-    display: none;
 }
 
 .logPlaceholder {
     color: #666;
     font-style: italic;
     padding: 0.2rem 0;
-    overflow-wrap: anywhere;
 }
 
-.logLine {
-    padding: 2px 0;
-    border-bottom: 1px solid #222;
-    overflow-wrap: anywhere;
-}
-
-/* Small parser box */
+/* Small central PARSER box */
 .parserBox {
+    position: absolute;
     left: 50%;
     top: calc(var(--log-half) - var(--parser-half));
     width: var(--parser-size);
@@ -179,6 +146,11 @@
     transform: translateX(-50%);
     z-index: 4;
     background: #080000;
+    border: 2px solid #ff2222;
+    border-radius: 8px;
+    box-shadow: 0 0 12px rgba(255, 34, 34, 0.85), 0 0 26px rgba(255, 34, 34, 0.45);
+    display: flex;
+    flex-direction: column;
 }
 
 .parserBoxHeader {
@@ -186,21 +158,21 @@
     background: #111;
     color: #ff2222;
     font-size: clamp(0.62rem, 0.8vw, 0.78rem);
-    line-height: 1;
-    border-bottom: 2px solid #ff2222;
     text-align: center;
-    letter-spacing: 0.08em;
+    border-bottom: 2px solid #ff2222;
     text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .parserCore {
-    position: relative;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    background:
-        radial-gradient(circle at center, rgba(255, 34, 34, 0.18), transparent 62%),
-        #050000;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, rgba(255, 34, 34, 0.18), transparent 62%), #050000;
+    font-size: clamp(0.55rem, 0.7vw, 0.7rem);
+    color: #ffb4b4;
+    text-align: center;
 }
 
 /* Binary tunnels */
@@ -209,12 +181,8 @@
     z-index: 1;
     overflow: hidden;
     border: 1px solid rgba(255, 34, 34, 0.75);
-    background:
-        linear-gradient(90deg, rgba(255, 34, 34, 0.16), rgba(255, 34, 34, 0.04), rgba(255, 34, 34, 0.16)),
-        #050000;
-    box-shadow:
-        0 0 8px rgba(255, 34, 34, 0.65),
-        inset 0 0 12px rgba(255, 34, 34, 0.28);
+    background: linear-gradient(90deg, rgba(255, 34, 34, 0.16), rgba(255, 34, 34, 0.04), rgba(255, 34, 34, 0.16)), #050000;
+    box-shadow: 0 0 8px rgba(255, 34, 34, 0.65), inset 0 0 12px rgba(255, 34, 34, 0.28);
 }
 
 .horizontalTunnel {
@@ -241,25 +209,19 @@
     border-radius: 999px;
 }
 
+/* Animated binary streams inside tunnels */
 .binaryStream {
     position: absolute;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
     color: #ff3333;
     font-family: 'pixelSans', monospace;
     font-size: clamp(8px, 0.65vw, 11px);
     letter-spacing: 0.12em;
     white-space: nowrap;
-    text-shadow:
-        0 0 5px rgba(255, 34, 34, 0.9),
-        0 0 12px rgba(255, 34, 34, 0.75);
-}
-
-.binaryStream.vertical {
-    writing-mode: vertical-rl;
+    text-shadow: 0 0 5px rgba(255, 34, 34, 0.9), 0 0 12px rgba(255, 34, 34, 0.75);
 }
 
 .binaryStream:not(.reverse) {
@@ -318,109 +280,10 @@
     }
 }
 
-/* Parser logs content */
+/* Parser logs box content */
 .parserLogContent {
     font-size: clamp(0.58rem, 0.72vw, 0.75rem);
     line-height: 1.15;
-}
-
-.packetTransform {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-    min-height: 0;
-    height: 100%;
-}
-
-.transformSection {
-    border: 1px solid rgba(255, 34, 34, 0.35);
-    border-radius: 6px;
-    background: #070000;
-    padding: 0.45rem;
-}
-
-.transformLabel {
-    display: block;
-    margin-bottom: 0.3rem;
-    color: #ff7777;
-    font-size: 0.7em;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.packetRaw,
-.packetJson,
-.binarySection code {
-    display: block;
-    margin: 0;
-    color: var(--color-terminal-text);
-    font-family: 'pixelSans', monospace;
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-}
-
-.packetRaw {
-    max-height: 22%;
-}
-
-.packetJson {
-    max-height: 42%;
-    min-height: 0;
-    overflow-y: auto;
-    scrollbar-width: none;
-}
-
-.packetJson::-webkit-scrollbar {
-    display: none;
-}
-
-.binarySection {
-    flex: 0 0 auto;
-}
-
-.binarySection code {
-    color: #ff3333;
-    text-shadow: 0 0 6px rgba(255, 34, 34, 0.75);
-}
-
-.transformArrow {
-    color: #ff2222;
-    font-size: 1.1rem;
-    line-height: 0.8;
-    text-align: center;
-    text-shadow: 0 0 8px rgba(255, 34, 34, 0.8);
-}
-
-.parserHistory {
-    margin-top: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid rgba(255, 34, 34, 0.25);
-}
-
-.historyLabel {
-    margin-bottom: 0.35rem;
-    color: #ff7777;
-    font-size: 0.72em;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.parserHistoryEntry {
-    padding: 0.35rem 0;
-    border-bottom: 1px solid rgba(255, 34, 34, 0.15);
-}
-
-.parserHistoryEntry span {
-    display: block;
-    color: var(--color-terminal-text);
-    overflow-wrap: anywhere;
-}
-
-.parserHistoryEntry code {
-    display: block;
-    color: #ff3333;
-    overflow-wrap: anywhere;
 }
 
 .statusCapturing {
@@ -456,7 +319,6 @@
 @media (max-width: 900px) {
     .overseerGraphic {
         min-height: 600px;
-        align-items: flex-start;
     }
 
     .overseerEye {
@@ -466,10 +328,6 @@
     .overseerHand {
         width: clamp(45px, 9vw, 90px);
         top: 330px;
-    }
-
-    .overseerDiagram {
-        min-width: 640px;
     }
 }
 
@@ -489,9 +347,5 @@
 
     .overseerHand {
         visibility: hidden;
-    }
-
-    .overseerDiagram {
-        min-width: 610px;
     }
 }

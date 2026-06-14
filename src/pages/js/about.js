@@ -1,4 +1,4 @@
-const versionNumber = window.versionNumber || "0.0.7";
+import { versionNumber } from '../../globals.js';
 
 document.addEventListener('DOMContentLoaded', () => {
 

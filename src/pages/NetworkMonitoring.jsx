@@ -152,13 +152,13 @@ export default function NetworkMonitoring({ route, setRoute }) {
                     <div className="overseerDiagram">
                         {/* Binary tunnels */}
                         <div className="binaryTunnel horizontalTunnel leftTunnel">
-                            <BinaryStream />
-                        </div>
-                        <div className="binaryTunnel horizontalTunnel rightTunnel">
                             <BinaryStream reverse />
                         </div>
+                        <div className="binaryTunnel horizontalTunnel rightTunnel">
+                            <BinaryStream />
+                        </div>
                         <div className="binaryTunnel verticalTunnel">
-                            <BinaryStream vertical />
+                            <BinaryStream vertical reverse />
                         </div>
 
                         {/* Left box - unused */}

@@ -54,6 +54,27 @@
     left: 12%;
 }
 
+.overseerWing {
+    position: absolute;
+    width: clamp(180px, 18vw, 360px);
+    height: auto;
+    top: calc(clamp(20px, 1vw, 120px) + 0.75rem);
+    z-index: 3;
+    opacity: 0.32;
+    filter: brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(100%) contrast(107%) drop-shadow(0 0 18px rgba(255, 34, 34, 0.75));
+}
+
+.overseerWing.right {
+    right: 8%;
+    transform: scaleX(-1);
+    transform: rotate(50deg) scaleX(-1) scaleY(-1);
+}
+
+.overseerWing.left {
+    left: 8%;
+    transform: rotate(-50deg) scaleY(-1);
+}
+
 /* Main diagram container */
 .overseerDiagram {
     display: flex;
@@ -69,7 +90,7 @@
     min-width: 700px;
     height: calc(var(--log-size) + var(--log-size) + var(--tunnel-gap) + 2rem);
     margin: clamp(2.5rem, 5vh, 4.25rem) auto 0;
-    z-index: 2;
+    z-index: 3;
 }
 
 /* Red boxes (absolute positioned) */

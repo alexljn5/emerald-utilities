@@ -3,6 +3,7 @@ import PageShell from './PageShell.jsx';
 import { networkManager } from '../core/networkManager.js';
 import eye from '../../img/network-overseer/network-overseer-eye.png';
 import hand from '../../img/network-overseer/network-overseer-hand.png';
+import wing from '../../img/network-overseer/network-overseer-wing.png';
 import '../css/network-monitoring.css';
 
 function BinaryStream({ text = "01010101 10101010 11001100", vertical = false, reverse = false }) {
@@ -148,6 +149,8 @@ export default function NetworkMonitoring({ route, setRoute }) {
                         </div>
                     </div>
 
+                    <img src={wing} alt="Left overseer wing" className="overseerWing left" />
+                    <img src={wing} alt="Right overseer wing" className="overseerWing right" />
                     <img src={hand} alt="Left hand" className="overseerHand left" />
                     <img src={hand} alt="Right hand" className="overseerHand right" />
                 </div>

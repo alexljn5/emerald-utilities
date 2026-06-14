@@ -3,33 +3,38 @@
     background: #000;
     border: 2px solid var(--color-accent);
     border-radius: 8px;
-    padding: 1.5rem;
+    padding: clamp(0.75rem, 1.5vw, 1.5rem);
     display: flex;
     flex-direction: column;
     height: 100%;
     position: relative;
     overflow-y: auto;
     overflow-x: hidden;
-    min-height: clamp(420px, 70vh, 760px);
+    min-height: 0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
-/* Graphic area - only contains eye + hands now */
+.networkOverseer::-webkit-scrollbar {
+    display: none;
+}
+
+/* Graphic area */
 .overseerGraphic {
     position: relative;
     flex: 1 1 auto;
     min-height: 0;
-    max-height: none;
     display: flex;
     justify-content: center;
-    align-items: flex-start;
-    margin-bottom: 1rem;
+    align-items: flex-end;
+    margin-bottom: 0;
     overflow: visible;
 }
 
 /* Eye */
 .overseerEye {
     position: absolute;
-    top: -4%;
+    top: clamp(-2rem, -4%, -0.75rem);
     width: clamp(120px, 15vw, 280px);
     height: auto;
     z-index: 3;
@@ -37,42 +42,40 @@
         brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(100%) contrast(107%) drop-shadow(0 0 25px rgba(255, 34, 34, 0.9));
 }
 
-/* Hands - absolute positioned inside graphic, above the boxes */
+/* Hands */
 .overseerHand {
     position: absolute;
     width: clamp(60px, 11vw, 145px);
     height: auto;
-    top: calc(70%);
+    top: 62%;
     z-index: 2;
     filter:
         brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(96%) contrast(107%);
 }
 
-/* Left hand: mirrored horizontally + upside down */
 .overseerHand.right {
     right: 13%;
     transform: scaleX(-1);
 }
 
-/* Right hand: just upside down */
 .overseerHand.left {
     left: 13%;
 }
 
-/* Red boxes row - now properly at bottom */
+/* Red boxes row */
 .overseerBoxes {
+    width: 100%;
     display: flex;
     justify-content: center;
-    align-items: center;
-    margin-top: 18%;
-    gap: clamp(1.5rem, 25vw, 15rem);
-    min-width: max-content;
+    align-items: flex-end;
+    gap: clamp(14rem, 4vw, 5rem);
+    min-width: 0;
+    z-index: 4;
+    padding-bottom: 12rem;
 }
 
-/* === Logging boxes (pure content, no controls inside) === */
+/* === Logging boxes === */
 .logBox {
-    width: clamp(260px, 15vw, 420px);
-    aspect-ratio: 1 / 1.05;
     display: flex;
     flex-direction: column;
     padding: 0;
@@ -81,42 +84,56 @@
 }
 
 .logBoxHeader {
-    padding: 0.6rem 1rem;
+    padding: clamp(0.45rem, 0.9vw, 0.7rem) clamp(0.5rem, 1vw, 0.9rem);
     background: #111;
     color: #ff2222;
-    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    font-size: clamp(0.7rem, 0.95vw, 1rem);
+    line-height: 1.1;
     border-bottom: 2px solid #ff2222;
     flex-shrink: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
 }
 
 .logBoxContent {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    padding: 0.75rem;
+    overflow-x: hidden;
+    padding: clamp(0.45rem, 0.9vw, 0.75rem);
     background: #0a0a0a;
     color: var(--color-terminal-text);
     font-family: 'pixelSans', monospace;
-    font-size: 0.85rem;
+    font-size: clamp(0.62rem, 0.8vw, 0.85rem);
+    line-height: 1.2;
     white-space: pre-wrap;
     word-break: break-word;
-    min-height: clamp(180px, 30vh, 380px);
+    overflow-wrap: anywhere;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.logBoxContent::-webkit-scrollbar {
+    display: none;
 }
 
 .logPlaceholder {
     color: #666;
     font-style: italic;
-    padding: 0.2rem 50;
+    padding: 0.2rem 0;
+    overflow-wrap: anywhere;
 }
 
 .logLine {
     padding: 2px 0;
     border-bottom: 1px solid #222;
+    overflow-wrap: anywhere;
 }
 
 /* Individual red box */
 .redBox {
     flex: 0 0 auto;
-    width: clamp(150px, 16vw, 280px);
+    width: clamp(220px, 18vw, 320px);
     aspect-ratio: 1 / 1;
     background: var(--color-bg);
     border: 2px solid #ff2222;
@@ -127,21 +144,36 @@
         0 0 40px rgba(255, 34, 34, 0.2);
 }
 
-/* Responsive (same as before, just minor tweaks) */
-@media (max-width: 1400px) {
-    .overseerBoxes {
-        gap: 8rem;
+.statusCapturing {
+    color: #0f0;
+    margin-top: 0.5rem;
+}
+
+.statusError {
+    color: #ff4444;
+    margin-top: 0.5rem;
+}
+
+.statusIdle {
+    color: #f44;
+    margin-top: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .redBox {
+        width: clamp(190px, 20vw, 280px);
     }
 
-    .redBox {
-        max-height: 320px;
+    .overseerBoxes {
+        gap: clamp(0.75rem, 3vw, 3rem);
     }
 }
 
 @media (max-width: 900px) {
     .overseerGraphic {
         min-height: 260px;
-        max-height: 360px;
+        align-items: flex-end;
     }
 
     .overseerEye {
@@ -149,35 +181,45 @@
     }
 
     .overseerHand {
-        width: clamp(170px, 11vw, 120px);
-        top: 80%;
-        visibility: hidden;
+        width: clamp(45px, 9vw, 90px);
+        top: 72%;
     }
 
     .overseerBoxes {
-        gap: 14rem;
-        padding-bottom: 3rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+        padding-bottom: 1rem;
     }
 
     .redBox {
-        max-height: 220px;
+        width: min(42vw, 260px);
+        min-width: 170px;
     }
 }
 
 @media (max-width: 600px) {
+    .networkOverseer {
+        padding: 0.5rem;
+    }
+
     .overseerGraphic {
         min-height: 200px;
-        max-height: 280px;
+    }
+
+    .overseerEye {
+        top: 0;
+    }
+
+    .overseerHand {
+        visibility: hidden;
     }
 
     .overseerBoxes {
-        gap: 2rem;
-        padding: 0 6%;
-        padding-bottom: 2rem;
+        gap: 0.75rem;
     }
 
     .redBox {
-        max-height: 160px;
+        width: min(46vw, 180px);
+        min-width: 145px;
     }
-
 }

@@ -120,6 +120,17 @@
     gap: 0.25rem;
 }
 
+.inlineControls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.inlineControls input {
+    flex: 1;
+    min-width: 0;
+}
+
 .detailRow.ahkPathRow {
     flex-direction: row;
     align-items: center;

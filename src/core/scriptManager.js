@@ -1,14 +1,11 @@
-const { ipcRenderer } = require('electron');
-const path = require('path');
-const fs = require('fs').promises;
-const fsSync = require('fs');
-
+import { invoke, on } from '../js/electronApi.js';
 
 export class ScriptManager {
     constructor() {
         this.initialized = false;
         this.state = {
             currentScript: null,
+            currentScriptContent: '',
             runningScripts: new Set(),
             cronScripts: new Map(),
             config: { scripts: [], customScriptsPath: null, ahkPath: null },
@@ -17,18 +14,38 @@ export class ScriptManager {
         this.dom = null;
         this.log = null;
         this.renderFn = null;
-        this.logFilePath = null; // will be set on first use
+        this.onContentChange = null;
+        this.mainProcessUnsubscribe = [];
+        this.boundMainProcessEvents = false;
         this.bindMainProcessEvents();
     }
 
-    bindLogger(fn) { this.log = fn; }
-    bindDom(dom) { this.dom = dom; }
-    bindRenderer(fn) { this.renderFn = fn; }
+    bindLogger(fn) {
+        this.log = fn;
+    }
+
+    unbindLogger() {
+        this.log = null;
+    }
+
+    bindDom(dom) {
+        this.dom = dom;
+    }
+
+    bindRenderer(fn) {
+        this.renderFn = fn;
+        this.renderScripts();
+    }
+
+    bindContentChange(fn) {
+        this.onContentChange = fn;
+    }
 
     normalizeLogEntry(entry) {
         if (typeof entry === 'string') {
             return { id: null, message: entry };
         }
+
         return {
             id: entry?.id ?? null,
             message: entry?.message ?? ''
@@ -37,6 +54,7 @@ export class ScriptManager {
 
     emitLogEvent(entry) {
         if (typeof window === 'undefined') return;
+
         const normalized = this.normalizeLogEntry(entry);
         window.dispatchEvent(new CustomEvent('emerald-script-log', {
             detail: normalized
@@ -44,14 +62,18 @@ export class ScriptManager {
     }
 
     bindMainProcessEvents() {
-        ipcRenderer.on('script-log', (event, entry) => {
-            this.showExternalLog(entry);
-        });
+        if (this.boundMainProcessEvents) return;
 
-        ipcRenderer.on('script-running-changed', (event, { file, isRunning }) => {
+        this.boundMainProcessEvents = true;
+
+        this.mainProcessUnsubscribe.push(on('script-log', (entry) => {
+            this.showExternalLog(entry);
+        }));
+
+        this.mainProcessUnsubscribe.push(on('script-running-changed', ({ file, isRunning }) => {
             this.setScriptRunning(file, isRunning);
             this.renderScripts();
-        });
+        }));
     }
 
     showExternalLog(entry) {
@@ -60,9 +82,11 @@ export class ScriptManager {
         if (!msg) return;
 
         console.log('[ScriptManager]', msg);
+
         if (this.log) {
             this.log(normalized);
         }
+
         this.emitLogEvent(normalized);
     }
 
@@ -92,14 +116,14 @@ export class ScriptManager {
 
     renderScripts() {
         if (this.renderFn) {
-            this.renderFn(this.state.config._files || [], this.state.config.scripts);
+            this.renderFn(this.state.config._files || [], this.state.config.scripts || []);
         }
     }
 
     async syncRunningScripts() {
         try {
-            const running = await ipcRenderer.invoke('get-running-scripts');
-            this.state.runningScripts = new Set(running);
+            const running = await invoke('get-running-scripts');
+            this.state.runningScripts = new Set(running || []);
         } catch (err) {
             this._log(`Running state error: ${err.message}`);
         }
@@ -107,8 +131,8 @@ export class ScriptManager {
 
     async replayMainProcessLogToTerminal(maxLines = 500) {
         try {
-            const lines = await ipcRenderer.invoke('get-script-log-history', maxLines);
-            for (const line of lines) {
+            const lines = await invoke('get-script-log-history', maxLines);
+            for (const line of lines || []) {
                 this.showExternalLog(line);
             }
         } catch (err) {
@@ -116,189 +140,97 @@ export class ScriptManager {
         }
     }
 
-    async replayStartupLogToTerminal(maxLines = 30) {
-        try {
-            const logPath = await this.getLogFilePath();
-            if (!fsSync.existsSync(logPath)) return;
-
-            const content = await fs.readFile(logPath, 'utf8');
-            const lines = content.trim().split('\n').slice(-maxLines);
-
-            for (const line of lines) {
-                // strip timestamp if you want cleaner output, or keep it
-                if (this.log) {
-                    this.log(line);
-                }
-                this.emitLogEvent(line);
-            }
-        } catch (err) {
-            console.error('Failed to replay startup log:', err);
-        }
-    }
-
-    async getLogFilePath() {
-        if (this.logFilePath) return this.logFilePath;
-        const userData = await ipcRenderer.invoke('get-user-data-path');
-        this.logFilePath = path.join(userData, 'emerald_startup.log');
-        return this.logFilePath;
-    }
-
     async _writeToLogFile(msg) {
         try {
-            const logPath = await this.getLogFilePath();
-            const timestamp = new Date().toISOString();
-            const line = `[${timestamp}] ${msg}\n`;
-            await fs.appendFile(logPath, line, 'utf8');
-        } catch (e) {
-            console.error('Failed to write startup log:', e);
+            await invoke('write-startup-log', msg);
+        } catch (err) {
+            console.error('Failed to write startup log:', err);
         }
     }
 
     _log(msg) {
-        // Always try to write to persistent file (works on startup too)
-        this._writeToLogFile(msg);
-
-        // Send to main process (if preload/main listens for it)
         try {
-            ipcRenderer.send('log', msg);
+            invoke('log', msg);
         } catch { }
 
-        // Normal console (for devtools / normal terminal)
         console.log('[ScriptManager]', msg);
 
-        // If UI logger is bound, also show in internal terminal
         if (this.log) {
             this.log(msg);
         }
 
         this.emitLogEvent(msg);
-    }
-
-    _logProcessOutput(data, prefix = '') {
-        const text = data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd();
-        if (!text) return;
-
-        for (const line of text.split('\n')) {
-            this._log(`${prefix}${line}`);
-        }
+        this._writeToLogFile(msg);
     }
 
     init(options = {}) {
-        const { bindUI = true } = options;
+        const { bindUI = true, skipAutoRun = false } = options;
+
+        this.bindMainProcessEvents();
+
         if (bindUI && this.initialized) return;
         if (bindUI) this.initialized = true;
 
-        this._log("ScriptManager initialized");
-        this.loadScripts().then(() => this.tryAutoRun());
+        this._log('ScriptManager initialized');
+
+        this.loadScripts()
+            .then(() => {
+                if (!skipAutoRun) {
+                    return this.tryAutoRun();
+                }
+
+                return undefined;
+            })
+            .catch((err) => this._log(`Init error: ${err.message}`));
     }
 
-    /* ---------------- CONFIG ---------------- */
+    cloneConfig() {
+        return {
+            scripts: [...(this.state.config.scripts || [])],
+            customScriptsPath: this.state.config.customScriptsPath || null,
+            ahkPath: this.state.config.ahkPath || null
+        };
+    }
+
     async updateConfig(file, updates) {
         try {
-            const configPath = path.join(
-                await ipcRenderer.invoke('get-user-data-path'),
-                'config.json'
-            );
-            const cfg = this.state.config;
-            const idx = cfg.scripts.findIndex(s => s.file === file);
+            const cfg = this.cloneConfig();
+            const idx = cfg.scripts.findIndex((script) => script.file === file);
+            const nextScript = {
+                file,
+                type: file.match(/\.(js|sh|bat|exe|ahk)$/)?.[1] ?? 'unknown',
+                autoRun: false,
+                cronEnabled: false,
+                cronInterval: 0,
+                displayName: `Run ${file}`,
+                ...updates
+            };
 
             if (idx === -1) {
-                cfg.scripts.push({
-                    file,
-                    type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
-                    autoRun: false,
-                    displayName: `Run ${file}`,
-                    ...updates
-                });
+                cfg.scripts.push(nextScript);
             } else {
                 cfg.scripts[idx] = { ...cfg.scripts[idx], ...updates };
             }
 
-            await fs.writeFile(configPath, JSON.stringify(cfg, null, 2), 'utf8');
+            const result = await invoke('config:save', { config: cfg });
+            this.state.config = { ...result.config, _files: this.state.config._files || [] };
             this._log(`[config] ${idx === -1 ? 'added' : 'updated'} ${file}`);
+            this.renderScripts();
         } catch (err) {
             this._log(`Config error: ${err.message}`);
         }
     }
 
     getScriptsDir() {
-        if (this.state.config.customScriptsPath) return this.state.config.customScriptsPath;
-        const devPath = path.join(__dirname, '../scripts');
-        const resPath = path.join(process.resourcesPath || '', 'scripts');
-        if (fsSync.existsSync(devPath)) return devPath;
-        if (fsSync.existsSync(resPath)) return resPath;
-        return devPath;
-    }
-
-    async ensureConfigEntries(files) {
-        const cfg = this.state.config;
-        let changed = false;
-
-        for (const file of files) {
-            if (!cfg.scripts.find(s => s.file === file)) {
-                cfg.scripts.push({
-                    file,
-                    type: file.match(/\.(js|sh|bat|exe)$/)?.[1] ?? 'unknown',
-                    autoRun: false,
-                    cronEnabled: false,
-                    cronInterval: 0,
-                    displayName: `Run ${file}`
-                });
-                changed = true;
-            } else {
-                const scriptConfig = cfg.scripts.find(s => s.file === file);
-                if (Object.prototype.hasOwnProperty.call(scriptConfig, 'persistent')) {
-                    delete scriptConfig.persistent;
-                    changed = true;
-                }
-                // Add missing cron fields
-                if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronEnabled')) {
-                    scriptConfig.cronEnabled = false;
-                    changed = true;
-                }
-                if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronInterval')) {
-                    scriptConfig.cronInterval = 0;
-                    changed = true;
-                }
-            }
-        }
-        return changed;
+        return this.state.config.customScriptsPath || 'default scripts folder';
     }
 
     async loadScripts() {
         try {
-            const configPath = path.join(
-                await ipcRenderer.invoke('get-user-data-path'),
-                'config.json'
-            );
-
-            try {
-                this.state.config = JSON.parse(await fs.readFile(configPath, 'utf8'));
-            } catch {
-                this.state.config = { scripts: [], customScriptsPath: null, ahkPath: null };
-                await fs.writeFile(configPath, JSON.stringify(this.state.config, null, 2));
-            }
-
-            const scriptsDir = this.getScriptsDir();
-            if (!fsSync.existsSync(scriptsDir)) {
-                await fs.mkdir(scriptsDir, { recursive: true });
-            }
-
-            const files = (await fs.readdir(scriptsDir))
-                .filter(f => f.match(/\.(js|sh|bat|exe|ahk)$/));
-
-            this.state.config._files = files;
-
-            // NEW: make sure every file has a config entry
-            const changed = await this.ensureConfigEntries(files);
-            if (changed) {
-                await fs.writeFile(configPath, JSON.stringify(this.state.config, null, 2), 'utf8');
-                this._log('[config] Auto-created missing config entries');
-            }
-
-            this._log(`Scripts loaded: ${files.length}`);
+            const result = await invoke('scripts:list');
+            this.state.config = { ...result.config, _files: result.files || [] };
+            this._log(`Scripts loaded: ${result.files?.length ?? 0}`);
             await this.syncRunningScripts();
-
             this.renderScripts();
         } catch (err) {
             this._log(`Load error: ${err.message}`);
@@ -310,24 +242,19 @@ export class ScriptManager {
     }
 
     async setAhkPath(ahkPath) {
-        this.state.config.ahkPath = ahkPath;
-        const configPath = path.join(
-            await ipcRenderer.invoke('get-user-data-path'),
-            'config.json'
-        );
-        await fs.writeFile(configPath, JSON.stringify(this.state.config, null, 2), 'utf8');
+        const cfg = this.cloneConfig();
+        cfg.ahkPath = ahkPath || null;
+        const result = await invoke('config:save', { config: cfg });
+        this.state.config = { ...result.config, _files: this.state.config._files || [] };
         this._log(`[config] AHK path set to: ${ahkPath || 'auto-detect'}`);
     }
 
     async chooseCustomScriptFolder() {
-        const customPath = await ipcRenderer.invoke('select-directory');
+        const customPath = await invoke('select-directory');
         if (!customPath) return;
-        this.state.config.customScriptsPath = customPath;
-        await fs.writeFile(
-            path.join(await ipcRenderer.invoke('get-user-data-path'), 'config.json'),
-            JSON.stringify(this.state.config, null, 2),
-            'utf8'
-        );
+
+        const result = await invoke('scripts:set-directory', { customScriptsPath: customPath });
+        this.state.config = { ...result.config, _files: this.state.config._files || [] };
         this._log(`Scripts dir set: ${customPath}`);
         await this.loadScripts();
     }
@@ -337,24 +264,24 @@ export class ScriptManager {
         sessionStorage.setItem('autoRunDone', '1');
 
         for (const file of this.state.config._files || []) {
-            const cfg = this.state.config.scripts.find(s => s.file === file);
+            const cfg = this.state.config.scripts.find((script) => script.file === file);
             if (!cfg) continue;
 
-            // Auto-run regular scripts
             if (cfg.autoRun) {
                 const ok = await this.hasAllDependencies(file);
-                if (ok) this.runScript(file);
-                else {
+                if (ok) {
+                    await this.runScript(file);
+                } else {
                     await this.updateConfig(file, { autoRun: false });
                     this._log(`Auto-run disabled: ${file}`);
                 }
             }
 
-            // Auto-start cron jobs
             if (cfg.cronEnabled && cfg.cronInterval > 0) {
                 const ok = await this.hasAllDependencies(file);
-                if (ok) this.startCronScript(file, cfg.cronInterval);
-                else {
+                if (ok) {
+                    await this.startCronScript(file, cfg.cronInterval);
+                } else {
                     await this.updateConfig(file, { cronEnabled: false });
                     this._log(`Cron auto-start disabled: ${file}`);
                 }
@@ -369,12 +296,7 @@ export class ScriptManager {
         }
 
         try {
-            const scriptPath = path.join(this.getScriptsDir(), file);
-            if (!fsSync.existsSync(scriptPath)) {
-                return this._log(`Missing: ${file}`);
-            }
-
-            const result = await ipcRenderer.invoke('run-script', { file, scriptPath });
+            const result = await invoke('run-script', { file });
             if (result?.ok) {
                 this.setScriptRunning(file, true);
                 this.renderScripts();
@@ -392,12 +314,7 @@ export class ScriptManager {
         }
 
         try {
-            const scriptPath = path.join(this.getScriptsDir(), file);
-            if (!fsSync.existsSync(scriptPath)) {
-                return this._log(`Missing: ${file}`);
-            }
-
-            const result = await ipcRenderer.invoke('start-cron-script', { file, scriptPath, intervalMs });
+            const result = await invoke('start-cron-script', { file, intervalMs });
             if (result?.ok) {
                 this.setCronRunning(file, true);
                 this.renderScripts();
@@ -417,7 +334,7 @@ export class ScriptManager {
 
     async stopCronScript(file) {
         try {
-            const result = await ipcRenderer.invoke('stop-cron-script', { file });
+            const result = await invoke('stop-cron-script', { file });
             if (result?.ok) {
                 this.setCronRunning(file, false);
                 this.renderScripts();
@@ -433,7 +350,7 @@ export class ScriptManager {
     async stopScript(file) {
         try {
             this._log(`Attempting to stop ${file}...`);
-            const result = await ipcRenderer.invoke('stop-script', { file });
+            const result = await invoke('stop-script', { file });
 
             if (result?.ok) {
                 this.setScriptRunning(file, false);
@@ -448,39 +365,58 @@ export class ScriptManager {
     }
 
     async hasAllDependencies(file) {
-        const scriptPath = path.join(this.getScriptsDir(), file);
         const ext = file.split('.').pop();
         if (!['bat', 'sh', 'js', 'ahk'].includes(ext)) return true;
 
-        const content = await fs.readFile(scriptPath, 'utf8');
-        const matches = content.match(/\b[\w\-.]+\.exe\b/gi) || [];
+        const result = await invoke('scripts:read', { file });
+        const matches = result.content.match(/\b[\w\-.]+\.exe\b/gi) || [];
         const allow = new Set([
-            'powershell.exe', 'cmd.exe', 'bash.exe', 'node.exe',
-            'npm.exe', 'explorer.exe', 'taskkill.exe', 'reg.exe', 'wmic.exe'
+            'powershell.exe',
+            'cmd.exe',
+            'bash.exe',
+            'node.exe',
+            'npm.exe',
+            'explorer.exe',
+            'taskkill.exe',
+            'reg.exe',
+            'wmic.exe'
         ]);
 
-        for (const m of matches) {
-            const exe = m.toLowerCase();
+        for (const match of matches) {
+            const exe = match.toLowerCase();
             if (allow.has(exe)) continue;
-            if (!fsSync.existsSync(path.join(path.dirname(scriptPath), exe))) {
+
+            const exists = await invoke('scripts:dependency-exists', { file: exe });
+            if (!exists) {
                 this._log(`Missing dep: ${exe}`);
                 return false;
             }
         }
+
         return true;
     }
 
-    // New helper methods for view/save
     async viewScript(file) {
-        if (!this.dom?.scriptContent) return;
+        if (!file) return;
+
         try {
-            const scriptPath = path.join(this.getScriptsDir(), file);
             if (file.endsWith('.exe')) {
                 this._log('Cannot view binary file');
                 return;
             }
-            this.dom.scriptContent.value = await fs.readFile(scriptPath, 'utf8');
+
+            const result = await invoke('scripts:read', { file });
             this.state.currentScript = file;
+            this.state.currentScriptContent = result.content;
+
+            if (this.onContentChange) {
+                this.onContentChange(result.content);
+            }
+
+            if (this.dom?.scriptContent) {
+                this.dom.scriptContent.value = result.content;
+            }
+
             this._log(`Viewing: ${file}`);
         } catch (err) {
             this._log(`View error: ${err.message}`);
@@ -492,9 +428,13 @@ export class ScriptManager {
             this._log('No script selected to save');
             return;
         }
+
         try {
-            const scriptPath = path.join(this.getScriptsDir(), this.state.currentScript);
-            await fs.writeFile(scriptPath, this.dom.scriptContent.value, 'utf8');
+            const content = this.state.currentScriptContent || this.dom?.scriptContent?.value || '';
+            await invoke('scripts:write', {
+                file: this.state.currentScript,
+                content
+            });
             this._log(`Saved ${this.state.currentScript}`);
         } catch (err) {
             this._log(`Save error: ${err.message}`);

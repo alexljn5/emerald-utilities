@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, screen } = require('ele
 const path = require('path');
 const { spawn } = require('child_process');
 const { existsSync } = require('fs');
+const fsPromises = require('fs').promises;
 const { execSync } = require('child_process');
 
 function commandExists(command) {
@@ -51,6 +52,98 @@ const MAX_SCRIPT_LOG_LINES = 500;
 const SCRIPT_LOG_SESSION_ID = Date.now().toString(36);
 let nextScriptLogId = 1;
 let networkCaptureProcess = null;
+
+function getDefaultConfig() {
+    return { scripts: [], customScriptsPath: null, ahkPath: null };
+}
+
+function getConfigPath() {
+    return path.join(app.getPath('userData'), 'config.json');
+}
+
+async function readConfig() {
+    try {
+        const configPath = getConfigPath();
+        if (!existsSync(configPath)) {
+            const config = getDefaultConfig();
+            await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+            return config;
+        }
+
+        return JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+    } catch {
+        return getDefaultConfig();
+    }
+}
+
+async function writeConfig(config) {
+    const cleanConfig = {
+        scripts: Array.isArray(config.scripts) ? config.scripts : [],
+        customScriptsPath: config.customScriptsPath || null,
+        ahkPath: config.ahkPath || null
+    };
+
+    await fsPromises.writeFile(getConfigPath(), JSON.stringify(cleanConfig, null, 2), 'utf8');
+    return cleanConfig;
+}
+
+function getDefaultScriptsDir() {
+    const devPath = path.join(app.getAppPath(), 'scripts');
+    const resPath = path.join(process.resourcesPath || '', 'scripts');
+
+    if (existsSync(devPath)) return devPath;
+    if (existsSync(resPath)) return resPath;
+
+    return devPath;
+}
+
+function getScriptsDir(config) {
+    return config?.customScriptsPath || getDefaultScriptsDir();
+}
+
+function sanitizeScriptFile(file) {
+    if (!file || typeof file !== 'string') return null;
+
+    const normalized = file.replace(/\\/g, '/');
+    if (normalized.includes('/') || normalized.includes('..')) return null;
+    if (!/\.(js|sh|bat|exe|ahk)$/i.test(normalized)) return null;
+
+    return normalized;
+}
+
+async function ensureConfigEntries(config, files) {
+    let changed = false;
+
+    for (const file of files) {
+        if (!config.scripts.find((script) => script.file === file)) {
+            config.scripts.push({
+                file,
+                type: file.match(/\.(js|sh|bat|exe|ahk)$/i)?.[1]?.toLowerCase() ?? 'unknown',
+                autoRun: false,
+                cronEnabled: false,
+                cronInterval: 0,
+                displayName: `Run ${file}`
+            });
+            changed = true;
+        } else {
+            const scriptConfig = config.scripts.find((script) => script.file === file);
+            if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronEnabled')) {
+                scriptConfig.cronEnabled = false;
+                changed = true;
+            }
+            if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronInterval')) {
+                scriptConfig.cronInterval = 0;
+                changed = true;
+            }
+        }
+    }
+
+    if (changed) {
+        await writeConfig(config);
+    }
+
+    return changed;
+}
 
 function broadcast(channel, ...args) {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -364,10 +457,19 @@ function createWindow() {
             mainWindow.setMenu(null);
         }
 
-        const indexPath = path.join(__dirname, 'index.html');
-        mainWindow.loadFile(indexPath).catch(err => {
-            console.error('Failed to load index.html:', err);
-        });
+        const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173';
+        const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+
+        if (isDev) {
+            mainWindow.loadURL(devServerUrl).catch(err => {
+                console.error('Failed to load Vite dev server:', err);
+            });
+        } else {
+            const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+            mainWindow.loadFile(indexPath).catch(err => {
+                console.error('Failed to load dist/index.html:', err);
+            });
+        }
 
         mainWindow.on('close', (event) => {
             if (!app.isQuitting) {
@@ -439,6 +541,18 @@ app.on('before-quit', () => {
 ipcMain.on('log', (event, message) => {
     console.log('Renderer log:', message);
 });
+
+ipcMain.handle('write-startup-log', async (_event, message) => {
+    try {
+        const logPath = path.join(app.getPath('userData'), 'emerald_startup.log');
+        const timestamp = new Date().toISOString();
+        await fsPromises.appendFile(logPath, `[${timestamp}] ${message}\n`, 'utf8');
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
 ipcMain.handle('network-start-capture', async () => {
     if (networkCaptureProcess) {
         return { ok: true, alreadyRunning: true };
@@ -524,43 +638,26 @@ ipcMain.handle('network-stop-capture', () => {
     return { ok: true };
 });
 
-ipcMain.handle('run-script', async (event, { file, scriptPath }) => {
-    return startScript(file, scriptPath);
+ipcMain.handle('run-script', async (_event, { file }) => {
+    const safeFile = sanitizeScriptFile(file);
+    if (!safeFile) return { ok: false, error: 'Invalid script file' };
+
+    const config = await readConfig();
+    const scriptPath = path.join(getScriptsDir(config), safeFile);
+    return startScript(safeFile, scriptPath);
 });
 
 ipcMain.handle('stop-script', (event, { file }) => {
-    const child = scriptRunners.get(file);
-    if (!child) {
-        return { ok: false, reason: 'not running' };
-    }
-
-    pushScriptLog(`Stopping ${file}...`);
-
-    // Immediately destroy streams to prevent further output
-    child.stdout?.destroy();
-    child.stderr?.destroy();
-
-    // Remove from map immediately to prevent duplicate exit handling
-    scriptRunners.delete(file);
-    setScriptRunning(file, false);
-
-    // Kill the process (and its tree on Windows)
-    if (child.pid) {
-        killProcessTree(child.pid);
-    } else {
-        child.kill();
-    }
-
-    // Log when process actually exits (one-time handler)
-    child.once('exit', (code, signal) => {
-        pushScriptLog(`${file} stopped (${signal || code})`);
-    });
-
-    return { ok: true };
+    return stopScript(file);
 });
 
-ipcMain.handle('start-cron-script', async (event, { file, scriptPath, intervalMs }) => {
-    return startCronScript(file, scriptPath, intervalMs);
+ipcMain.handle('start-cron-script', async (_event, { file, intervalMs }) => {
+    const safeFile = sanitizeScriptFile(file);
+    if (!safeFile) return { ok: false, error: 'Invalid script file' };
+
+    const config = await readConfig();
+    const scriptPath = path.join(getScriptsDir(config), safeFile);
+    return startCronScript(safeFile, scriptPath, intervalMs);
 });
 
 ipcMain.handle('stop-cron-script', (event, { file }) => {
@@ -577,7 +674,7 @@ ipcMain.handle('get-cron-scripts', () => {
     return result;
 });
 
-ipcMain.handle('get-script-log-history', (event, maxLines = MAX_SCRIPT_LOG_LINES) => {
+ipcMain.handle('get-script-log-history', (_event, maxLines = MAX_SCRIPT_LOG_LINES) => {
     return scriptLogHistory.slice(-maxLines);
 });
 
@@ -589,7 +686,7 @@ ipcMain.handle('select-directory', async () => {
     return result.canceled ? null : result.filePaths[0];
 });
 
-ipcMain.handle('select-file', async (event, options = {}) => {
+ipcMain.handle('select-file', async (_event, options = {}) => {
     try {
         const result = await dialog.showOpenDialog(mainWindow, {
             title: options.title || 'Select File',
@@ -605,33 +702,99 @@ ipcMain.handle('select-file', async (event, options = {}) => {
 
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 
-ipcMain.handle('get-ahk-path', async () => {
+ipcMain.handle('scripts:list', async () => {
     try {
-        const configPath = path.join(app.getPath('userData'), 'config.json');
-        if (existsSync(configPath)) {
-            const config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
-            return config.ahkPath || null;
+        const config = await readConfig();
+        const scriptsDir = getScriptsDir(config);
+
+        if (!existsSync(scriptsDir)) {
+            await fsPromises.mkdir(scriptsDir, { recursive: true });
         }
-    } catch (e) {
-        // Ignore errors
+
+        const files = (await fsPromises.readdir(scriptsDir))
+            .filter((file) => /\.(js|sh|bat|exe|ahk)$/i.test(file))
+            .sort((a, b) => a.localeCompare(b));
+
+        await ensureConfigEntries(config, files);
+        return { files, config: await readConfig(), scriptsDir };
+    } catch (err) {
+        pushScriptLog(`[Scripts] List error: ${err.message}`);
+        return { files: [], config: await readConfig(), scriptsDir: getDefaultScriptsDir() };
     }
-    return null;
 });
 
-ipcMain.handle('set-ahk-path', async (event, ahkPath) => {
+ipcMain.handle('scripts:read', async (_event, { file }) => {
     try {
-        const configPath = path.join(app.getPath('userData'), 'config.json');
-        let config = { scripts: [], customScriptsPath: null, ahkPath: null };
-        if (existsSync(configPath)) {
-            config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
-        }
-        config.ahkPath = ahkPath;
-        require('fs').writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        const safeFile = sanitizeScriptFile(file);
+        if (!safeFile) return { ok: false, error: 'Invalid script file' };
+        if (safeFile.toLowerCase().endsWith('.exe')) return { ok: false, error: 'Cannot view binary file' };
+
+        const config = await readConfig();
+        const content = await fsPromises.readFile(path.join(getScriptsDir(config), safeFile), 'utf8');
+        return { ok: true, content };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('scripts:write', async (_event, { file, content }) => {
+    try {
+        const safeFile = sanitizeScriptFile(file);
+        if (!safeFile) return { ok: false, error: 'Invalid script file' };
+        if (safeFile.toLowerCase().endsWith('.exe')) return { ok: false, error: 'Cannot write binary file' };
+
+        const config = await readConfig();
+        await fsPromises.writeFile(path.join(getScriptsDir(config), safeFile), String(content || ''), 'utf8');
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('scripts:set-directory', async (_event, { customScriptsPath }) => {
+    try {
+        const config = await readConfig();
+        config.customScriptsPath = customScriptsPath || null;
+        const savedConfig = await writeConfig(config);
+        return { ok: true, config: savedConfig };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('scripts:dependency-exists', async (_event, { file }) => {
+    try {
+        const config = await readConfig();
+        return existsSync(path.join(getScriptsDir(config), sanitizeScriptFile(file) || file));
+    } catch {
+        return false;
+    }
+});
+
+ipcMain.handle('config:save', async (_event, { config }) => {
+    try {
+        const savedConfig = await writeConfig(config);
+        return { ok: true, config: savedConfig };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('get-ahk-path', async () => {
+    const config = await readConfig();
+    return config.ahkPath || null;
+});
+
+ipcMain.handle('set-ahk-path', async (_event, ahkPath) => {
+    try {
+        const config = await readConfig();
+        config.ahkPath = ahkPath || null;
+        await writeConfig(config);
         console.log(`[AHK] Path updated to: ${ahkPath || 'auto-detect'}`);
         return { ok: true };
-    } catch (e) {
-        console.error('[AHK] Failed to save path:', e);
-        return { ok: false, error: e.message };
+    } catch (err) {
+        console.error('[AHK] Failed to save path:', err);
+        return { ok: false, error: err.message };
     }
 });
 

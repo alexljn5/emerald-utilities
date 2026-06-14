@@ -1,5 +1,5 @@
 // src/globals.js
-const versionNumber = "0.0.8";
+export const versionNumber = "0.0.8";
 
 window.versionNumber = versionNumber;
 

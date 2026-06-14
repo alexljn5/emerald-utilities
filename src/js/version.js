@@ -1,1 +1,3 @@
-export const versionNumber = '0.0.7';
+import { versionNumber } from '../globals.js';
+
+export { versionNumber };

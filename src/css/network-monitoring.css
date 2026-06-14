@@ -108,6 +108,11 @@
     font-size: clamp(0.75rem, 0.95vw, 0.95rem);
 }
 
+.packetLogViewerContent,
+.packetLogViewerRaw {
+    font-family: 'pixelSans', monospace;
+}
+
 .packetLogViewerContent {
     flex: 1;
     min-height: 0;
@@ -117,7 +122,6 @@
     border: 1px solid rgba(255, 34, 34, 0.55);
     border-radius: 6px;
     color: var(--color-terminal-text);
-    font-family: 'pixelSans', monospace;
     font-size: clamp(0.62rem, 0.8vw, 0.82rem);
     line-height: 1.25;
     white-space: pre-wrap;

@@ -61,77 +61,62 @@ export default function NetworkMonitoring({ route, setRoute }) {
 
         let cancelled = false;
 
-        async function loadPacketLogFiles() {
+        async function loadPacketLogs() {
             setPacketLogLoading(true);
             setPacketLogError('');
+
             try {
-                const result = await invoke('network-logs:list', { folder: packetLogFolder });
+                const listResult = await invoke('network-logs:list', { folder: packetLogFolder });
                 if (cancelled) return;
 
-                if (!result?.ok) {
+                if (!listResult?.ok) {
                     setPacketLogFiles([]);
                     setSelectedPacketLogFile(null);
                     setPacketLogContent('');
-                    setPacketLogError(result?.error || 'Unable to list packet logs');
+                    setPacketLogError(listResult?.error || 'Unable to list packet logs');
                     return;
                 }
 
-                setPacketLogFiles(result.files || []);
-                setSelectedPacketLogFile(result.files?.[0] || null);
-                setPacketLogContent('');
+                const files = listResult.files || [];
+                const fileToRead = selectedPacketLogFile && files.includes(selectedPacketLogFile)
+                    ? selectedPacketLogFile
+                    : files[0] || null;
+
+                setPacketLogFiles(files);
+                setSelectedPacketLogFile(fileToRead);
+
+                if (!fileToRead) {
+                    setPacketLogContent('');
+                    return;
+                }
+
+                const readResult = await invoke('network-logs:read', {
+                    folder: packetLogFolder,
+                    file: fileToRead
+                });
+
+                if (cancelled) return;
+
+                if (!readResult?.ok) {
+                    setPacketLogContent('');
+                    setPacketLogError(readResult?.error || 'Unable to read packet log');
+                    return;
+                }
+
+                setPacketLogContent(readResult.content || '');
             } catch (err) {
                 if (cancelled) return;
                 setPacketLogFiles([]);
                 setSelectedPacketLogFile(null);
                 setPacketLogContent('');
-                setPacketLogError(err?.message || 'Unable to list packet logs');
+                setPacketLogError(err?.message || 'Unable to load packet logs');
             } finally {
                 if (!cancelled) setPacketLogLoading(false);
             }
         }
 
-        loadPacketLogFiles();
-        return () => {
-            cancelled = true;
-        };
-    }, [showPacketLogs, packetLogFolder]);
+        loadPacketLogs();
 
-    useEffect(() => {
-        if (!showPacketLogs || !selectedPacketLogFile) {
-            setPacketLogContent('');
-            return;
-        }
-
-        let cancelled = false;
-
-        async function loadPacketLogContent() {
-            setPacketLogLoading(true);
-            setPacketLogError('');
-            try {
-                const result = await invoke('network-logs:read', {
-                    folder: packetLogFolder,
-                    file: selectedPacketLogFile
-                });
-
-                if (cancelled) return;
-
-                if (!result?.ok) {
-                    setPacketLogContent('');
-                    setPacketLogError(result?.error || 'Unable to read packet log');
-                    return;
-                }
-
-                setPacketLogContent(result.content || '');
-            } catch (err) {
-                if (cancelled) return;
-                setPacketLogContent('');
-                setPacketLogError(err?.message || 'Unable to read packet log');
-            } finally {
-                if (!cancelled) setPacketLogLoading(false);
-            }
-        }
-
-        loadPacketLogContent();
         return () => {
             cancelled = true;
         };

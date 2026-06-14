@@ -5,6 +5,7 @@ import fs from 'fs';
 import { existsSync } from 'fs';
 import fsPromises from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { parseTcpdumpArgs } from './core/tcpdumpArgs.js';
 import { writePacket } from './core/networkFileWriter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -193,12 +194,12 @@ function toWslPath(windowsPath) {
     return normalized;
 }
 
-export function startCapture(iface = 'any') {
+export function startCapture(iface = 'any', tcpdumpArgs = []) {
+    const { iface: normalizedIface, extraArgs } = normalizeNetworkCaptureOptions({ iface, tcpdumpArgs });
     const scriptPath = getNetworkCaptureScriptPath();
-    const useWsl = process.platform === 'win32';
     const proc = spawn(
-        useWsl ? 'wsl' : 'bash',
-        useWsl ? ['bash', toWslPath(scriptPath), iface] : ['bash', scriptPath, iface],
+        process.platform === 'win32' ? 'wsl' : 'bash',
+        getNetworkCaptureSpawnArgs(scriptPath, normalizedIface, extraArgs),
         { stdio: ['ignore', 'pipe', 'pipe'] }
     );
 
@@ -214,7 +215,7 @@ export function startCapture(iface = 'any') {
                 ts: new Date().toISOString(),
                 raw: line.trim(),
                 source: 'tcpdump',
-                interface: iface
+                interface: normalizedIface
             };
 
             writePacket(packet);
@@ -226,6 +227,31 @@ export function startCapture(iface = 'any') {
     });
 
     return proc;
+}
+
+function normalizeNetworkCaptureOptions(options = {}) {
+    const iface = String(options?.iface ?? options?.interface ?? 'any').trim() || 'any';
+    let extraArgs;
+
+    try {
+        extraArgs = parseTcpdumpArgs(options?.tcpdumpArgs ?? options?.args ?? []);
+    } catch (err) {
+        throw new Error(`Invalid tcpdump arguments: ${err.message}`);
+    }
+
+    extraArgs = extraArgs
+        .map((arg) => String(arg).trim())
+        .filter((arg) => arg.length > 0);
+
+    return { iface, extraArgs };
+}
+
+function getNetworkCaptureSpawnArgs(scriptPath, iface = 'any', extraArgs = []) {
+    if (process.platform === 'win32') {
+        return ['bash', toWslPath(scriptPath), iface, ...extraArgs];
+    }
+
+    return [scriptPath, iface, ...extraArgs];
 }
 
 function getNetworkCaptureScriptPath() {
@@ -616,19 +642,9 @@ ipcMain.handle('write-startup-log', async (_event, message) => {
     }
 });
 
-ipcMain.handle('network-start-capture', async () => {
+ipcMain.handle('network-start-capture', async (_event, options = {}) => {
     if (networkCaptureProcess) {
         return { ok: true, alreadyRunning: true };
-    }
-    if (process.platform !== 'win32') {
-        const error = 'Network capture currently requires Windows with WSL.';
-        pushScriptLog(`[Network] ${error}`);
-        return { ok: false, error };
-    }
-    if (!commandExists('wsl')) {
-        const error = 'WSL is not installed or unavailable.';
-        pushScriptLog(`[Network] ${error}`);
-        return { ok: false, error };
     }
 
     const scriptPath = getNetworkCaptureScriptPath();
@@ -638,14 +654,35 @@ ipcMain.handle('network-start-capture', async () => {
         return { ok: false, error };
     }
 
+    let iface = 'any';
+    let extraArgs = [];
+
     try {
-        const wslScriptPath = toWslPath(scriptPath);
+        const normalized = normalizeNetworkCaptureOptions(options);
+        iface = normalized.iface;
+        extraArgs = normalized.extraArgs;
+    } catch (err) {
+        pushScriptLog(`[Network] ${err.message}`);
+        return { ok: false, error: err.message };
+    }
 
-        networkCaptureProcess = spawn('wsl', ['bash', wslScriptPath, 'any'], {
-            stdio: ['ignore', 'pipe', 'pipe']
-        });
+    try {
+        if (process.platform === 'win32') {
+            if (!commandExists('wsl')) {
+                const error = 'WSL is not installed or unavailable.';
+                pushScriptLog(`[Network] ${error}`);
+                return { ok: false, error };
+            }
+        }
 
-        pushScriptLog('[Network] Started capture via WSL');
+        const spawnArgs = getNetworkCaptureSpawnArgs(scriptPath, iface, extraArgs);
+        networkCaptureProcess = spawn(
+            process.platform === 'win32' ? 'wsl' : 'bash',
+            spawnArgs,
+            { stdio: ['ignore', 'pipe', 'pipe'] }
+        );
+
+        pushScriptLog(`[Network] Started capture on interface: ${iface}${extraArgs.length ? ` with args: ${extraArgs.join(' ')}` : ''}`);
 
         networkCaptureProcess.stdout.on('data', (data) => {
             const lines = data.toString().split(/\r?\n/);
@@ -655,16 +692,16 @@ ipcMain.handle('network-start-capture', async () => {
                         ts: new Date().toISOString(),
                         raw: line.trim(),
                         source: 'tcpdump',
-                        interface: 'any'
+                        interface: iface
                     };
-                    writePacket(packet);           // ← This writes to JSON
-                    broadcastNetworkLog(line);     // ← This sends to UI
+                    writePacket(packet);
+                    broadcastNetworkLog(line);
                 }
             }
         });
 
         networkCaptureProcess.stderr.on('data', (data) => {
-            broadcastNetworkLog(`WSL ERR: ${data.toString().trim()}`);
+            broadcastNetworkLog(process.platform === 'win32' ? `WSL ERR: ${data.toString().trim()}` : data.toString().trim());
         });
 
         networkCaptureProcess.on('error', (err) => {
@@ -677,7 +714,7 @@ ipcMain.handle('network-start-capture', async () => {
             pushScriptLog(`[Network] Capture stopped (code ${code})`);
         });
 
-        return { ok: true };
+        return { ok: true, iface, extraArgs };
     } catch (err) {
         networkCaptureProcess = null;
         pushScriptLog(`[Network] Failed to start: ${err.message}`);

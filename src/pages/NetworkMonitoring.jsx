@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import PageShell from './PageShell.jsx';
+import { parseTcpdumpArgs } from '../core/tcpdumpArgs.js';
 import { networkManager } from '../core/networkManager.js';
 import { invoke } from '../js/electronApi.js';
 import eye from '../../img/network-overseer/network-overseer-eye.png';
@@ -26,6 +27,10 @@ export default function NetworkMonitoring({ route, setRoute }) {
         latestPacket: networkManager.state.latestPacket || null,
         status: networkManager.state.status
     });
+
+    const [captureInterface, setCaptureInterface] = useState('any');
+    const [tcpdumpArgs, setTcpdumpArgs] = useState('');
+    const [captureError, setCaptureError] = useState('');
 
     const [busy, setBusy] = useState(false);
     const [showPacketLogs, setShowPacketLogs] = useState(false);
@@ -131,13 +136,24 @@ export default function NetworkMonitoring({ route, setRoute }) {
     async function toggleCapture() {
         if (busy) return;
         setBusy(true);
+        setCaptureError('');
+
         try {
             if (state.isCapturing) {
                 await networkManager.stopCapture();
             } else {
-                await networkManager.startCapture();
+                const parsedArgs = parseTcpdumpArgs(tcpdumpArgs);
+                const started = await networkManager.startCapture({
+                    interface: captureInterface,
+                    tcpdumpArgs: parsedArgs
+                });
+
+                if (!started) {
+                    setCaptureError('Unable to start capture');
+                }
             }
         } catch (e) {
+            setCaptureError(e?.message || 'Unable to start capture');
             console.error(e);
         } finally {
             setBusy(false);
@@ -162,6 +178,31 @@ export default function NetworkMonitoring({ route, setRoute }) {
                     <button className="full" disabled={busy} onClick={toggleCapture}>
                         {state.isCapturing ? '⏹ Stop Capture' : '▶ Start Capture'}
                     </button>
+
+                    <form className="captureForm" onSubmit={(event) => event.preventDefault()}>
+                        <label>
+                            Interface
+                            <input
+                                value={captureInterface}
+                                disabled={busy || state.isCapturing}
+                                placeholder="any"
+                                onChange={(event) => setCaptureInterface(event.target.value)}
+                            />
+                        </label>
+
+                        <label>
+                            tcpdump args
+                            <input
+                                value={tcpdumpArgs}
+                                disabled={busy || state.isCapturing}
+                                placeholder="-s 0 port 443"
+                                onChange={(event) => setTcpdumpArgs(event.target.value)}
+                            />
+                        </label>
+                    </form>
+
+                    {captureError ? <div className="captureError">{captureError}</div> : null}
+
                     <button className="full" onClick={clearLogs}>Clear Logs</button>
                 </div>
 

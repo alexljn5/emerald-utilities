@@ -104,8 +104,8 @@ export class NetworkManager {
         return this.electronAPI.invoke(channel, ...args);
     }
 
-    async startCapture() {
-        const result = await this.invoke('network-start-capture');
+    async startCapture(options = {}) {
+        const result = await this.invoke('network-start-capture', options);
 
         if (result?.ok) {
             this.state.isCapturing = true;

@@ -57,7 +57,7 @@ export default function ScriptTool({ route, setRoute }) {
             setConfigScripts([...nextConfigScripts]);
         });
         scriptManager.bindContentChange(setScriptContent);
-        scriptManager.init();
+        scriptManager.init({ bindUI: true, skipAutoRun: true });
         scriptManager.replayMainProcessLogToTerminal(500);
 
         invoke('get-ahk-path')

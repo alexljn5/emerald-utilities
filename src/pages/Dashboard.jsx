@@ -44,7 +44,7 @@ export default function Dashboard({ route, setRoute }) {
 
     useEffect(() => {
         scriptManager.bindLogger(appendTerminalLog);
-        scriptManager.init({ bindUI: false, skipAutoRun: true });
+        scriptManager.init({ bindUI: false, skipAutoRun: false });
         scriptManager.replayMainProcessLogToTerminal(500);
 
         return () => {

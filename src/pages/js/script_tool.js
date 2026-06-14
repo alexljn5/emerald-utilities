@@ -256,7 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderTerminal(terminalLog);
     scriptManager.replayMainProcessLogToTerminal(MAX_TERMINAL_LINES);
 
-    scriptManager.init();
+    scriptManager.init({ bindUI: true, skipAutoRun: true });
 
     /* ---------------- UI EVENTS ---------------- */
 

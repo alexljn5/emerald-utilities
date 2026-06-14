@@ -23,21 +23,23 @@
 .overseerGraphic {
     position: relative;
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 680px;
     display: flex;
+    align-items: flex-start;
     justify-content: center;
-    align-items: flex-end;
-    margin-bottom: 0;
+    margin: 0;
     overflow: visible;
 }
 
 /* Eye */
 .overseerEye {
     position: absolute;
-    top: clamp(-2rem, -4%, -0.75rem);
+    top: clamp(-1.75rem, -3%, -0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
     width: clamp(120px, 15vw, 280px);
     height: auto;
-    z-index: 3;
+    z-index: 5;
     filter:
         brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(100%) contrast(107%) drop-shadow(0 0 25px rgba(255, 34, 34, 0.9));
 }
@@ -47,40 +49,78 @@
     position: absolute;
     width: clamp(60px, 11vw, 145px);
     height: auto;
-    top: 62%;
-    z-index: 2;
+    top: calc(clamp(220px, 24vw, 320px) + 1rem);
+    z-index: 1;
+    opacity: 0.55;
     filter:
         brightness(0) saturate(100%) invert(13%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(96%) contrast(107%);
 }
 
 .overseerHand.right {
-    right: 13%;
+    right: 12%;
     transform: scaleX(-1);
 }
 
 .overseerHand.left {
-    left: 13%;
+    left: 12%;
 }
 
-/* Red boxes row */
-.overseerBoxes {
-    width: 100%;
+/* Main diagram grid */
+.overseerDiagram {
+    --log-size: clamp(220px, 24vw, 320px);
+    --parser-size: clamp(86px, 8vw, 120px);
+    --parser-half: clamp(43px, 4vw, 60px);
+    --log-half: clamp(110px, 12vw, 160px);
+    --tunnel-gap: clamp(0.75rem, 3vw, 3.5rem);
+
+    position: relative;
+    width: min(100%, 980px);
+    min-width: 680px;
+    height: calc(var(--log-size) + var(--log-size) + var(--tunnel-gap) + 2rem);
+    margin: clamp(2.5rem, 5vh, 4.25rem) auto 0;
+    z-index: 2;
+}
+
+/* Individual red box */
+.redBox {
+    position: absolute;
     display: flex;
-    justify-content: center;
-    align-items: flex-end;
-    gap: clamp(14rem, 4vw, 5rem);
-    min-width: 0;
-    z-index: 4;
-    padding-bottom: 12rem;
+    flex-direction: column;
+    width: var(--log-size);
+    height: var(--log-size);
+    padding: 0;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--color-bg);
+    border: 2px solid #ff2222;
+    box-shadow:
+        0 0 10px rgba(255, 34, 34, 0.6),
+        0 0 20px rgba(255, 34, 34, 0.4),
+        0 0 40px rgba(255, 34, 34, 0.2);
+}
+
+.userTrafficBox {
+    left: 0;
+    top: 0;
+    z-index: 3;
+}
+
+.fullPacketBox {
+    right: 0;
+    top: 0;
+    z-index: 3;
+}
+
+.parserLogsBox {
+    left: 50%;
+    top: calc(var(--log-size) + var(--tunnel-gap));
+    transform: translateX(-50%);
+    z-index: 3;
 }
 
 /* === Logging boxes === */
 .logBox {
-    display: flex;
-    flex-direction: column;
-    padding: 0;
     overflow: hidden;
-    border-radius: 8px;
 }
 
 .logBoxHeader {
@@ -130,18 +170,257 @@
     overflow-wrap: anywhere;
 }
 
-/* Individual red box */
-.redBox {
-    flex: 0 0 auto;
-    width: clamp(220px, 18vw, 320px);
-    aspect-ratio: 1 / 1;
-    background: var(--color-bg);
-    border: 2px solid #ff2222;
-    border-radius: 8px;
+/* Small parser box */
+.parserBox {
+    left: 50%;
+    top: calc(var(--log-half) - var(--parser-half));
+    width: var(--parser-size);
+    height: var(--parser-size);
+    transform: translateX(-50%);
+    z-index: 4;
+    background: #080000;
+}
+
+.parserBoxHeader {
+    padding: 0.35rem 0.25rem;
+    background: #111;
+    color: #ff2222;
+    font-size: clamp(0.62rem, 0.8vw, 0.78rem);
+    line-height: 1;
+    border-bottom: 2px solid #ff2222;
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parserCore {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at center, rgba(255, 34, 34, 0.18), transparent 62%),
+        #050000;
+}
+
+/* Binary tunnels */
+.binaryTunnel {
+    position: absolute;
+    z-index: 1;
+    overflow: hidden;
+    border: 1px solid rgba(255, 34, 34, 0.75);
+    background:
+        linear-gradient(90deg, rgba(255, 34, 34, 0.16), rgba(255, 34, 34, 0.04), rgba(255, 34, 34, 0.16)),
+        #050000;
     box-shadow:
-        0 0 10px rgba(255, 34, 34, 0.6),
-        0 0 20px rgba(255, 34, 34, 0.4),
-        0 0 40px rgba(255, 34, 34, 0.2);
+        0 0 8px rgba(255, 34, 34, 0.65),
+        inset 0 0 12px rgba(255, 34, 34, 0.28);
+}
+
+.horizontalTunnel {
+    top: var(--log-half);
+    height: clamp(14px, 1.4vw, 18px);
+    border-radius: 999px;
+}
+
+.leftTunnel {
+    left: calc(var(--log-size) + var(--tunnel-gap));
+    right: calc(50% - var(--parser-half));
+}
+
+.rightTunnel {
+    left: calc(50% + var(--parser-half));
+    right: calc(var(--log-size) + var(--tunnel-gap));
+}
+
+.verticalTunnel {
+    left: calc(50% - 7px);
+    top: calc(var(--log-half) + var(--parser-half));
+    bottom: calc(var(--log-size) + var(--tunnel-gap) + 0.5rem);
+    width: 14px;
+    border-radius: 999px;
+}
+
+.binaryStream {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: #ff3333;
+    font-family: 'pixelSans', monospace;
+    font-size: clamp(8px, 0.65vw, 11px);
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+    text-shadow:
+        0 0 5px rgba(255, 34, 34, 0.9),
+        0 0 12px rgba(255, 34, 34, 0.75);
+}
+
+.binaryStream.vertical {
+    writing-mode: vertical-rl;
+}
+
+.binaryStream:not(.reverse) {
+    animation: binaryFlowLeft 3.2s linear infinite;
+}
+
+.binaryStream.reverse {
+    animation: binaryFlowRight 3.2s linear infinite;
+}
+
+.binaryStream.vertical:not(.reverse) {
+    animation: binaryFlowDown 2.6s linear infinite;
+}
+
+.binaryStream.vertical.reverse {
+    animation: binaryFlowUp 2.6s linear infinite;
+}
+
+@keyframes binaryFlowLeft {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(-100%);
+    }
+}
+
+@keyframes binaryFlowRight {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes binaryFlowDown {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(-100%);
+    }
+}
+
+@keyframes binaryFlowUp {
+    from {
+        transform: translateY(-100%);
+    }
+
+    to {
+        transform: translateY(100%);
+    }
+}
+
+/* Parser logs content */
+.parserLogContent {
+    font-size: clamp(0.58rem, 0.72vw, 0.75rem);
+    line-height: 1.15;
+}
+
+.packetTransform {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-height: 0;
+    height: 100%;
+}
+
+.transformSection {
+    border: 1px solid rgba(255, 34, 34, 0.35);
+    border-radius: 6px;
+    background: #070000;
+    padding: 0.45rem;
+}
+
+.transformLabel {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: #ff7777;
+    font-size: 0.7em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.packetRaw,
+.packetJson,
+.binarySection code {
+    display: block;
+    margin: 0;
+    color: var(--color-terminal-text);
+    font-family: 'pixelSans', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.packetRaw {
+    max-height: 22%;
+}
+
+.packetJson {
+    max-height: 42%;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.packetJson::-webkit-scrollbar {
+    display: none;
+}
+
+.binarySection {
+    flex: 0 0 auto;
+}
+
+.binarySection code {
+    color: #ff3333;
+    text-shadow: 0 0 6px rgba(255, 34, 34, 0.75);
+}
+
+.transformArrow {
+    color: #ff2222;
+    font-size: 1.1rem;
+    line-height: 0.8;
+    text-align: center;
+    text-shadow: 0 0 8px rgba(255, 34, 34, 0.8);
+}
+
+.parserHistory {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 34, 34, 0.25);
+}
+
+.historyLabel {
+    margin-bottom: 0.35rem;
+    color: #ff7777;
+    font-size: 0.72em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parserHistoryEntry {
+    padding: 0.35rem 0;
+    border-bottom: 1px solid rgba(255, 34, 34, 0.15);
+}
+
+.parserHistoryEntry span {
+    display: block;
+    color: var(--color-terminal-text);
+    overflow-wrap: anywhere;
+}
+
+.parserHistoryEntry code {
+    display: block;
+    color: #ff3333;
+    overflow-wrap: anywhere;
 }
 
 .statusCapturing {
@@ -161,19 +440,23 @@
 
 /* Responsive */
 @media (max-width: 1200px) {
-    .redBox {
-        width: clamp(190px, 20vw, 280px);
+    .overseerGraphic {
+        min-height: 640px;
     }
 
-    .overseerBoxes {
-        gap: clamp(0.75rem, 3vw, 3rem);
+    .overseerDiagram {
+        --log-size: clamp(190px, 20vw, 280px);
+        --parser-size: clamp(82px, 7vw, 105px);
+        --parser-half: clamp(41px, 3.5vw, 52px);
+        --log-half: clamp(95px, 10vw, 140px);
+        --tunnel-gap: clamp(0.65rem, 2.2vw, 2.5rem);
     }
 }
 
 @media (max-width: 900px) {
     .overseerGraphic {
-        min-height: 260px;
-        align-items: flex-end;
+        min-height: 600px;
+        align-items: flex-start;
     }
 
     .overseerEye {
@@ -182,28 +465,22 @@
 
     .overseerHand {
         width: clamp(45px, 9vw, 90px);
-        top: 72%;
+        top: 330px;
     }
 
-    .overseerBoxes {
-        flex-wrap: wrap;
-        gap: 1rem;
-        padding-bottom: 1rem;
-    }
-
-    .redBox {
-        width: min(42vw, 260px);
-        min-width: 170px;
+    .overseerDiagram {
+        min-width: 640px;
     }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
     .networkOverseer {
         padding: 0.5rem;
+        overflow-x: auto;
     }
 
     .overseerGraphic {
-        min-height: 200px;
+        min-height: 560px;
     }
 
     .overseerEye {
@@ -214,12 +491,7 @@
         visibility: hidden;
     }
 
-    .overseerBoxes {
-        gap: 0.75rem;
-    }
-
-    .redBox {
-        width: min(46vw, 180px);
-        min-width: 145px;
+    .overseerDiagram {
+        min-width: 610px;
     }
 }

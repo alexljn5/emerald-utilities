@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import Dashboard from './pages/Dashboard.jsx';
 import ScriptTool from './pages/ScriptTool.jsx';
 import NetworkMonitoring from './pages/NetworkMonitoring.jsx';
+import TheAI from './pages/TheAI.jsx';
 import About from './pages/About.jsx';
 import './css/globals.css';
 
@@ -10,6 +11,7 @@ const pages = {
     dashboard: Dashboard,
     scriptTool: ScriptTool,
     networkMonitoring: NetworkMonitoring,
+    ai: TheAI,
     about: About
 };
 

@@ -80,6 +80,7 @@ export default function Dashboard({ route, setRoute }) {
                 <div className="navButtons">
                     <button className="nav-btn full" type="button" onClick={() => setRoute('scriptTool')}>Script Tool</button>
                     <button className="nav-btn full" type="button" onClick={() => setRoute('networkMonitoring')}>Network Monitor</button>
+                    <button className="nav-btn full" type="button" onClick={() => setRoute('ai')}>AI</button>
                     <button className="nav-btn full" type="button" onClick={() => setRoute('about')}>ⓘ About</button>
                 </div>
             </div>

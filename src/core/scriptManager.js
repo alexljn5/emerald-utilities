@@ -198,7 +198,7 @@ export class ScriptManager {
             const idx = cfg.scripts.findIndex((script) => script.file === file);
             const nextScript = {
                 file,
-                type: file.match(/\.(js|sh|bat|exe|ahk)$/)?.[1] ?? 'unknown',
+                type: file.match(/\.(js|sh|bat|exe|ahk|ps1)$/i)?.[1]?.toLowerCase() ?? 'unknown',
                 autoRun: false,
                 cronEnabled: false,
                 cronInterval: 0,
@@ -366,12 +366,13 @@ export class ScriptManager {
 
     async hasAllDependencies(file) {
         const ext = file.split('.').pop();
-        if (!['bat', 'sh', 'js', 'ahk'].includes(ext)) return true;
+        if (!['bat', 'sh', 'js', 'ahk', 'ps1'].includes(ext)) return true;
 
         const result = await invoke('scripts:read', { file });
         const matches = result.content.match(/\b[\w\-.]+\.exe\b/gi) || [];
         const allow = new Set([
             'powershell.exe',
+            'pwsh.exe',
             'cmd.exe',
             'bash.exe',
             'node.exe',

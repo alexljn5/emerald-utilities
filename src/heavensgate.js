@@ -127,7 +127,7 @@ function sanitizeScriptFile(file) {
 
     const normalized = file.replace(/\\/g, '/');
     if (normalized.includes('/') || normalized.includes('..')) return null;
-    if (!/\.(js|sh|bat|exe|ahk)$/i.test(normalized)) return null;
+    if (!/\.(js|sh|bat|exe|ahk|ps1)$/i.test(normalized)) return null;
 
     return normalized;
 }
@@ -139,7 +139,7 @@ async function ensureConfigEntries(config, files) {
         if (!config.scripts.find((script) => script.file === file)) {
             config.scripts.push({
                 file,
-                type: file.match(/\.(js|sh|bat|exe|ahk)$/i)?.[1]?.toLowerCase() ?? 'unknown',
+                type: file.match(/\.(js|sh|bat|exe|ahk|ps1)$/i)?.[1]?.toLowerCase() ?? 'unknown',
                 autoRun: false,
                 cronEnabled: false,
                 cronInterval: 0,
@@ -386,6 +386,32 @@ function findAutoHotkey() {
     return null;
 }
 
+function findPowerShell() {
+    if (process.platform === 'win32') {
+        if (commandExists('powershell.exe')) {
+            console.log('[PowerShell] Found powershell.exe in PATH');
+            return 'powershell.exe';
+        }
+
+        const windowsPowerShellPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+        if (existsSync(windowsPowerShellPath)) {
+            console.log(`[PowerShell] Found at: ${windowsPowerShellPath}`);
+            return windowsPowerShellPath;
+        }
+
+        console.warn('[PowerShell] powershell.exe not found');
+        return null;
+    }
+
+    if (commandExists('pwsh')) {
+        console.log('[PowerShell] Found pwsh in PATH');
+        return 'pwsh';
+    }
+
+    console.warn('[PowerShell] pwsh not found');
+    return null;
+}
+
 // ==================== GET SCRIPT COMMAND (Fixed) ====================
 function getScriptCommand(file, scriptPath) {
     const ext = file.split('.').pop().toLowerCase();
@@ -418,6 +444,21 @@ function getScriptCommand(file, scriptPath) {
         }
         case 'bat':
             return { command: 'cmd.exe', args: ['/c', scriptPath] };
+        case 'ps1': {
+            const powershellPath = findPowerShell();
+            if (!powershellPath) {
+                pushScriptLog(process.platform === 'win32'
+                    ? 'PowerShell not found. Please install Windows PowerShell.'
+                    : 'PowerShell Core (pwsh) not found. Please install PowerShell.');
+                return null;
+            }
+
+            return {
+                command: powershellPath,
+                args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+                useShell: process.platform === 'win32'
+            };
+        }
         case 'exe':
             return { command: scriptPath, args: [] };
         case 'ahk': {
@@ -437,7 +478,7 @@ function getScriptCommand(file, scriptPath) {
 function startScript(file, scriptPath) {
     const commandInfo = getScriptCommand(file, scriptPath);
     if (!commandInfo) {
-        pushScriptLog('Unsupported script type or missing AutoHotkey.');
+        pushScriptLog('Unsupported script type or missing runtime.');
         return { ok: false, running: false };
     }
 
@@ -478,7 +519,7 @@ function startScript(file, scriptPath) {
 function startCronScript(file, scriptPath, intervalMs) {
     const commandInfo = getScriptCommand(file, scriptPath);
     if (!commandInfo) {
-        pushScriptLog('Unsupported type for cron');
+        pushScriptLog('Unsupported type or missing runtime for cron');
         return { ok: false };
     }
 
@@ -494,8 +535,14 @@ function startCronScript(file, scriptPath, intervalMs) {
         ? `"${commandInfo.command}"`
         : commandInfo.command;
 
+    const cwd = isWindows ? path.dirname(scriptPath).replace(/\\/g, '/') : path.dirname(scriptPath);
+
     const timer = setInterval(() => {
-        const child = spawn(command, commandInfo.args, { shell: commandInfo.useShell !== false && isWindows });
+        const child = spawn(command, commandInfo.args, {
+            shell: commandInfo.useShell !== false && isWindows,
+            windowsVerbatimArguments: true,
+            cwd
+        });
         pushScriptLog(`[CRON] Running ${file}`);
 
         if (child.stdout) {
@@ -846,7 +893,7 @@ ipcMain.handle('scripts:list', async () => {
         }
 
         const files = (await fsPromises.readdir(scriptsDir))
-            .filter((file) => /\.(js|sh|bat|exe|ahk)$/i.test(file))
+            .filter((file) => /\.(js|sh|bat|exe|ahk|ps1)$/i.test(file))
             .sort((a, b) => a.localeCompare(b));
 
         await ensureConfigEntries(config, files);

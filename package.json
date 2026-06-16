@@ -1,6 +1,6 @@
 {
   "name": "emerald-utilities",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "type": "module",
   "description": "alexljn5's Personal Utility Program.",
   "main": "src/heavensgate.js",

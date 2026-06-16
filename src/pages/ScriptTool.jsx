@@ -260,7 +260,7 @@ export default function ScriptTool({ route, setRoute }) {
                                 className={isCronRunning ? 'cronActive' : ''}
                                 type="button"
                                 onClick={handleCronToggle}
-                                disabled={!selectedFile || isCronRunning}
+                                disabled={!selectedFile}
                             >
                                 {isCronRunning ? '⏹ Stop Cron' : '▶ Start Cron'}
                             </button>

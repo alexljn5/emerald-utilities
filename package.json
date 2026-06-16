@@ -7,7 +7,7 @@
   "author": "alexljn5",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "dev:electron": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 EMERALD_CONFIG_PATH=scripts/config.json electron .\"",
     "start": "npm run build && electron .",
     "postinstall": "electron-builder install-app-deps",
     "build": "vite build",

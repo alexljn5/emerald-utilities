@@ -184,9 +184,10 @@ async function writeConfig(config, options = {}) {
     return queueConfigWrite(async () => {
         const baseConfig = options.preserveExisting ? await readConfig() : null;
         const existingScripts = Array.isArray(baseConfig?.scripts) ? baseConfig.scripts : [];
+        const fallbackScripts = options.preserveExistingScriptSettings || options.preserveMissingScripts ? existingScripts : [];
         const scripts = options.preserveExistingScriptSettings
             ? mergeScriptsPreservingExisting(config?.scripts, existingScripts)
-            : normalizeScriptEntries(config?.scripts);
+            : normalizeScriptEntries(config?.scripts, fallbackScripts);
 
         const cleanConfig = {
             scripts,
@@ -1050,7 +1051,7 @@ ipcMain.handle('scripts:set-directory', async (_event, { customScriptsPath }) =>
     try {
         const config = await readConfig();
         config.customScriptsPath = customScriptsPath || null;
-        const savedConfig = await writeConfig(config);
+        const savedConfig = await writeConfig(config, { preserveMissingScripts: true });
         return { ok: true, config: savedConfig };
     } catch (err) {
         return { ok: false, error: err.message };

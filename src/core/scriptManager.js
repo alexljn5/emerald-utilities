@@ -213,6 +213,11 @@ export class ScriptManager {
             }
 
             const result = await invoke('config:save', { config: cfg });
+            if (!result?.ok) {
+                this._log(`Config save failed: ${result?.error || 'unknown'}`);
+                return;
+            }
+
             this.state.config = { ...result.config, _files: this.state.config._files || [] };
             this._log(`[config] ${idx === -1 ? 'added' : 'updated'} ${file}`);
             this.renderScripts();
@@ -245,6 +250,11 @@ export class ScriptManager {
         const cfg = this.cloneConfig();
         cfg.ahkPath = ahkPath || null;
         const result = await invoke('config:save', { config: cfg });
+        if (!result?.ok) {
+            this._log(`AHK config save failed: ${result?.error || 'unknown'}`);
+            return;
+        }
+
         this.state.config = { ...result.config, _files: this.state.config._files || [] };
         this._log(`[config] AHK path set to: ${ahkPath || 'auto-detect'}`);
     }
@@ -272,8 +282,7 @@ export class ScriptManager {
                 if (ok) {
                     await this.runScript(file);
                 } else {
-                    await this.updateConfig(file, { autoRun: false });
-                    this._log(`Auto-run disabled: ${file}`);
+                    this._log(`Auto-run skipped, missing dependency: ${file}`);
                 }
             }
 
@@ -282,8 +291,7 @@ export class ScriptManager {
                 if (ok) {
                     await this.startCronScript(file, cfg.cronInterval);
                 } else {
-                    await this.updateConfig(file, { cronEnabled: false });
-                    this._log(`Cron auto-start disabled: ${file}`);
+                    this._log(`Cron auto-start skipped, missing dependency: ${file}`);
                 }
             }
         }

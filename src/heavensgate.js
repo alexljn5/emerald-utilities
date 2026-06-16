@@ -84,15 +84,123 @@ async function readConfig() {
     }
 }
 
-async function writeConfig(config) {
-    const cleanConfig = {
-        scripts: Array.isArray(config.scripts) ? config.scripts : [],
-        customScriptsPath: config.customScriptsPath || null,
-        ahkPath: config.ahkPath || null
-    };
+let configWritePromise = Promise.resolve();
 
-    await fsPromises.writeFile(getConfigPath(), JSON.stringify(cleanConfig, null, 2), 'utf8');
-    return cleanConfig;
+function queueConfigWrite(writeFn) {
+    const run = configWritePromise.then(writeFn, writeFn);
+    configWritePromise = run.then(() => undefined, () => undefined);
+    return run;
+}
+
+function inferScriptType(file) {
+    return file.match(/\.(js|sh|bat|exe|ahk|ps1)$/i)?.[1]?.toLowerCase() ?? 'unknown';
+}
+
+function normalizeCronInterval(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : 0;
+}
+
+function createDefaultScriptConfig(file) {
+    return {
+        file,
+        type: inferScriptType(file),
+        autoRun: false,
+        cronEnabled: false,
+        cronInterval: 0,
+        displayName: `Run ${file}`
+    };
+}
+
+function normalizeScriptEntry(script, fallback = {}) {
+    if (!script || typeof script !== 'object') return null;
+
+    const file = typeof script.file === 'string' ? script.file.trim() : '';
+    if (!file) return null;
+
+    return {
+        file,
+        type: typeof script.type === 'string' && script.type ? script.type.toLowerCase() : (typeof fallback.type === 'string' && fallback.type ? fallback.type : inferScriptType(file)),
+        autoRun: Boolean(script.autoRun ?? fallback.autoRun ?? false),
+        cronEnabled: Boolean(script.cronEnabled ?? fallback.cronEnabled ?? false),
+        cronInterval: normalizeCronInterval(script.cronInterval ?? fallback.cronInterval ?? 0),
+        displayName: typeof script.displayName === 'string' && script.displayName.trim()
+            ? script.displayName
+            : (typeof fallback.displayName === 'string' && fallback.displayName ? fallback.displayName : `Run ${file}`)
+    };
+}
+
+function normalizeScriptEntries(scripts, fallbackScripts = []) {
+    const seen = new Set();
+    const normalized = [];
+
+    for (const script of Array.isArray(scripts) ? scripts : []) {
+        const normalizedScript = normalizeScriptEntry(script);
+        if (!normalizedScript || seen.has(normalizedScript.file)) continue;
+
+        seen.add(normalizedScript.file);
+        normalized.push(normalizedScript);
+    }
+
+    for (const fallback of Array.isArray(fallbackScripts) ? fallbackScripts : []) {
+        const normalizedFallback = normalizeScriptEntry(fallback);
+        if (!normalizedFallback || seen.has(normalizedFallback.file)) continue;
+
+        seen.add(normalizedFallback.file);
+        normalized.push(normalizedFallback);
+    }
+
+    return normalized;
+}
+
+function mergeScriptsPreservingExisting(incomingScripts, existingScripts) {
+    const existingByFile = new Map();
+
+    for (const script of normalizeScriptEntries(existingScripts)) {
+        existingByFile.set(script.file, script);
+    }
+
+    for (const incoming of normalizeScriptEntries(incomingScripts)) {
+        const existing = existingByFile.get(incoming.file);
+
+        if (!existing) {
+            existingByFile.set(incoming.file, incoming);
+            continue;
+        }
+
+        existingByFile.set(incoming.file, {
+            ...existing,
+            file: incoming.file,
+            type: existing.type || inferScriptType(incoming.file),
+            cronEnabled: Object.prototype.hasOwnProperty.call(existing, 'cronEnabled') ? existing.cronEnabled : false,
+            cronInterval: Object.prototype.hasOwnProperty.call(existing, 'cronInterval') ? existing.cronInterval : 0
+        });
+    }
+
+    return Array.from(existingByFile.values());
+}
+
+async function writeConfig(config, options = {}) {
+    return queueConfigWrite(async () => {
+        const baseConfig = options.preserveExisting ? await readConfig() : null;
+        const existingScripts = Array.isArray(baseConfig?.scripts) ? baseConfig.scripts : [];
+        const scripts = options.preserveExistingScriptSettings
+            ? mergeScriptsPreservingExisting(config?.scripts, existingScripts)
+            : normalizeScriptEntries(config?.scripts);
+
+        const cleanConfig = {
+            scripts,
+            customScriptsPath: options.preserveTopLevel && config?.customScriptsPath == null
+                ? (baseConfig?.customScriptsPath || null)
+                : (config?.customScriptsPath || null),
+            ahkPath: options.preserveTopLevel && config?.ahkPath == null
+                ? (baseConfig?.ahkPath || null)
+                : (config?.ahkPath || null)
+        };
+
+        await fsPromises.writeFile(getConfigPath(), JSON.stringify(cleanConfig, null, 2), 'utf8');
+        return cleanConfig;
+    });
 }
 
 function getDefaultScriptsDir() {
@@ -132,35 +240,41 @@ function sanitizeScriptFile(file) {
     return normalized;
 }
 
-async function ensureConfigEntries(config, files) {
+async function ensureConfigEntries(files) {
+    const config = await readConfig();
+    config.scripts = normalizeScriptEntries(config.scripts);
+
+    const scriptsByFile = new Map(config.scripts.map((script) => [script.file, script]));
     let changed = false;
 
     for (const file of files) {
-        if (!config.scripts.find((script) => script.file === file)) {
-            config.scripts.push({
-                file,
-                type: file.match(/\.(js|sh|bat|exe|ahk|ps1)$/i)?.[1]?.toLowerCase() ?? 'unknown',
-                autoRun: false,
-                cronEnabled: false,
-                cronInterval: 0,
-                displayName: `Run ${file}`
-            });
+        const scriptConfig = scriptsByFile.get(file);
+
+        if (!scriptConfig) {
+            scriptsByFile.set(file, createDefaultScriptConfig(file));
             changed = true;
-        } else {
-            const scriptConfig = config.scripts.find((script) => script.file === file);
-            if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronEnabled')) {
-                scriptConfig.cronEnabled = false;
-                changed = true;
-            }
-            if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronInterval')) {
-                scriptConfig.cronInterval = 0;
-                changed = true;
-            }
+            continue;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronEnabled')) {
+            scriptConfig.cronEnabled = false;
+            changed = true;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(scriptConfig, 'cronInterval')) {
+            scriptConfig.cronInterval = 0;
+            changed = true;
         }
     }
 
+    config.scripts = Array.from(scriptsByFile.values());
+
     if (changed) {
-        await writeConfig(config);
+        await writeConfig(config, {
+            preserveExisting: true,
+            preserveExistingScriptSettings: true,
+            preserveTopLevel: true
+        });
     }
 
     return changed;
@@ -798,7 +912,7 @@ ipcMain.handle('run-script', async (_event, { file }) => {
 });
 
 ipcMain.handle('stop-script', (event, { file }) => {
-    return stopScript(file);
+    return stopScript(file) ? { ok: true } : { ok: true, alreadyStopped: true };
 });
 
 ipcMain.handle('start-cron-script', async (_event, { file, intervalMs }) => {
@@ -811,7 +925,7 @@ ipcMain.handle('start-cron-script', async (_event, { file, intervalMs }) => {
 });
 
 ipcMain.handle('stop-cron-script', (event, { file }) => {
-    return stopCronJob(file);
+    return stopCronJob(file) ? { ok: true } : { ok: true, alreadyStopped: true };
 });
 
 ipcMain.handle('get-running-scripts', () => Array.from(scriptRunners.keys()));
@@ -896,7 +1010,7 @@ ipcMain.handle('scripts:list', async () => {
             .filter((file) => /\.(js|sh|bat|exe|ahk|ps1)$/i.test(file))
             .sort((a, b) => a.localeCompare(b));
 
-        await ensureConfigEntries(config, files);
+        await ensureConfigEntries(files);
         return { files, config: await readConfig(), scriptsDir };
     } catch (err) {
         pushScriptLog(`[Scripts] List error: ${err.message}`);
@@ -954,9 +1068,14 @@ ipcMain.handle('scripts:dependency-exists', async (_event, { file }) => {
 
 ipcMain.handle('config:save', async (_event, { config }) => {
     try {
+        if (!config || typeof config !== 'object') {
+            return { ok: false, error: 'Missing config' };
+        }
+
         const savedConfig = await writeConfig(config);
         return { ok: true, config: savedConfig };
     } catch (err) {
+        console.error('[Config] Failed to save:', err);
         return { ok: false, error: err.message };
     }
 });

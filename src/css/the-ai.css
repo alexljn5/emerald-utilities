@@ -21,11 +21,17 @@
 
 .aiHanging {
     display: block;
-    width: min(42vw, 520px);
+    width: 100%;
+    max-width: min(42vw, 520px);
+    height: 100%;
+    /* Fill container height too */
     max-height: 78vh;
-    object-fit: contain;
+    object-fit: cover;
+    /* This makes it fill more aggressively */
     object-position: center;
     border: 2px solid #770505;
+    image-rendering: pixelated;
+    box-sizing: border-box;
     filter:
         brightness(0) saturate(50%) invert(23%) sepia(93%) saturate(7482%) hue-rotate(357deg) brightness(100%) contrast(90%) drop-shadow(0 0 0px var(--color-accent));
 }

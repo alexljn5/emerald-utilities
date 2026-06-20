@@ -69,6 +69,7 @@
     }
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   }

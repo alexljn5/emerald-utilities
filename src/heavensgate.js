@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { parseTcpdumpArgs } from './core/tcpdumpArgs.js';
 import { writePacket } from './core/networkFileWriter.js';
 import { registerIpcHandlers } from './utils/ipcHandlers.js';
+import { registerModUpdaterIpcHandlers } from './utils/modUpdaterIpcHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -836,6 +837,12 @@ registerIpcHandlers({
         networkCaptureProcess = value;
     },
     getDialogParentWindow: () => mainWindow
+});
+
+registerModUpdaterIpcHandlers({
+    app,
+    ipcMain,
+    dialog
 });
 
 export { PRODUCTION };

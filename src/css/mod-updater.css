@@ -1,0 +1,424 @@
+.modUpdaterSidebar {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.6rem, 1vw, 1rem);
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.modUpdaterSidebar .navBox {
+    flex: 0 0 auto;
+}
+
+.modUpdaterControls h3,
+.modUpdaterSelectionBox h3 {
+    margin-bottom: clamp(0.5rem, 0.8vw, 0.75rem);
+    color: var(--color-accent);
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+}
+
+.modUpdaterControls .formField,
+.modUpdaterControls .checkRow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.65rem;
+    color: #dcdcdc;
+    font-size: clamp(0.72rem, 0.9vw, 0.9rem);
+}
+
+.modUpdaterControls .inlineField {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.modUpdaterControls input[type="text"],
+.modUpdaterControls input:not([type="checkbox"]),
+.modUpdaterControls select {
+    width: 100%;
+    padding: 0.45rem 0.55rem;
+    background: #050505;
+    color: var(--color-text);
+    border: 1px solid rgba(255, 34, 34, 0.75);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: clamp(0.72rem, 0.9vw, 0.9rem);
+}
+
+.modUpdaterControls input[readonly] {
+    color: #cfcfcf;
+}
+
+.modUpdaterControls input:disabled,
+.modUpdaterControls select:disabled {
+    opacity: 0.55;
+}
+
+.modUpdaterControls .checkRow {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.45rem 0;
+}
+
+.modUpdaterControls .checkRow input {
+    width: auto;
+    accent-color: var(--color-accent);
+}
+
+.modUpdaterControls .dangerRow {
+    color: #ffb3b3;
+}
+
+.controlButtonRow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.modUpdaterError,
+.modUpdaterStatus {
+    margin: 0.75rem 0 0;
+    padding: 0.55rem 0.65rem;
+    border-radius: 4px;
+    font-size: clamp(0.68rem, 0.85vw, 0.85rem);
+    line-height: 1.35;
+}
+
+.modUpdaterError {
+    color: #ff9a9a;
+    border: 1px solid rgba(255, 68, 68, 0.35);
+    background: rgba(80, 0, 0, 0.35);
+}
+
+.modUpdaterStatus.loading {
+    color: #a8d8ff;
+    border: 1px solid rgba(80, 170, 255, 0.35);
+    background: rgba(0, 45, 80, 0.35);
+}
+
+.modUpdaterStatus.success {
+    color: #a6f2a6;
+    border: 1px solid rgba(80, 255, 120, 0.3);
+    background: rgba(0, 70, 30, 0.35);
+}
+
+.modUpdaterStatus.warning {
+    color: #ffd27a;
+    border: 1px solid rgba(255, 180, 60, 0.35);
+    background: rgba(90, 55, 0, 0.35);
+}
+
+.modUpdaterSelectionBox .selectionSummary {
+    margin-bottom: 0.6rem;
+    color: var(--color-accent);
+    font-size: clamp(0.75rem, 0.95vw, 0.95rem);
+}
+
+.modUpdaterSelectionBox .navBox button+.navBox button,
+.modUpdaterSelectionBox button+button {
+    margin-top: 0.5rem;
+}
+
+.modUpdaterContent {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.85rem, 1.4vw, 1.4rem);
+    min-height: 100%;
+    padding: clamp(1rem, 2vw, 2rem);
+}
+
+.modUpdaterHero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: end;
+    padding: clamp(1rem, 2vw, 1.5rem);
+    background:
+        linear-gradient(135deg, rgba(255, 34, 34, 0.18), rgba(0, 0, 0, 0.15)),
+        #080808;
+    border: 2px solid rgba(255, 34, 34, 0.8);
+    border-radius: 10px;
+    box-shadow: 0 0 28px rgba(255, 34, 34, 0.16);
+}
+
+.modUpdaterHero .eyebrow {
+    margin-bottom: 0.35rem;
+    color: var(--color-accent);
+    font-size: clamp(0.68rem, 0.85vw, 0.85rem);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.modUpdaterHero h2 {
+    margin-bottom: 0.45rem;
+    color: #fff;
+    font-size: clamp(1.35rem, 2.2vw, 2.2rem);
+    line-height: 1;
+}
+
+.modUpdaterHero p:not(.eyebrow) {
+    max-width: 760px;
+    color: #cfcfcf;
+    font-size: clamp(0.78rem, 1vw, 1rem);
+    line-height: 1.45;
+}
+
+.heroStats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(76px, 1fr));
+    gap: 0.6rem;
+    min-width: min(420px, 100%);
+}
+
+.heroStats div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 76px;
+    padding: 0.75rem 0.5rem;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 34, 34, 0.55);
+    border-radius: 8px;
+}
+
+.heroStats strong {
+    color: var(--color-accent);
+    font-size: clamp(1.2rem, 2vw, 2rem);
+    line-height: 1;
+}
+
+.heroStats span {
+    margin-top: 0.35rem;
+    color: #aaa;
+    font-size: clamp(0.65rem, 0.85vw, 0.85rem);
+}
+
+.modUpdaterEmpty {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.75rem;
+    min-height: 420px;
+    padding: 2rem;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px dashed rgba(255, 34, 34, 0.55);
+    border-radius: 10px;
+}
+
+.modUpdaterEmpty .emptySigil {
+    width: clamp(72px, 12vw, 150px);
+    height: clamp(72px, 12vw, 150px);
+    display: grid;
+    place-items: center;
+    color: var(--color-accent);
+    font-size: clamp(2rem, 5vw, 5rem);
+    border: 2px solid rgba(255, 34, 34, 0.45);
+    border-radius: 50%;
+    box-shadow: 0 0 26px rgba(255, 34, 34, 0.18);
+}
+
+.modUpdaterEmpty h3 {
+    color: #fff;
+    font-size: clamp(1.1rem, 1.8vw, 1.8rem);
+}
+
+.modUpdaterEmpty p {
+    max-width: 560px;
+    color: #bdbdbd;
+    font-size: clamp(0.75rem, 1vw, 1rem);
+    line-height: 1.45;
+}
+
+.modCardsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+    gap: clamp(0.75rem, 1.2vw, 1rem);
+    padding-bottom: 1rem;
+}
+
+.modCard {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    min-height: 260px;
+    padding: clamp(0.85rem, 1.4vw, 1.1rem);
+    background: linear-gradient(180deg, rgba(28, 28, 28, 0.98), rgba(12, 12, 12, 0.98));
+    border: 2px solid rgba(255, 34, 34, 0.45);
+    border-left-width: 5px;
+    border-radius: 10px;
+    box-shadow: 0 0 18px rgba(0, 0, 0, 0.35);
+}
+
+.modCardUpdate {
+    border-left-color: #ffb000;
+    box-shadow: 0 0 24px rgba(255, 176, 0, 0.18);
+}
+
+.modCardSuccess {
+    border-left-color: #55ff88;
+}
+
+.modCardWarning {
+    border-left-color: #ffcc66;
+}
+
+.modCardError {
+    border-left-color: #ff4444;
+}
+
+.modCardIdle {
+    border-left-color: #55ff88;
+}
+
+.modCardMain {
+    flex: 1;
+    min-width: 0;
+}
+
+.modCardTitleRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.modCardTitleRow h4 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: #fff;
+    font-size: clamp(0.95rem, 1.3vw, 1.2rem);
+    line-height: 1.15;
+}
+
+.modBadge {
+    flex: 0 0 auto;
+    padding: 0.25rem 0.45rem;
+    border-radius: 999px;
+    color: #050505;
+    background: #777;
+    font-size: clamp(0.55rem, 0.75vw, 0.7rem);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.modBadge.modCardUpdate {
+    background: #ffb000;
+}
+
+.modBadge.modCardSuccess,
+.modBadge.modCardIdle {
+    background: #55ff88;
+}
+
+.modBadge.modCardWarning {
+    background: #ffcc66;
+}
+
+.modBadge.modCardError {
+    background: #ff4444;
+}
+
+.modMetaGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+}
+
+.modMetaGrid div {
+    min-width: 0;
+    padding: 0.5rem 0.6rem;
+    background: rgba(0, 0, 0, 0.38);
+    border: 1px solid rgba(255, 34, 34, 0.22);
+    border-radius: 6px;
+}
+
+.modMetaGrid span {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: #8f8f8f;
+    font-size: clamp(0.62rem, 0.8vw, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.modMetaGrid strong {
+    display: block;
+    overflow-wrap: anywhere;
+    color: #e9e9e9;
+    font-size: clamp(0.72rem, 0.95vw, 0.92rem);
+    font-weight: 500;
+    line-height: 1.25;
+}
+
+.modError {
+    margin: 0.7rem 0 0;
+    padding: 0.55rem;
+    color: #ffb0b0;
+    background: rgba(120, 0, 0, 0.35);
+    border: 1px solid rgba(255, 68, 68, 0.35);
+    border-radius: 6px;
+    font-size: clamp(0.68rem, 0.85vw, 0.85rem);
+    line-height: 1.35;
+}
+
+.modSelect {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem;
+    background: rgba(255, 34, 34, 0.08);
+    border: 1px solid rgba(255, 34, 34, 0.35);
+    border-radius: 6px;
+    color: #fff;
+    font-size: clamp(0.72rem, 0.9vw, 0.9rem);
+    cursor: pointer;
+}
+
+.modSelect input {
+    width: auto;
+    accent-color: var(--color-accent);
+}
+
+.modSelect span {
+    color: #ffd2d2;
+}
+
+@media (max-width: 1100px) {
+    .modUpdaterHero {
+        grid-template-columns: 1fr;
+    }
+
+    .heroStats {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 760px) {
+    .modUpdaterContent {
+        padding: 1rem;
+    }
+
+    .modCardsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .modUpdaterControls .inlineField {
+        grid-template-columns: 1fr;
+    }
+
+    .heroStats {
+        grid-template-columns: 1fr;
+    }
+}

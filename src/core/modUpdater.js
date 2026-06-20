@@ -94,6 +94,80 @@ export async function getMinecraftVersions() {
     return versions.length > 0 ? versions : getFallbackVersions();
 }
 
+function readFabricModJson(fullPath) {
+    const zip = new AdmZip(fullPath);
+    const entry = zip.getEntry('fabric.mod.json');
+
+    if (!entry) {
+        return null;
+    }
+
+    return JSON.parse(entry.getData().toString('utf8'));
+}
+
+function normalizeVersionCandidate(candidate) {
+    if (!candidate) return null;
+
+    const normalized = String(candidate)
+        .trim()
+        .replace(/^v/i, '')
+        .replace(/^minecraft[-_.]?/i, '')
+        .replace(/^mc[-_.]?/i, '')
+        .replace(/[-_.](?:fabric|forge|quilt)$/i, '')
+        .replace(/\.0+$/g, '');
+
+    if (!/^\d+(?:\.\d+){0,3}$/.test(normalized)) {
+        return null;
+    }
+
+    return normalized;
+}
+
+function extractVersionCandidates(text, source, existing = []) {
+    const candidates = [...existing];
+    const addCandidate = (candidate) => {
+        const normalized = normalizeVersionCandidate(candidate);
+        if (normalized && !candidates.includes(normalized)) {
+            candidates.push({ version: normalized, source });
+        }
+    };
+
+    const patterns = [
+        /(?:^|[-_.])(?:mc|minecraft)[-_.]?(\d+(?:\.\d+){1,3})/gi,
+        /minecraft[-_.]?(\d+(?:\.\d+){1,3})/gi,
+        /(?:^|[-_+])(\d+(?:\.\d+){1,3})(?:[-_.](?:fabric|mc|minecraft)|$)/gi
+    ];
+
+    if (source !== 'filename') {
+        patterns.push(/[<>=~^]?\s*v?(\d+(?:\.\d+){1,3})/g);
+    }
+
+    for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(String(text || ''))) !== null) {
+            addCandidate(match[1]);
+        }
+    }
+
+    return candidates;
+}
+
+function chooseDetectedVersion(candidates) {
+    const counts = new Map();
+
+    for (const candidate of candidates) {
+        counts.set(candidate.version, (counts.get(candidate.version) || 0) + 1);
+    }
+
+    const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return null;
+
+    return {
+        version: entries[0][0],
+        confidence: entries[0][1]
+    };
+}
+
 export function scanMods(modFolder) {
     if (!modFolder || !fs.existsSync(modFolder)) {
         return [];
@@ -108,19 +182,22 @@ export function scanMods(modFolder) {
         const fullPath = path.join(modFolder, file);
 
         try {
-            const zip = new AdmZip(fullPath);
-            const entry = zip.getEntry('fabric.mod.json');
-
-            if (!entry) continue;
-
-            const content = JSON.parse(entry.getData().toString('utf8'));
+            const content = readFabricModJson(fullPath);
 
             if (!content?.id || !content?.version) continue;
+
+            const detectedCandidates = [
+                ...extractVersionCandidates(file, 'filename'),
+                ...extractVersionCandidates(content.depends?.minecraft, 'fabric.mod.json depends.minecraft')
+            ];
+            const detectedMCVersion = chooseDetectedVersion(detectedCandidates.map((candidate) => ({ version: candidate.version })))?.version || null;
 
             mods.push({
                 id: String(content.id),
                 version: String(content.version),
-                file
+                file,
+                detectedMCVersion,
+                detectedMCVersionCandidates: detectedCandidates.map((candidate) => candidate.version)
             });
         } catch (err) {
             console.warn(`[Mod Updater] Failed to read mod jar ${file}:`, err.message);
@@ -128,6 +205,25 @@ export function scanMods(modFolder) {
     }
 
     return mods;
+}
+
+export function analyzeModsFolder(modFolder) {
+    const mods = scanMods(modFolder);
+    const candidates = [];
+
+    for (const mod of mods) {
+        for (const version of mod.detectedMCVersionCandidates || []) {
+            candidates.push({ version, source: mod.file });
+        }
+    }
+
+    const detected = chooseDetectedVersion(candidates);
+
+    return {
+        mods,
+        detectedMCVersion: detected?.version || null,
+        detectedMCVersionConfidence: detected?.confidence || 0
+    };
 }
 
 export async function searchProjectSmart(modId, targetMCVersion) {
@@ -314,26 +410,46 @@ export function resolveModsFolder(modsFolder, app) {
     return getDefaultModsFolder(app);
 }
 
-export async function checkModUpdates({ targetMCVersion, includeUnstable, modsFolder, app }) {
+export async function checkModUpdates({
+    targetMCVersion,
+    includeUnstable,
+    modsFolder,
+    app,
+    autoDetectMCVersion = false
+}) {
     const modsPath = resolveModsFolder(modsFolder, app);
-    const mods = scanMods(modsPath);
+    const analysis = analyzeModsFolder(modsPath);
+    const mods = analysis.mods;
+    const effectiveTargetVersion = targetMCVersion;
     const results = [];
+
+    if (autoDetectMCVersion && !analysis.detectedMCVersion) {
+        return {
+            ok: false,
+            modsPath,
+            mods,
+            error: 'Unable to auto-detect the Minecraft/Fabric version from the selected mods folder.',
+            analysis
+        };
+    }
 
     for (const mod of mods) {
         try {
-            const project = await searchProjectSmart(mod.id, targetMCVersion);
+            const project = await searchProjectSmart(mod.id, effectiveTargetVersion);
 
             if (!project) {
                 results.push({
                     id: mod.id,
                     file: mod.file,
                     status: 'not_found',
-                    currentVersion: mod.version
+                    currentVersion: mod.version,
+                    detectedMCVersion: mod.detectedMCVersion || analysis.detectedMCVersion,
+                    targetVersion: effectiveTargetVersion
                 });
                 continue;
             }
 
-            const versions = await getVersions(project.id, targetMCVersion, includeUnstable);
+            const versions = await getVersions(project.id, effectiveTargetVersion, includeUnstable);
 
             if (versions.length === 0) {
                 results.push({
@@ -341,7 +457,9 @@ export async function checkModUpdates({ targetMCVersion, includeUnstable, modsFo
                     file: mod.file,
                     status: 'no_compatible',
                     currentVersion: mod.version,
-                    projectName: project.title
+                    projectName: project.title,
+                    detectedMCVersion: mod.detectedMCVersion || analysis.detectedMCVersion,
+                    targetVersion: effectiveTargetVersion
                 });
                 continue;
             }
@@ -358,7 +476,8 @@ export async function checkModUpdates({ targetMCVersion, includeUnstable, modsFo
                 projectName: project.title,
                 hasUpdate,
                 versionData: latestVersion,
-                targetVersion: targetMCVersion
+                detectedMCVersion: mod.detectedMCVersion || analysis.detectedMCVersion,
+                targetVersion: effectiveTargetVersion
             });
         } catch (err) {
             results.push({
@@ -366,7 +485,9 @@ export async function checkModUpdates({ targetMCVersion, includeUnstable, modsFo
                 file: mod.file,
                 status: 'error',
                 currentVersion: mod.version,
-                error: err.message
+                error: err.message,
+                detectedMCVersion: mod.detectedMCVersion || analysis.detectedMCVersion,
+                targetVersion: effectiveTargetVersion
             });
         }
     }
@@ -374,7 +495,11 @@ export async function checkModUpdates({ targetMCVersion, includeUnstable, modsFo
     return {
         ok: true,
         modsPath,
-        mods: results
+        mods: results,
+        detectedMCVersion: analysis.detectedMCVersion,
+        detectedMCVersionConfidence: analysis.detectedMCVersionConfidence,
+        autoDetectedMCVersion: Boolean(autoDetectMCVersion),
+        analysis
     };
 }
 

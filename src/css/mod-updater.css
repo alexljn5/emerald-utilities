@@ -18,13 +18,39 @@
 }
 
 .modUpdaterControls .formField,
-.modUpdaterControls .checkRow {
+.modUpdaterControls .checkRow,
+.detectedVersionBox {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
     margin-bottom: 0.65rem;
     color: #dcdcdc;
     font-size: clamp(0.72rem, 0.9vw, 0.9rem);
+}
+
+.detectedVersionBox {
+    padding: 0.6rem;
+    background: rgba(255, 34, 34, 0.08);
+    border: 1px solid rgba(255, 34, 34, 0.35);
+    border-radius: 6px;
+}
+
+.detectedVersionBox span {
+    color: #aaa;
+    font-size: clamp(0.62rem, 0.8vw, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.detectedVersionBox strong {
+    color: var(--color-accent);
+    font-size: clamp(1rem, 1.4vw, 1.35rem);
+}
+
+.detectedVersionBox em {
+    color: #aaa;
+    font-size: clamp(0.62rem, 0.8vw, 0.75rem);
+    font-style: normal;
 }
 
 .modUpdaterControls .inlineField {

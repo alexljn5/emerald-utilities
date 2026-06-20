@@ -5,6 +5,7 @@ import '../css/mod-updater.css';
 
 const STORAGE_KEYS = {
     modsFolder: 'modUpdater.modsFolder',
+    autoDetectMCVersion: 'modUpdater.autoDetectMCVersion',
     includeUnstable: 'modUpdater.includeUnstable',
     overwrite: 'modUpdater.overwrite',
     backup: 'modUpdater.backup',
@@ -69,6 +70,10 @@ function ModCard({ mod, selected, onToggle }) {
                         <strong>{latestLine}</strong>
                     </div>
                     <div>
+                        <span>Detected MC</span>
+                        <strong>{mod.detectedMCVersion || mod.targetVersion || '—'}</strong>
+                    </div>
+                    <div>
                         <span>Target</span>
                         <strong>{mod.targetVersion || '—'}</strong>
                     </div>
@@ -98,8 +103,10 @@ function ModCard({ mod, selected, onToggle }) {
 export default function ModUpdater({ route, setRoute }) {
     const [modsFolder, setModsFolder] = useState(() => localStorage.getItem(STORAGE_KEYS.modsFolder) || '');
     const [versions, setVersions] = useState([]);
-    const [currentVersion, setCurrentVersion] = useState('');
     const [targetVersion, setTargetVersion] = useState('');
+    const [autoDetectMCVersion, setAutoDetectMCVersion] = useState(() => readStoredBool(STORAGE_KEYS.autoDetectMCVersion, true));
+    const [detectedMCVersion, setDetectedMCVersion] = useState('');
+    const [detectedMCVersionConfidence, setDetectedMCVersionConfidence] = useState(0);
     const [includeUnstable, setIncludeUnstable] = useState(() => readStoredBool(STORAGE_KEYS.includeUnstable, true));
     const [overwrite, setOverwrite] = useState(() => readStoredBool(STORAGE_KEYS.overwrite, false));
     const [backup, setBackup] = useState(() => readStoredBool(STORAGE_KEYS.backup, true));
@@ -122,6 +129,7 @@ export default function ModUpdater({ route, setRoute }) {
                 const defaultFolderResult = await invoke('mod-updater:get-default-folder');
                 if (defaultFolderResult?.path && !modsFolder) {
                     setModsFolder(defaultFolderResult.path);
+                    await analyzeFolder(defaultFolderResult.path);
                 }
             } catch (err) {
                 console.warn('[Mod Updater] Failed to load default folder:', err);
@@ -148,8 +156,7 @@ export default function ModUpdater({ route, setRoute }) {
                 const latestFabricLoader = selectableVersions.find((version) => version.type === 'fabric-loader')?.id;
 
                 setVersions(fetchedVersions);
-                setCurrentVersion(latestFabricLoader || selectableVersions[0]?.id || '');
-                setTargetVersion(latestMinecraft || selectableVersions.find((version) => version.type !== 'fabric-loader')?.id || selectableVersions[0]?.id || '');
+                setTargetVersion(latestMinecraft || latestFabricLoader || selectableVersions[0]?.id || '');
             } catch (err) {
                 setError(err.message || 'Unable to load Minecraft versions');
             } finally {
@@ -159,6 +166,10 @@ export default function ModUpdater({ route, setRoute }) {
 
         loadVersions();
     }, []);
+
+    useEffect(() => {
+        storeBool(STORAGE_KEYS.autoDetectMCVersion, autoDetectMCVersion);
+    }, [autoDetectMCVersion]);
 
     useEffect(() => {
         storeBool(STORAGE_KEYS.includeUnstable, includeUnstable);
@@ -180,6 +191,21 @@ export default function ModUpdater({ route, setRoute }) {
         storeBool(STORAGE_KEYS.copyNonUpdatable, copyNonUpdatable);
     }, [copyNonUpdatable]);
 
+    async function analyzeFolder(folderPath = modsFolder) {
+        try {
+            const result = await invoke('mod-updater:analyze', {
+                modsFolder: folderPath || undefined
+            });
+
+            if (result?.ok) {
+                setDetectedMCVersion(result.detectedMCVersion || '');
+                setDetectedMCVersionConfidence(result.detectedMCVersionConfidence || 0);
+            }
+        } catch (err) {
+            console.warn('[Mod Updater] Analyze failed:', err);
+        }
+    }
+
     async function selectFolder() {
         setError('');
 
@@ -188,6 +214,9 @@ export default function ModUpdater({ route, setRoute }) {
             if (result?.path) {
                 setModsFolder(result.path);
                 localStorage.setItem(STORAGE_KEYS.modsFolder, result.path);
+                setDetectedMCVersion('');
+                setDetectedMCVersionConfidence(0);
+                await analyzeFolder(result.path);
             }
         } catch (err) {
             setError(err.message || 'Unable to select mods folder');
@@ -201,15 +230,16 @@ export default function ModUpdater({ route, setRoute }) {
         setError('');
         setStatus({
             type: 'loading',
-            message: `Checking ${modsFolder || 'default mods folder'} for Fabric mods targeting ${targetVersion}...`
+            message: `Analyzing ${modsFolder || 'default mods folder'} and checking Fabric mods targeting ${targetVersion}...`
         });
         setMods([]);
         setSelectedModIds(new Set());
 
         try {
             const result = await invoke('mod-updater:check', {
-                targetMCVersion: targetVersion,
+                targetMCVersion,
                 includeUnstable,
+                autoDetectMCVersion,
                 modsFolder: modsFolder || undefined
             });
 
@@ -218,10 +248,12 @@ export default function ModUpdater({ route, setRoute }) {
             }
 
             setMods(result.mods || []);
+            setDetectedMCVersion(result.detectedMCVersion || detectedMCVersion);
+            setDetectedMCVersionConfidence(result.detectedMCVersionConfidence || detectedMCVersionConfidence);
             setSelectedModIds(new Set((result.mods || []).filter((mod) => mod.status === 'found' && mod.hasUpdate).map((mod) => mod.id)));
             setStatus({
                 type: 'success',
-                message: `Found ${result.mods?.length || 0} Fabric mod${result.mods?.length === 1 ? '' : 's'} in ${result.modsPath || 'the selected folder'}.`
+                message: `Detected ${result.detectedMCVersion || targetVersion} from ${result.mods?.length || 0} Fabric mod${result.mods?.length === 1 ? '' : 's'} in ${result.modsPath || 'the selected folder'}.`
             });
         } catch (err) {
             setError(err.message || 'Unable to check for updates');
@@ -335,15 +367,24 @@ export default function ModUpdater({ route, setRoute }) {
                         </div>
                     </label>
 
-                    <label className="formField">
-                        From version
-                        <select value={currentVersion} onChange={(event) => setCurrentVersion(event.target.value)} disabled={versionsLoading || busy}>
-                            {versionOptions.map((version) => <option key={version.id} value={version.id}>{version.name}</option>)}
-                        </select>
+                    <div className="detectedVersionBox">
+                        <span>Detected version</span>
+                        <strong>{detectedMCVersion || 'Not analyzed yet'}</strong>
+                        {detectedMCVersionConfidence > 0 ? <em>{detectedMCVersionConfidence} mod match{detectedMCVersionConfidence === 1 ? '' : 'es'}</em> : null}
+                    </div>
+
+                    <label className="checkRow">
+                        <input
+                            type="checkbox"
+                            checked={autoDetectMCVersion}
+                            onChange={(event) => setAutoDetectMCVersion(event.target.checked)}
+                            disabled={busy}
+                        />
+                        Auto-analyze version from selected mods
                     </label>
 
                     <label className="formField">
-                        To version
+                        Target version
                         <select value={targetVersion} onChange={(event) => setTargetVersion(event.target.value)} disabled={versionsLoading || busy}>
                             {versionOptions.map((version) => <option key={version.id} value={version.id}>{version.name}</option>)}
                         </select>
@@ -401,7 +442,7 @@ export default function ModUpdater({ route, setRoute }) {
 
                     <div className="controlButtonRow">
                         <button type="button" className="full" disabled={busy || versionsLoading || !targetVersion} onClick={checkUpdates}>
-                            Check Updates
+                            Analyze & Check Updates
                         </button>
                         <button type="button" className="full" disabled={busy || !hasSelectedMods} onClick={downloadSelected}>
                             Download/Copy Selected
@@ -443,6 +484,10 @@ export default function ModUpdater({ route, setRoute }) {
                             <span>updates</span>
                         </div>
                         <div>
+                            <strong>{detectedMCVersion || '—'}</strong>
+                            <span>detected</span>
+                        </div>
+                        <div>
                             <strong>{selectedModIds.size}</strong>
                             <span>selected</span>
                         </div>
@@ -453,7 +498,7 @@ export default function ModUpdater({ route, setRoute }) {
                     <section className="modUpdaterEmpty">
                         <div className="emptySigil">⬡</div>
                         <h3>No scan results yet</h3>
-                        <p>Select your mods folder, choose a target Minecraft version, then run Check Updates.</p>
+                        <p>Select your mods folder, then run Analyze & Check Updates. The app will detect the current Fabric/Minecraft version so you can update or downgrade to any target version.</p>
                         {outputFolder ? <code>{outputFolder}</code> : null}
                     </section>
                 ) : (

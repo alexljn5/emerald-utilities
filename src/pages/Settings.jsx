@@ -296,16 +296,6 @@ export default function Settings({ route, setRoute }) {
                     </section>
                 </div>
 
-                <div className="settingsActions">
-                    <button type="button" onClick={resetSettings} disabled={saving || loading}>
-                        Reset defaults
-                    </button>
-                    <button type="button" onClick={saveSettings} disabled={saving || loading}>
-                        {saving ? 'Saving...' : isDirty ? 'Save changes' : 'Save settings'}
-                    </button>
-                </div>
-
-                {message ? <div className="settingsMessage">{message}</div> : null}
             </div>
         </PageShell>
     );

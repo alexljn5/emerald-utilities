@@ -45,7 +45,15 @@ export default function NetworkMonitoring({ route, setRoute }) {
     const packetLogViewerRef = useRef(null);
 
     useEffect(() => {
-        return networkManager.onStateChange((next) => {
+        let cancelled = false;
+
+        networkManager.syncCaptureStatus().catch((err) => {
+            if (!cancelled) setCaptureError(err?.message || 'Unable to sync capture status');
+        });
+
+        const unsubscribe = networkManager.onStateChange((next) => {
+            if (cancelled) return;
+
             setState({
                 isCapturing: next.isCapturing,
                 logs: [...(next.logs || [])],
@@ -54,6 +62,11 @@ export default function NetworkMonitoring({ route, setRoute }) {
                 status: next.status
             });
         });
+
+        return () => {
+            cancelled = true;
+            unsubscribe();
+        };
     }, []);
 
     useEffect(() => {

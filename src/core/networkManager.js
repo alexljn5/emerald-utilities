@@ -126,6 +126,19 @@ export class NetworkManager {
         }
     }
 
+    async syncCaptureStatus() {
+        try {
+            const result = await this.invoke('network-capture:get-status');
+            if (result?.ok) {
+                this.state.isCapturing = Boolean(result.isCapturing);
+                this.state.status = result.status || (result.isCapturing ? 'Capturing...' : 'Idle');
+                this.emit();
+            }
+        } catch {
+            // Non-fatal: the dashboard still works even if the status IPC call fails.
+        }
+    }
+
     addLog(line) {
         const packet = parseTcpdumpLine(String(line || ''));
         const parserEntry = {

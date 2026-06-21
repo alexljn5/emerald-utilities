@@ -173,7 +173,15 @@ function DashboardNetworkPanel({ ui }) {
     const lines = useMemo(() => state.logs.slice(-120), [state.logs]);
 
     useEffect(() => {
-        return networkManager.onStateChange((next) => {
+        let cancelled = false;
+
+        networkManager.syncCaptureStatus().catch(() => {
+            if (!cancelled) setError('Unable to sync capture status');
+        });
+
+        const unsubscribe = networkManager.onStateChange((next) => {
+            if (cancelled) return;
+
             setState({
                 isCapturing: next.isCapturing,
                 logs: [...(next.logs || [])],
@@ -181,6 +189,11 @@ function DashboardNetworkPanel({ ui }) {
             });
             setError('');
         });
+
+        return () => {
+            cancelled = true;
+            unsubscribe();
+        };
     }, []);
 
     useEffect(() => {
@@ -258,14 +271,19 @@ export default function Dashboard({ route, setRoute }) {
                     setDashboardUi(result.ui || {});
                 }
             } catch {
-                setDashboardUi(DEFAULT_DASHBOARD_UI);
+                if (!cancelled) setDashboardUi(DEFAULT_DASHBOARD_UI);
             }
         }
 
         loadDashboardSettings();
 
+        const unsubscribe = window.electronAPI?.on?.('settings-changed', (nextUi) => {
+            if (!cancelled) setDashboardUi(nextUi || {});
+        });
+
         return () => {
             cancelled = true;
+            unsubscribe?.();
         };
     }, []);
 

@@ -828,25 +828,37 @@ function applyWindowUi(ui) {
     currentWindowUi = normalizeUiConfig(ui);
 }
 
+function showMainWindow() {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+    }
+}
+
 function createTray() {
     try {
         const iconPath = path.join(__dirname, '../img/favicons/favicon.png');
         tray = new Tray(iconPath);
 
         const contextMenu = Menu.buildFromTemplate([
-            { label: 'Show App', click: () => mainWindow?.show() },
+            { label: 'Show App', click: showMainWindow },
             {
                 label: 'Quit',
                 click: () => {
                     app.isQuitting = true;
+                    if (tray && !tray.isDestroyed()) {
+                        tray.destroy();
+                    }
                     app.quit();
                 }
             }
         ]);
 
-        tray.setToolTip('Emerald Utilities');
-        tray.setContextMenu(contextMenu);
-        tray.on('click', () => mainWindow?.show());
+        if (!tray.isDestroyed()) {
+            tray.setToolTip('Emerald Utilities');
+            tray.setContextMenu(contextMenu);
+            tray.on('click', showMainWindow);
+        }
     } catch (err) {
         console.error('Error setting up tray:', err);
     }
@@ -862,8 +874,7 @@ app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         await createWindow();
     } else {
-        mainWindow?.show();
-        mainWindow?.focus();
+        showMainWindow();
     }
 });
 
@@ -874,6 +885,16 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+    const captureProcess = networkCaptureProcess;
+    if (captureProcess) {
+        networkCaptureProcess = null;
+        if (captureProcess.pid) {
+            killProcessTree(captureProcess.pid);
+        } else {
+            captureProcess.kill('SIGTERM');
+        }
+    }
+
     for (const file of Array.from(scriptRunners.keys())) {
         stopScript(file);
     }

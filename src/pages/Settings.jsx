@@ -94,6 +94,23 @@ export default function Settings({ route, setRoute }) {
     }, []);
 
     useEffect(() => {
+        let cancelled = false;
+
+        const unsubscribe = window.electronAPI?.on?.('settings-changed', (nextUi) => {
+            if (!cancelled) {
+                loadedRef.current = true;
+                setUi(mergeUi(nextUi));
+                setMessage('Settings updated.');
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            unsubscribe?.();
+        };
+    }, []);
+
+    useEffect(() => {
         if (!loadedRef.current) return;
 
         if (saveTimerRef.current) {

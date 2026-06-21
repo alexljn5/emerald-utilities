@@ -167,6 +167,15 @@ export function registerIpcHandlers(context) {
         return { ok: true };
     });
 
+    ipcMain.handle('network-capture:get-status', () => {
+        const captureProcess = getNetworkCaptureProcess();
+        return {
+            ok: true,
+            isCapturing: Boolean(captureProcess),
+            status: captureProcess ? 'Capturing...' : 'Idle'
+        };
+    });
+
     ipcMain.handle('run-script', async (_event, { file }) => {
         const safeFile = sanitizeScriptFile(file);
         if (!safeFile) return { ok: false, error: 'Invalid script file' };

@@ -55,13 +55,14 @@ function WeatherCityField({ value, onChange }) {
 }
 
 function sameUi(a = {}, b = {}) {
-    return Object.keys(DEFAULT_UI).every((key) => a[key] === b[key]);
+    return Object.keys(DEFAULT_UI).every((key) => a?.[key] === b?.[key]);
 }
 
 export default function Settings({ route, setRoute }) {
     const [ui, setUi] = useState(DEFAULT_UI);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
     const [message, setMessage] = useState('');
     const loadedRef = useRef(false);
     const uiRef = useRef(DEFAULT_UI);
@@ -114,6 +115,7 @@ export default function Settings({ route, setRoute }) {
                 lastSavedUiRef.current = nextSettings;
                 loadedRef.current = true;
                 setUi(nextSettings);
+                setIsDirty(false);
                 setMessage('Settings updated.');
             }
         });
@@ -126,7 +128,12 @@ export default function Settings({ route, setRoute }) {
 
     useEffect(() => {
         if (!loadedRef.current) return;
-        if (sameUi(uiRef.current, lastSavedUiRef.current)) return;
+        if (sameUi(ui, lastSavedUiRef.current)) {
+            setIsDirty(false);
+            return;
+        }
+
+        setIsDirty(true);
 
         if (saveTimerRef.current) {
             clearTimeout(saveTimerRef.current);
@@ -148,6 +155,7 @@ export default function Settings({ route, setRoute }) {
         const next = { ...uiRef.current, [key]: value };
         uiRef.current = next;
         setUi(next);
+        setIsDirty(true);
         setMessage('Saving...');
     }
 
@@ -161,6 +169,7 @@ export default function Settings({ route, setRoute }) {
             if (!result?.ok) throw new Error(result?.error || 'Unable to save settings');
             uiRef.current = mergeUi(result.ui);
             lastSavedUiRef.current = uiRef.current;
+            setIsDirty(false);
             setMessage(showMessage
                 ? 'Settings saved. Startup changes apply after restart; window behavior updates immediately.'
                 : 'Saved to config.');
@@ -172,10 +181,11 @@ export default function Settings({ route, setRoute }) {
     }
 
     function resetSettings() {
-        const defaults = DEFAULT_UI;
+        const defaults = { ...DEFAULT_UI };
         uiRef.current = defaults;
         lastSavedUiRef.current = null;
         setUi(defaults);
+        setIsDirty(true);
         setMessage('Defaults restored. Save to apply them.');
     }
 
@@ -272,7 +282,7 @@ export default function Settings({ route, setRoute }) {
                         Reset defaults
                     </button>
                     <button type="button" onClick={saveSettings} disabled={saving || loading}>
-                        {saving ? 'Saving...' : 'Save settings'}
+                        {saving ? 'Saving...' : isDirty ? 'Save changes' : 'Save settings'}
                     </button>
                 </div>
 

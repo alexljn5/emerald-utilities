@@ -30,23 +30,42 @@ const PRODUCTION = true;   // Change to false for development
 
 // ==================== PROCESS KILLING HELPERS ====================
 function killProcessTree(pid) {
-    if (process.platform === 'win32') {
-        // On Windows, use taskkill to kill the process tree
-        try {
-            spawn('taskkill', ['/F', '/T', '/PID', pid]);
-        } catch (e) {
-            // Fallback to regular kill
-            try { process.kill(pid); } catch { }
+    const numericPid = Number(pid);
+    if (!Number.isFinite(numericPid)) return false;
+
+    try {
+        if (process.platform === 'win32') {
+            execSync(`taskkill /F /T /PID ${numericPid}`, { stdio: 'ignore' });
+            return true;
         }
-    } else {
-        // On Unix, kill the process group
+
         try {
-            process.kill(-pid, 'SIGTERM');
-        } catch (e) {
-            // Process may already be dead or not in a group
-            try { process.kill(pid, 'SIGTERM'); } catch { }
+            process.kill(-numericPid, 'SIGTERM');
+            return true;
+        } catch {
+            process.kill(numericPid, 'SIGTERM');
+            return true;
         }
+    } catch {
+        return false;
     }
+}
+
+function killChildProcess(child, label = 'child process') {
+    if (!child || child.killed) return false;
+
+    pushScriptLog(`Stopping ${label}...`);
+    child.stdin?.destroy();
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+
+    if (child.pid) {
+        killProcessTree(child.pid);
+    } else {
+        child.kill('SIGTERM');
+    }
+
+    return true;
 }
 
 // ==================== WINDOW CREATION ====================
@@ -132,6 +151,19 @@ async function readConfig() {
         return config;
     } catch (err) {
         console.error('[Config] Failed to read config:', err.message);
+        return getDefaultConfig();
+    }
+}
+
+function readConfigSync() {
+    try {
+        const configPath = getConfigPath();
+        if (!existsSync(configPath)) return getDefaultConfig();
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        config.ui = normalizeUiConfig(config?.ui);
+        return config;
+    } catch (err) {
+        console.error('[Config] Failed to synchronously read config:', err.message);
         return getDefaultConfig();
     }
 }
@@ -477,24 +509,10 @@ function stopScript(file) {
     const child = scriptRunners.get(file);
     if (!child) return false;
 
-    pushScriptLog(`Stopping ${file}...`);
-
-    // Immediately destroy streams to prevent further output
-    child.stdout?.destroy();
-    child.stderr?.destroy();
-
-    // Remove from map immediately to prevent duplicate exit handling
     scriptRunners.delete(file);
     setScriptRunning(file, false);
+    killChildProcess(child, file);
 
-    // Kill the process (and its tree on Windows)
-    if (child.pid) {
-        killProcessTree(child.pid);
-    } else {
-        child.kill();
-    }
-
-    // Log when process actually exits (one-time handler)
     child.once('exit', (code, signal) => {
         pushScriptLog(`${file} stopped (${signal || code})`);
     });
@@ -508,6 +526,11 @@ function stopCronJob(file) {
 
     pushScriptLog(`Stopping cron job for ${file}...`);
     clearInterval(job.timer);
+
+    if (job.currentChild) {
+        killChildProcess(job.currentChild, `${file} cron process`);
+    }
+
     cronJobs.delete(file);
     setScriptRunning(file, false);
     pushScriptLog(`Cron job stopped for ${file}`);
@@ -718,11 +741,19 @@ function startCronScript(file, scriptPath, intervalMs) {
     const cwd = isWindows ? path.dirname(scriptPath).replace(/\\/g, '/') : path.dirname(scriptPath);
 
     const timer = setInterval(() => {
+        const previousChild = cronJobs.get(file)?.currentChild;
+        if (previousChild && !previousChild.killed) {
+            pushScriptLog(`[CRON] Stopping previous ${file} process before next run`);
+            killChildProcess(previousChild, `${file} previous cron process`);
+        }
+
         const child = spawn(command, commandInfo.args, {
             shell: commandInfo.useShell !== false && isWindows,
             windowsVerbatimArguments: true,
             cwd
         });
+
+        cronJobs.set(file, { timer, intervalMs, scriptPath, currentChild: child });
         pushScriptLog(`[CRON] Running ${file}`);
 
         if (child.stdout) {
@@ -735,6 +766,10 @@ function startCronScript(file, scriptPath, intervalMs) {
             pushScriptLog(`[CRON] ${file} error: ${err.message}`);
         });
         child.on('exit', (code, signal) => {
+            const job = cronJobs.get(file);
+            if (job?.currentChild === child) {
+                job.currentChild = null;
+            }
             pushScriptLog(`[CRON] ${file} finished (${signal || code})`);
         });
     }, intervalMs);
@@ -806,16 +841,18 @@ async function createWindow() {
         }
 
         mainWindow.on('close', (event) => {
-            const activeUi = currentWindowUi || ui;
+            const activeUi = normalizeUiConfig(readConfigSync()?.ui);
             if (!app.isQuitting && activeUi.hideOnClose) {
                 event.preventDefault();
-                mainWindow.hide();
+                if (!mainWindow.isDestroyed()) {
+                    mainWindow.hide();
+                }
             }
         });
 
         mainWindow.on('minimize', () => {
-            const activeUi = currentWindowUi || ui;
-            if (activeUi.hideOnMinimize) {
+            const activeUi = normalizeUiConfig(readConfigSync()?.ui);
+            if (activeUi.hideOnMinimize && !mainWindow.isDestroyed()) {
                 mainWindow.hide();
             }
         });
@@ -879,8 +916,11 @@ app.on('activate', async () => {
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        // Keep running in tray
+    if (process.platform === 'darwin') return;
+
+    const activeUi = normalizeUiConfig(readConfigSync()?.ui);
+    if (!activeUi.hideOnClose) {
+        app.quit();
     }
 });
 
@@ -888,11 +928,7 @@ app.on('before-quit', () => {
     const captureProcess = networkCaptureProcess;
     if (captureProcess) {
         networkCaptureProcess = null;
-        if (captureProcess.pid) {
-            killProcessTree(captureProcess.pid);
-        } else {
-            captureProcess.kill('SIGTERM');
-        }
+        killChildProcess(captureProcess, 'network capture');
     }
 
     for (const file of Array.from(scriptRunners.keys())) {

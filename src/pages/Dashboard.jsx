@@ -260,6 +260,15 @@ export default function Dashboard({ route, setRoute }) {
     const [dashboardUi, setDashboardUi] = useState(null);
     const [mascotMood, setMascotMood] = useState('neutral');
     const ui = { ...DEFAULT_DASHBOARD_UI, ...(dashboardUi || {}) };
+    const showTerminalPanel = Boolean(ui.showDashboardTerminal);
+    const showNetworkPanel = Boolean(ui.showDashboardNetworkOutput);
+    const panelsClass = showTerminalPanel && showNetworkPanel
+        ? 'dashboardPanels twoPanels'
+        : showTerminalPanel
+            ? 'dashboardPanels terminalOnly'
+            : showNetworkPanel
+                ? 'dashboardPanels networkOnly'
+                : 'dashboardPanels emptyPanels';
 
     useEffect(() => {
         let cancelled = false;
@@ -338,9 +347,9 @@ export default function Dashboard({ route, setRoute }) {
 
             <div className="dashboardContent">
                 {ui.showDashboardTopBar ? <DashboardTopBar ui={ui} /> : null}
-                <div className="dashboardPanels">
-                    <TerminalLines terminalLog={terminalLog} terminalRef={terminalRef} ui={ui} />
-                    {ui.showDashboardNetworkOutput ? <DashboardNetworkPanel ui={ui} /> : null}
+                <div className={panelsClass}>
+                    {showTerminalPanel ? <TerminalLines terminalLog={terminalLog} terminalRef={terminalRef} ui={ui} /> : null}
+                    {showNetworkPanel ? <DashboardNetworkPanel ui={ui} /> : null}
                 </div>
             </div>
 

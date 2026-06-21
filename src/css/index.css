@@ -55,6 +55,7 @@
     z-index: 1;
     height: 100%;
     min-height: 0;
+    overflow: hidden;
     padding: clamp(0.65rem, 1.4vw, 1.25rem);
     display: flex;
     flex-direction: column;
@@ -67,6 +68,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
     gap: clamp(0.5rem, 1vw, 0.8rem);
     align-items: stretch;
+    min-width: 0;
     padding: clamp(0.55rem, 1vw, 0.8rem);
     border: 2px solid var(--color-accent);
     border-radius: 8px;
@@ -85,7 +87,14 @@
 
 .dashboardInfoCluster {
     flex-wrap: wrap;
+    min-width: 0;
 }
+
+.dashboardWeather {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 
 .dashboardInfoPill,
 .dashboardWeatherCity,
@@ -93,6 +102,7 @@
     display: inline-flex;
     align-items: center;
     min-height: 1.65rem;
+    max-width: 100%;
     padding: 0.2rem 0.5rem;
     border: 1px solid rgba(255, 34, 34, 0.55);
     border-radius: 999px;
@@ -111,6 +121,7 @@
 .dashboardWeather {
     justify-content: flex-end;
     text-align: right;
+    min-width: 0;
 }
 
 .dashboardWeatherCity {
@@ -119,9 +130,11 @@
 }
 
 .dashboardWeatherText {
+    max-width: 100%;
     border-radius: 4px;
     white-space: normal;
     text-align: left;
+    overflow-wrap: anywhere;
 }
 
 .dashboardWeatherError {
@@ -132,9 +145,13 @@
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: clamp(0.65rem, 1.2vw, 1rem);
     padding-bottom: min(24vw, 18rem);
+}
+
+.dashboardPanels.twoPanels {
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
 }
 
 .dashboardPanel {
@@ -153,12 +170,31 @@
     border-radius: 6px;
 }
 
+.dashboardPanel.compactPanel .dashboardPanelHeader {
+    padding: clamp(0.32rem, 0.65vw, 0.5rem);
+}
+
+.dashboardPanel.compactPanel .dashboardPanelActions button {
+    padding: 0.25rem 0.4rem;
+    font-size: clamp(0.62rem, 0.76vw, 0.75rem);
+}
+
+.dashboardPanel.compactPanel .dashboardPanelScroll {
+    padding: clamp(0.32rem, 0.65vw, 0.5rem);
+}
+
+.dashboardPanel.compactPanel .dashboardNetworkLog {
+    font-size: clamp(0.62rem, 0.76vw, 0.75rem);
+    line-height: 1.25;
+}
+
 .dashboardPanelHeader {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.6rem;
+    min-width: 0;
     padding: clamp(0.45rem, 0.8vw, 0.7rem);
     border-bottom: 1px solid rgba(255, 34, 34, 0.55);
     color: var(--color-accent);
@@ -166,8 +202,11 @@
 
 .dashboardPanelHeader h3 {
     margin: 0;
+    min-width: 0;
     font-size: clamp(0.85rem, 1.1vw, 1.1rem);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .dashboardPanelHeader span,
@@ -180,6 +219,8 @@
 .dashboardPanelActions {
     display: flex;
     gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     flex-shrink: 0;
 }
 
@@ -201,6 +242,7 @@
     width: auto;
     height: auto;
     z-index: auto;
+    overflow-wrap: anywhere;
 }
 
 .dashboardNetworkStatus,
@@ -265,7 +307,7 @@
     }
 
     .dashboardPanel {
-        min-height: 220px;
+        min-height: clamp(120px, 35dvh, 220px);
     }
 
     .dashboardPanels {

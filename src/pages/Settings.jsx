@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { invoke } from '../js/electronApi.js';
 import '../css/settings.css';
@@ -59,6 +59,8 @@ export default function Settings({ route, setRoute }) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
+    const loadedRef = useRef(false);
+    const saveTimerRef = useRef(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -70,10 +72,12 @@ export default function Settings({ route, setRoute }) {
             try {
                 const result = await invoke('settings:get');
                 if (!cancelled) {
+                    loadedRef.current = true;
                     setUi(mergeUi(result?.ui));
                 }
             } catch (err) {
                 if (!cancelled) {
+                    loadedRef.current = true;
                     setUi(DEFAULT_UI);
                     setMessage(err?.message || 'Unable to load settings');
                 }
@@ -89,19 +93,40 @@ export default function Settings({ route, setRoute }) {
         };
     }, []);
 
+    useEffect(() => {
+        if (!loadedRef.current) return;
+
+        if (saveTimerRef.current) {
+            clearTimeout(saveTimerRef.current);
+        }
+
+        setMessage('Saving...');
+        saveTimerRef.current = setTimeout(() => {
+            saveSettings(false);
+        }, 250);
+
+        return () => {
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+        };
+    }, [ui]);
+
     function updateSetting(key, value) {
         setUi((current) => ({ ...current, [key]: value }));
-        setMessage('');
+        setMessage('Saving...');
     }
 
-    async function saveSettings() {
+    async function saveSettings(showMessage = true) {
         setSaving(true);
         setMessage('');
 
         try {
             const result = await invoke('settings:update', ui);
             if (!result?.ok) throw new Error(result?.error || 'Unable to save settings');
-            setMessage('Settings saved. Restart the app to apply startup behavior.');
+            setMessage(showMessage
+                ? 'Settings saved. Startup changes apply after restart; window behavior updates immediately.'
+                : 'Saved to config.');
         } catch (err) {
             setMessage(err?.message || 'Unable to save settings');
         } finally {
@@ -113,6 +138,14 @@ export default function Settings({ route, setRoute }) {
         setUi(DEFAULT_UI);
         setMessage('Defaults restored. Save to apply them.');
     }
+
+    useEffect(() => {
+        return () => {
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+        };
+    }, []);
 
     return (
         <PageShell title="Settings" route={route} setRoute={setRoute} showBack={true}>

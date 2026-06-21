@@ -134,6 +134,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
     gap: clamp(0.65rem, 1.2vw, 1rem);
+    padding-bottom: min(34vw, 26rem);
 }
 
 .dashboardPanel {
@@ -265,5 +266,9 @@
 
     .dashboardPanel {
         min-height: 220px;
+    }
+
+    .dashboardPanels {
+        padding-bottom: min(42vw, 18rem);
     }
 }

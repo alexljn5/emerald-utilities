@@ -59,11 +59,47 @@ const MAX_SCRIPT_LOG_LINES = 500;
 const SCRIPT_LOG_SESSION_ID = Date.now().toString(36);
 const NETWORK_LOG_DIR = path.join(process.cwd(), 'src/logs/logs-network');
 const NETWORK_LOG_FOLDERS = new Set(['ALL', 'FILTERED']);
+const DEFAULT_UI_CONFIG = Object.freeze({
+    minimizeAtStartup: true,
+    hideOnMinimize: true,
+    hideOnClose: true,
+    showDashboardTopBar: true,
+    showDashboardTerminal: true,
+    showDashboardNetworkOutput: true,
+    compactDashboard: false,
+    weatherCity: 'Amsterdam'
+});
 let nextScriptLogId = 1;
 let networkCaptureProcess = null;
+let currentWindowUi = null;
+
+function getDefaultUiConfig() {
+    return { ...DEFAULT_UI_CONFIG };
+}
+
+function normalizeBoolean(value, fallback) {
+    return typeof value === 'boolean' ? value : fallback;
+}
+
+function normalizeUiConfig(ui = {}) {
+    const fallback = getDefaultUiConfig();
+
+    return {
+        minimizeAtStartup: normalizeBoolean(ui?.minimizeAtStartup, fallback.minimizeAtStartup),
+        hideOnMinimize: normalizeBoolean(ui?.hideOnMinimize, fallback.hideOnMinimize),
+        hideOnClose: normalizeBoolean(ui?.hideOnClose, fallback.hideOnClose),
+        showDashboardTopBar: normalizeBoolean(ui?.showDashboardTopBar, fallback.showDashboardTopBar),
+        showDashboardTerminal: normalizeBoolean(ui?.showDashboardTerminal, fallback.showDashboardTerminal),
+        showDashboardNetworkOutput: normalizeBoolean(ui?.showDashboardNetworkOutput, fallback.showDashboardNetworkOutput),
+        compactDashboard: normalizeBoolean(ui?.compactDashboard, fallback.compactDashboard),
+        weatherCity: typeof ui?.weatherCity === 'string' && ui.weatherCity.trim()
+            ? ui.weatherCity.trim()
+            : fallback.weatherCity
+    };
+}
 
 function getDefaultConfig() {
-    return { scripts: [], customScriptsPath: null, ahkPath: null };
+    return { scripts: [], customScriptsPath: null, ahkPath: null, ui: getDefaultUiConfig() };
 }
 
 function getConfigPath() {
@@ -91,7 +127,9 @@ async function readConfig() {
         }
 
         console.log(`[Config] Using config: ${configPath}`);
-        return JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+        const config = JSON.parse(await fsPromises.readFile(configPath, 'utf8'));
+        config.ui = normalizeUiConfig(config?.ui);
+        return config;
     } catch (err) {
         console.error('[Config] Failed to read config:', err.message);
         return getDefaultConfig();
@@ -210,7 +248,8 @@ async function writeConfig(config, options = {}) {
                 : (config?.customScriptsPath || null),
             ahkPath: options.preserveTopLevel && config?.ahkPath == null
                 ? (baseConfig?.ahkPath || null)
-                : (config?.ahkPath || null)
+                : (config?.ahkPath || null),
+            ui: normalizeUiConfig(config?.ui)
         };
 
         await fsPromises.writeFile(getConfigPath(), JSON.stringify(cleanConfig, null, 2), 'utf8');
@@ -326,12 +365,14 @@ function toWslPath(windowsPath) {
 export function startCapture(iface = 'any', tcpdumpArgs = []) {
     const { iface: normalizedIface, extraArgs } = normalizeNetworkCaptureOptions({ iface, tcpdumpArgs });
     const scriptPath = getNetworkCaptureScriptPath();
+    const captureCommand = getNetworkCaptureCommand(scriptPath, normalizedIface, extraArgs);
     const proc = spawn(
-        process.platform === 'win32' ? 'wsl' : 'bash',
-        getNetworkCaptureSpawnArgs(scriptPath, normalizedIface, extraArgs),
-        { stdio: ['ignore', 'pipe', 'pipe'] }
+        captureCommand.command,
+        captureCommand.args,
+        { stdio: ['pipe', 'pipe', 'pipe'] }
     );
 
+    proc.stdin.end(captureCommand.stdin);
     proc.stdout.setEncoding('utf8');
 
     proc.stdout.on('data', (chunk) => {
@@ -375,12 +416,22 @@ function normalizeNetworkCaptureOptions(options = {}) {
     return { iface, extraArgs };
 }
 
-function getNetworkCaptureSpawnArgs(scriptPath, iface = 'any', extraArgs = []) {
+function getNetworkCaptureCommand(scriptPath, iface = 'any', extraArgs = []) {
+    const stdin = fs.readFileSync(scriptPath, 'utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
     if (process.platform === 'win32') {
-        return ['bash', toWslPath(scriptPath), iface, ...extraArgs];
+        return {
+            command: 'wsl',
+            args: ['bash', '-s', iface, ...extraArgs],
+            stdin
+        };
     }
 
-    return [scriptPath, iface, ...extraArgs];
+    return {
+        command: 'bash',
+        args: ['-s', iface, ...extraArgs],
+        stdin
+    };
 }
 
 function getNetworkCaptureScriptPath() {
@@ -695,8 +746,12 @@ function startCronScript(file, scriptPath, intervalMs) {
     return { ok: true };
 }
 
-function createWindow() {
+async function createWindow() {
     try {
+        const config = await readConfig();
+        const ui = normalizeUiConfig(config?.ui);
+        currentWindowUi = ui;
+        const shouldShowAtStartup = !ui.minimizeAtStartup;
         const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
         const width = Math.min(1280, Math.floor(screenWidth * 0.85));
         const height = Math.min(720, Math.floor(screenHeight * 0.85));
@@ -711,40 +766,66 @@ function createWindow() {
                 allowRendererProcessReuse: false,
                 webgl: false,
             },
-            show: false   // ← Never show automatically
+            show: false
         });
 
         if (PRODUCTION) {
             mainWindow.setMenu(null);
         }
 
+        const showMainWindow = () => {
+            if (!mainWindow || mainWindow.isDestroyed()) return;
+            mainWindow.show();
+            mainWindow.focus();
+        };
+
+        mainWindow.once('ready-to-show', () => {
+            if (shouldShowAtStartup) {
+                showMainWindow();
+            }
+        });
+
+        mainWindow.webContents.once('did-finish-load', () => {
+            if (shouldShowAtStartup && !mainWindow.isVisible()) {
+                showMainWindow();
+            }
+        });
+
         const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173';
         const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
         if (isDev) {
-            mainWindow.loadURL(devServerUrl).catch(err => {
+            await mainWindow.loadURL(devServerUrl).catch(err => {
                 console.error('Failed to load Vite dev server:', err);
             });
         } else {
             const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
-            mainWindow.loadFile(indexPath).catch(err => {
+            await mainWindow.loadFile(indexPath).catch(err => {
                 console.error('Failed to load dist/index.html:', err);
             });
         }
 
         mainWindow.on('close', (event) => {
-            if (!app.isQuitting) {
+            const activeUi = currentWindowUi || ui;
+            if (!app.isQuitting && activeUi.hideOnClose) {
                 event.preventDefault();
                 mainWindow.hide();
             }
         });
 
         mainWindow.on('minimize', () => {
-            mainWindow.hide();
+            const activeUi = currentWindowUi || ui;
+            if (activeUi.hideOnMinimize) {
+                mainWindow.hide();
+            }
         });
     } catch (err) {
         console.error('Error creating window:', err);
     }
+}
+
+function applyWindowUi(ui) {
+    currentWindowUi = normalizeUiConfig(ui);
 }
 
 function createTray() {
@@ -771,15 +852,18 @@ function createTray() {
     }
 }
 
-app.whenReady().then(() => {
-    createWindow();   // creates window in background
-    createTray();     // tray only
+app.whenReady().then(async () => {
+    await createWindow();
+    createTray();
     console.log("[Emerald] Running in background (tray only)");
 });
 
-app.on('activate', () => {
+app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        await createWindow();
+    } else {
+        mainWindow?.show();
+        mainWindow?.focus();
     }
 });
 
@@ -807,6 +891,7 @@ registerIpcHandlers({
     path,
     readConfig,
     writeConfig,
+    normalizeUiConfig,
     getScriptsDir,
     getDefaultScriptsDir,
     ensureConfigEntries,
@@ -816,7 +901,7 @@ registerIpcHandlers({
     NETWORK_LOG_FOLDERS,
     getNetworkCaptureScriptPath,
     normalizeNetworkCaptureOptions,
-    getNetworkCaptureSpawnArgs,
+    getNetworkCaptureCommand,
     commandExists,
     spawn,
     killProcessTree,
@@ -829,12 +914,14 @@ registerIpcHandlers({
     scriptLogHistory,
     MAX_SCRIPT_LOG_LINES,
     pushScriptLog,
+    broadcast,
     broadcastNetworkLog,
     writePacket,
     getNetworkCaptureProcess: () => networkCaptureProcess,
     setNetworkCaptureProcess: (value) => {
         networkCaptureProcess = value;
     },
+    applyWindowUi,
     getDialogParentWindow: () => mainWindow
 });
 

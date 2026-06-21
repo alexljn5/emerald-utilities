@@ -188,7 +188,8 @@ export class ScriptManager {
         return {
             scripts: [...(this.state.config.scripts || [])],
             customScriptsPath: this.state.config.customScriptsPath || null,
-            ahkPath: this.state.config.ahkPath || null
+            ahkPath: this.state.config.ahkPath || null,
+            ui: this.state.config.ui || null
         };
     }
 

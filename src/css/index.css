@@ -49,14 +49,178 @@
     width: 100%;
 }
 
-/* ==================== DASHBOARD TERMINAL ==================== */
-.dashboardTerminal {
-    position: absolute;
-    top: clamp(10px, 2vw, 20px);
-    left: clamp(10px, 2vw, 20px);
-    width: min(460px, 55%);
-    height: min(280px, 45%);
+/* ==================== DASHBOARD LAYOUT ==================== */
+.dashboardContent {
+    position: relative;
     z-index: 1;
+    height: 100%;
+    min-height: 0;
+    padding: clamp(0.65rem, 1.4vw, 1.25rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.65rem, 1.2vw, 1rem);
+}
+
+.dashboardTopBar {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: clamp(0.5rem, 1vw, 0.8rem);
+    align-items: stretch;
+    padding: clamp(0.55rem, 1vw, 0.8rem);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.72);
+    box-shadow: 0 0 16px rgba(255, 34, 34, 0.18);
+}
+
+.dashboardInfoCluster,
+.dashboardWeather {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: clamp(0.35rem, 0.7vw, 0.6rem);
+    overflow: hidden;
+}
+
+.dashboardInfoCluster {
+    flex-wrap: wrap;
+}
+
+.dashboardInfoPill,
+.dashboardWeatherCity,
+.dashboardWeatherText {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.65rem;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid rgba(255, 34, 34, 0.55);
+    border-radius: 999px;
+    background: rgba(255, 34, 34, 0.08);
+    color: var(--color-text);
+    font-size: clamp(0.68rem, 0.85vw, 0.9rem);
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.dashboardClock {
+    font-weight: 700;
+    color: var(--color-accent);
+}
+
+.dashboardWeather {
+    justify-content: flex-end;
+    text-align: right;
+}
+
+.dashboardWeatherCity {
+    color: var(--color-accent);
+    font-weight: 700;
+}
+
+.dashboardWeatherText {
+    border-radius: 4px;
+    white-space: normal;
+    text-align: left;
+}
+
+.dashboardWeatherError {
+    color: #ff8888;
+}
+
+.dashboardPanels {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+    gap: clamp(0.65rem, 1.2vw, 1rem);
+}
+
+.dashboardPanel {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.58);
+    box-shadow: 0 0 14px rgba(255, 34, 34, 0.12);
+}
+
+.dashboardPanel.compactPanel {
+    border-radius: 6px;
+}
+
+.dashboardPanelHeader {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: clamp(0.45rem, 0.8vw, 0.7rem);
+    border-bottom: 1px solid rgba(255, 34, 34, 0.55);
+    color: var(--color-accent);
+}
+
+.dashboardPanelHeader h3 {
+    margin: 0;
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+    white-space: nowrap;
+}
+
+.dashboardPanelHeader span,
+.dashboardNetworkStatus,
+.dashboardNetworkError {
+    color: #bbb;
+    font-size: clamp(0.68rem, 0.85vw, 0.9rem);
+}
+
+.dashboardPanelActions {
+    display: flex;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.dashboardPanelActions button {
+    padding: 0.35rem 0.55rem;
+    font-size: clamp(0.68rem, 0.85vw, 0.9rem);
+}
+
+.dashboardPanelScroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: clamp(0.45rem, 0.8vw, 0.7rem);
+}
+
+.dashboardTerminal {
+    position: static;
+    width: auto;
+    height: auto;
+    z-index: auto;
+}
+
+.dashboardNetworkStatus,
+.dashboardNetworkError {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid rgba(255, 34, 34, 0.22);
+}
+
+.dashboardNetworkError {
+    color: #ff8888;
+    border-bottom-color: rgba(255, 136, 136, 0.28);
+}
+
+.dashboardNetworkLog {
+    color: var(--color-terminal-text);
+    font-family: 'pixelSans', monospace;
+    font-size: clamp(0.68rem, 0.85vw, 0.88rem);
+    line-height: 1.35;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 /* ==================== DASHBOARD MASCOT ==================== */
@@ -82,4 +246,24 @@
 
 #dashboardMascot:hover {
     transform: scale(1.06);
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 900px) {
+    .dashboardTopBar {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboardWeather {
+        justify-content: flex-start;
+        text-align: left;
+    }
+
+    .dashboardPanels {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboardPanel {
+        min-height: 220px;
+    }
 }

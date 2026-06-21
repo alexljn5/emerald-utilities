@@ -17,6 +17,7 @@ export function registerIpcHandlers(context) {
         path,
         readConfig,
         writeConfig,
+        normalizeUiConfig,
         getScriptsDir,
         getDefaultScriptsDir,
         sanitizeScriptFile,
@@ -25,7 +26,7 @@ export function registerIpcHandlers(context) {
         NETWORK_LOG_FOLDERS,
         getNetworkCaptureScriptPath,
         normalizeNetworkCaptureOptions,
-        getNetworkCaptureSpawnArgs,
+        getNetworkCaptureCommand,
         commandExists,
         spawn,
         killProcessTree,
@@ -38,10 +39,12 @@ export function registerIpcHandlers(context) {
         scriptLogHistory,
         MAX_SCRIPT_LOG_LINES,
         pushScriptLog,
+        broadcast,
         broadcastNetworkLog,
         writePacket,
         getNetworkCaptureProcess,
         setNetworkCaptureProcess,
+        applyWindowUi,
         getDialogParentWindow
     } = context;
 
@@ -99,12 +102,13 @@ export function registerIpcHandlers(context) {
                 }
             }
 
-            const spawnArgs = getNetworkCaptureSpawnArgs(scriptPath, iface, extraArgs);
+            const captureCommand = getNetworkCaptureCommand(scriptPath, iface, extraArgs);
             captureProcess = spawn(
-                process.platform === 'win32' ? 'wsl' : 'bash',
-                spawnArgs,
-                { stdio: ['ignore', 'pipe', 'pipe'] }
+                captureCommand.command,
+                captureCommand.args,
+                { stdio: ['pipe', 'pipe', 'pipe'] }
             );
+            captureProcess.stdin.end(captureCommand.stdin);
             setNetworkCaptureProcess(captureProcess);
 
             pushScriptLog(`[Network] Started capture on interface: ${iface}${extraArgs.length ? ` with args: ${extraArgs.join(' ')}` : ''}`);
@@ -324,6 +328,38 @@ export function registerIpcHandlers(context) {
             return existsSync(path.join(getScriptsDir(config), sanitizeScriptFile(file) || file));
         } catch {
             return false;
+        }
+    });
+
+    ipcMain.handle('settings:get', async () => {
+        try {
+            const config = await readConfig();
+            return { ok: true, ui: normalizeUiConfig(config?.ui) };
+        } catch (err) {
+            console.error('[Settings] Failed to read:', err);
+            return { ok: false, error: err.message, ui: normalizeUiConfig() };
+        }
+    });
+
+    ipcMain.handle('settings:update', async (_event, ui = {}) => {
+        try {
+            if (!ui || typeof ui !== 'object') {
+                return { ok: false, error: 'Missing settings' };
+            }
+
+            const config = await readConfig();
+            const savedConfig = await writeConfig({
+                ...config,
+                ui: normalizeUiConfig({ ...(config?.ui || {}), ...ui })
+            });
+
+            applyWindowUi(savedConfig.ui);
+            broadcast('settings-changed', savedConfig.ui);
+
+            return { ok: true, ui: savedConfig.ui };
+        } catch (err) {
+            console.error('[Settings] Failed to save:', err);
+            return { ok: false, error: err.message };
         }
     });
 

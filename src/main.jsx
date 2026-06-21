@@ -6,6 +6,7 @@ import NetworkMonitoring from './pages/NetworkMonitoring.jsx';
 import TheAI from './pages/TheAI.jsx';
 import About from './pages/About.jsx';
 import ModUpdater from './pages/ModUpdater.jsx';
+import Settings from './pages/Settings.jsx';
 import './css/globals.css';
 
 const pages = {
@@ -14,7 +15,8 @@ const pages = {
     networkMonitoring: NetworkMonitoring,
     modUpdater: ModUpdater,
     ai: TheAI,
-    about: About
+    about: About,
+    settings: Settings
 };
 
 function App() {

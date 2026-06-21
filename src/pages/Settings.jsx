@@ -198,7 +198,26 @@ export default function Settings({ route, setRoute }) {
     }, []);
 
     return (
-        <PageShell title="Settings" route={route} setRoute={setRoute} showBack={true}>
+        <PageShell
+            title="Settings"
+            route={route}
+            setRoute={setRoute}
+            showBack={true}
+            leftChildren={(
+                <>
+                    <div className="settingsActions settingsLeftActions">
+                        <button type="button" onClick={resetSettings} disabled={saving || loading}>
+                            Reset defaults
+                        </button>
+                        <button type="button" onClick={saveSettings} disabled={saving || loading}>
+                            {saving ? 'Saving...' : isDirty ? 'Save changes' : 'Save settings'}
+                        </button>
+                    </div>
+
+                    {message ? <div className="settingsMessage settingsLeftMessage">{message}</div> : null}
+                </>
+            )}
+        >
             <div className="settingsPage">
                 <section className="settingsIntro">
                     <div>

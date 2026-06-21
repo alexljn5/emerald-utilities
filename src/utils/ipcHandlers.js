@@ -378,7 +378,11 @@ export function registerIpcHandlers(context) {
                 return { ok: false, error: 'Missing config' };
             }
 
-            const savedConfig = await writeConfig(config);
+            const existingConfig = await readConfig();
+            const savedConfig = await writeConfig({
+                ...config,
+                ui: config?.ui ?? existingConfig?.ui
+            });
             return { ok: true, config: savedConfig };
         } catch (err) {
             console.error('[Config] Failed to save:', err);

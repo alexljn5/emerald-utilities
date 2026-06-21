@@ -54,12 +54,18 @@ function WeatherCityField({ value, onChange }) {
     );
 }
 
+function sameUi(a = {}, b = {}) {
+    return Object.keys(DEFAULT_UI).every((key) => a[key] === b[key]);
+}
+
 export default function Settings({ route, setRoute }) {
     const [ui, setUi] = useState(DEFAULT_UI);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
     const loadedRef = useRef(false);
+    const uiRef = useRef(DEFAULT_UI);
+    const lastSavedUiRef = useRef(null);
     const saveTimerRef = useRef(null);
 
     useEffect(() => {
@@ -72,12 +78,17 @@ export default function Settings({ route, setRoute }) {
             try {
                 const result = await invoke('settings:get');
                 if (!cancelled) {
+                    const loadedUi = mergeUi(result?.ui);
                     loadedRef.current = true;
-                    setUi(mergeUi(result?.ui));
+                    uiRef.current = loadedUi;
+                    lastSavedUiRef.current = loadedUi;
+                    setUi(loadedUi);
                 }
             } catch (err) {
                 if (!cancelled) {
                     loadedRef.current = true;
+                    uiRef.current = DEFAULT_UI;
+                    lastSavedUiRef.current = DEFAULT_UI;
                     setUi(DEFAULT_UI);
                     setMessage(err?.message || 'Unable to load settings');
                 }
@@ -98,8 +109,11 @@ export default function Settings({ route, setRoute }) {
 
         const unsubscribe = window.electronAPI?.on?.('settings-changed', (nextUi) => {
             if (!cancelled) {
+                const nextSettings = mergeUi(nextUi);
+                uiRef.current = nextSettings;
+                lastSavedUiRef.current = nextSettings;
                 loadedRef.current = true;
-                setUi(mergeUi(nextUi));
+                setUi(nextSettings);
                 setMessage('Settings updated.');
             }
         });
@@ -112,6 +126,7 @@ export default function Settings({ route, setRoute }) {
 
     useEffect(() => {
         if (!loadedRef.current) return;
+        if (sameUi(uiRef.current, lastSavedUiRef.current)) return;
 
         if (saveTimerRef.current) {
             clearTimeout(saveTimerRef.current);
@@ -130,7 +145,9 @@ export default function Settings({ route, setRoute }) {
     }, [ui]);
 
     function updateSetting(key, value) {
-        setUi((current) => ({ ...current, [key]: value }));
+        const next = { ...uiRef.current, [key]: value };
+        uiRef.current = next;
+        setUi(next);
         setMessage('Saving...');
     }
 
@@ -139,8 +156,11 @@ export default function Settings({ route, setRoute }) {
         setMessage('');
 
         try {
-            const result = await invoke('settings:update', ui);
+            const currentUi = uiRef.current;
+            const result = await invoke('settings:update', currentUi);
             if (!result?.ok) throw new Error(result?.error || 'Unable to save settings');
+            uiRef.current = mergeUi(result.ui);
+            lastSavedUiRef.current = uiRef.current;
             setMessage(showMessage
                 ? 'Settings saved. Startup changes apply after restart; window behavior updates immediately.'
                 : 'Saved to config.');
@@ -152,7 +172,10 @@ export default function Settings({ route, setRoute }) {
     }
 
     function resetSettings() {
-        setUi(DEFAULT_UI);
+        const defaults = DEFAULT_UI;
+        uiRef.current = defaults;
+        lastSavedUiRef.current = null;
+        setUi(defaults);
         setMessage('Defaults restored. Save to apply them.');
     }
 

@@ -115,7 +115,7 @@ export default function Internet({ route, setRoute }) {
                             })()
                         `);
                         if (exportResult?.success && exportResult.data) {
-                            const fsResult = await exportData(exportResult.data, 'grok_export_live');
+                            const fsResult = await exportData(exportResult.data, 'great_white_throne');
                             if (fsResult?.success) {
                                 const count = fsResult.files ? fsResult.files.length : 1;
                                 setScraperStatus(`Live export updated (${count} conversation files)`);

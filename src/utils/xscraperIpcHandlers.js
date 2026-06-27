@@ -196,7 +196,7 @@ export function registerXScraperIpcHandlers(context) {
             }
 
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const filename = `grok_export_${timestamp}.json`;
+            const filename = `grok_export_${timestamp}_${exportData.totalMessages || 0}msgs.json`;
             const filepath = path.join(exportDir, filename);
 
             writeFileSync(filepath, JSON.stringify(exportData, null, 2), 'utf8');

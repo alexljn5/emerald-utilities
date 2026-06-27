@@ -24,3 +24,4 @@ DOCUMENTATION.md
 start_prod.sh
 start_dev.sh
 src/database/POSTGRES_JSON_PROPOSAL.md
+INTERNET_BROWSER.md

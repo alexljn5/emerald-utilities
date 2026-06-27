@@ -15,13 +15,40 @@ window.addEventListener('message', (event) => {
     if (event.source !== window) return;
 
     const message = event.data;
-    if (!message || message.source !== 'xscraper-page' || message.action !== 'saveMessages') return;
+    if (!message || message.source !== 'xscraper-page') return;
 
-    chrome.runtime.sendMessage({
-        action: 'saveMessages',
-        messages: Array.isArray(message.messages) ? message.messages : []
-    }).catch(() => { });
+    if (message.action === 'saveMessages') {
+        chrome.runtime.sendMessage({
+            action: 'saveMessages',
+            messages: Array.isArray(message.messages) ? message.messages : []
+        }).catch(() => { });
+    } else if (message.action === 'exportRequest') {
+        console.log('[XSCRAPER_CONTENT] exportRequest received:', message.requestId);
+        handleExportRequest(message);
+    }
 });
+
+async function handleExportRequest(message) {
+    try {
+        console.log('[XSCRAPER_CONTENT] sending exportData to background');
+        const result = await chrome.runtime.sendMessage({ action: 'exportData' });
+        console.log('[XSCRAPER_CONTENT] exportData response:', result);
+        window.postMessage({
+            source: 'xscraper-content',
+            action: 'exportResponse',
+            requestId: message.requestId,
+            result
+        }, '*');
+    } catch (err) {
+        console.error('[XSCRAPER_CONTENT] exportData error:', err);
+        window.postMessage({
+            source: 'xscraper-content',
+            action: 'exportResponse',
+            requestId: message.requestId,
+            result: { success: false, error: err?.message || 'Export failed' }
+        }, '*');
+    }
+}
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

@@ -134,7 +134,9 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                 }
 
                 case 'exportData': {
+                    console.log('[XSCRAPER_BACKGROUND] exportData requested');
                     const data = await handleExportData();
+                    console.log('[XSCRAPER_BACKGROUND] exportData response ready, messages:', data.totalMessages);
                     sendResponse({ success: true, data });
                     break;
                 }

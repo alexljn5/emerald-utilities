@@ -31,6 +31,7 @@
             stopCrawler: stopAutoScrollLoop,
             scrapeAll,
             scrape,
+            exportAsJSON,
             restart: () => {
                 startObserver();
                 forceScroll();
@@ -139,6 +140,38 @@
         // single nudge/scroll to attempt to load more messages
         forceScroll();
         return { success: true };
+    }
+
+    async function exportAsJSON() {
+        console.log('[XSCRAPER_HEAVENS] exportAsJSON called');
+        return new Promise((resolve, reject) => {
+            const requestId = `export-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const timeout = setTimeout(() => {
+                window.removeEventListener('message', handler);
+                console.error('[XSCRAPER_HEAVENS] export timed out');
+                reject(new Error('Export timed out'));
+            }, 15000);
+
+            function handler(event) {
+                if (event.source !== window) return;
+                const message = event.data;
+                console.log('[XSCRAPER_HEAVENS] received message:', message);
+                if (!message || message.source !== 'xscraper-content' || message.requestId !== requestId) return;
+                if (message.action !== 'exportResponse') return;
+                clearTimeout(timeout);
+                window.removeEventListener('message', handler);
+                console.log('[XSCRAPER_HEAVENS] export response received');
+                resolve(message.result);
+            }
+
+            window.addEventListener('message', handler);
+            console.log('[XSCRAPER_HEAVENS] sending exportRequest');
+            window.postMessage({
+                source: 'xscraper-page',
+                action: 'exportRequest',
+                requestId
+            }, '*');
+        });
     }
 
     /* ---------------- WATCHDOG ---------------- */

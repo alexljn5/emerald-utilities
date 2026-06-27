@@ -458,7 +458,7 @@ export function registerIpcHandlers(context) {
         try {
             const modsPath = resolveModsFolder(options.modsFolder, app);
             const result = await checkModUpdates({
-                targetMCVersion: options.targetMCVersion,
+                targetMCVersion: options.targetVersion,
                 includeUnstable: Boolean(options.includeUnstable),
                 modsFolder: modsPath,
                 autoDetectMCVersion: Boolean(options.autoDetectMCVersion),

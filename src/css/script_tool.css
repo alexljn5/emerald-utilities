@@ -297,3 +297,56 @@
 #cronEnabledToggle {
     accent-color: #00ff88;
 }
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 900px) {
+    #terminalOutput {
+        height: 150px;
+    }
+
+    #scriptContent {
+        height: 150px;
+    }
+
+    .terminalToggle {
+        top: 8px;
+        right: 8px;
+        padding: 0.3rem 0.6rem;
+        font-size: clamp(0.75rem, 0.9vw, 0.85rem);
+    }
+
+    .detailPanel {
+        padding: 0.75rem;
+    }
+
+    .detailRow.ahkPathRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+@media (max-width: 600px) {
+    #terminalOutput {
+        height: 120px;
+    }
+
+    #scriptContent {
+        height: 120px;
+    }
+
+    .detailPanel {
+        padding: 0.5rem;
+    }
+
+    .detailPanelActions {
+        flex-direction: column;
+    }
+
+    .detailActions {
+        flex-direction: column;
+    }
+
+    .scriptListItem {
+        padding: 0.3rem 0.4rem;
+    }
+}

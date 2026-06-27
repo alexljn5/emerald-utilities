@@ -7,6 +7,7 @@ import TheAI from './pages/TheAI.jsx';
 import About from './pages/About.jsx';
 import ModUpdater from './pages/ModUpdater.jsx';
 import Settings from './pages/Settings.jsx';
+import Internet from './pages/Internet.jsx';
 import './css/globals.css';
 
 const pages = {
@@ -16,7 +17,8 @@ const pages = {
     modUpdater: ModUpdater,
     ai: TheAI,
     about: About,
-    settings: Settings
+    settings: Settings,
+    internet: Internet
 };
 
 function App() {

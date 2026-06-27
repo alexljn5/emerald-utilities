@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, dialog, screen } from 'electron';
+import { app, BrowserWindow, BrowserView, Tray, Menu, ipcMain, dialog, screen } from 'electron';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
 import fs from 'fs';
@@ -71,6 +71,8 @@ function killChildProcess(child, label = 'child process') {
 // ==================== WINDOW CREATION ====================
 let tray = null;
 let mainWindow = null;
+const browserViews = new Map(); // tabId -> BrowserView
+let activeTabId = null;
 const scriptRunners = new Map();
 const cronJobs = new Map();
 const scriptLogHistory = [];
@@ -937,7 +939,209 @@ app.on('before-quit', () => {
     for (const file of Array.from(cronJobs.keys())) {
         stopCronJob(file);
     }
+
+    destroyBrowserView();
 });
+
+// ==================== BROWSER VIEW (INTERNET) ====================
+function destroyAllBrowserViews() {
+    for (const [tabId, view] of browserViews.entries()) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+                mainWindow.removeBrowserView(view);
+            } catch (err) {
+                // View might already be removed
+            }
+        }
+        try {
+            view.webContents.destroy();
+        } catch (err) {
+            // Already destroyed
+        }
+        browserViews.delete(tabId);
+    }
+    activeTabId = null;
+}
+
+// Audio detection script injected into each BrowserView
+const AUDIO_DETECTION_SCRIPT = `
+    (function() {
+        if (window.__emeraldAudioInjected) return;
+        window.__emeraldAudioInjected = true;
+        window.__emeraldAudioData = { isPlaying: false, frequencies: new Uint8Array(128) };
+
+        let audioContext = null;
+        let analyser = null;
+        let source = null;
+
+        function setupAudio() {
+            if (audioContext) return;
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.connect(audioContext.destination);
+                console.log('[Emerald Audio] AudioContext created');
+
+                // Monitor for audio/video elements
+                document.addEventListener('play', function(e) {
+                    if (e.target.tagName === 'AUDIO' || e.target.tagName === 'VIDEO') {
+                        console.log('[Emerald Audio] Element playing:', e.target.tagName, e.target.src);
+                        connectElement(e.target);
+                    }
+                }, true);
+
+                document.addEventListener('pause', function(e) {
+                    if (e.target.tagName === 'AUDIO' || e.target.tagName === 'VIDEO') {
+                        console.log('[Emerald Audio] Element paused:', e.target.tagName);
+                    }
+                }, true);
+
+                // Connect existing elements
+                document.querySelectorAll('audio, video').forEach(function(el) {
+                    console.log('[Emerald Audio] Found existing element:', el.tagName, el.src, 'paused:', el.paused);
+                    if (!el.paused) connectElement(el);
+                });
+            } catch (err) {
+                console.error('[Emerald Audio] Setup failed:', err);
+            }
+        }
+
+        function connectElement(el) {
+            if (!audioContext) setupAudio();
+            if (!audioContext || !analyser) return;
+            try {
+                if (source) {
+                    try { source.disconnect(); } catch(e) {}
+                }
+                source = audioContext.createMediaElementSource(el);
+                source.connect(analyser);
+                window.__emeraldAudioData.isPlaying = true;
+                console.log('[Emerald Audio] Connected element to analyser');
+            } catch (err) {
+                console.error('[Emerald Audio] Failed to connect element:', err.message);
+            }
+        }
+
+        // Poll for audio state
+        setInterval(function() {
+            if (!analyser) {
+                window.__emeraldAudioData.isPlaying = false;
+                return;
+            }
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(data);
+            window.__emeraldAudioData.frequencies = data;
+            const hasAudio = data.some(v => v > 0);
+            window.__emeraldAudioData.isPlaying = hasAudio;
+            if (hasAudio) {
+                console.log('[Emerald Audio] Audio detected, max freq:', Math.max(...data));
+            }
+        }, 100);
+    })();
+`;
+
+function createBrowserViewForTab(tabId, bounds, url = 'https://www.google.com') {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+
+    // Destroy existing view for this tab if any
+    if (browserViews.has(tabId)) {
+        const existing = browserViews.get(tabId);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+                mainWindow.removeBrowserView(existing);
+            } catch (err) { }
+        }
+        try {
+            existing.webContents.destroy();
+        } catch (err) { }
+        browserViews.delete(tabId);
+    }
+
+    const view = new BrowserView({
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            audioCapture: true
+        }
+    });
+
+    view.setBounds(bounds);
+    view.webContents.loadURL(url);
+
+    // Inject audio detection script after page loads
+    view.webContents.on('did-finish-load', () => {
+        view.webContents.executeJavaScript(AUDIO_DETECTION_SCRIPT).catch(() => { });
+    });
+
+    browserViews.set(tabId, view);
+
+    return view;
+}
+
+function showBrowserView(tabId, bounds) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    // Hide currently active view
+    if (activeTabId && browserViews.has(activeTabId)) {
+        try {
+            mainWindow.removeBrowserView(browserViews.get(activeTabId));
+        } catch (err) { }
+    }
+
+    // Ensure view exists for this tab
+    if (!browserViews.has(tabId)) {
+        createBrowserViewForTab(tabId, bounds);
+    }
+
+    const view = browserViews.get(tabId);
+    view.setBounds(bounds);
+    mainWindow.addBrowserView(view);
+    activeTabId = tabId;
+}
+
+function hideBrowserView() {
+    if (activeTabId && browserViews.has(activeTabId) && mainWindow && !mainWindow.isDestroyed()) {
+        try {
+            mainWindow.removeBrowserView(browserViews.get(activeTabId));
+        } catch (err) { }
+    }
+    activeTabId = null;
+}
+
+function navigateBrowserView(tabId, url) {
+    const view = browserViews.get(tabId);
+    if (view && !view.webContents.isDestroyed()) {
+        view.webContents.loadURL(url);
+    }
+}
+
+function closeBrowserViewTab(tabId) {
+    if (browserViews.has(tabId)) {
+        const view = browserViews.get(tabId);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+                mainWindow.removeBrowserView(view);
+            } catch (err) { }
+        }
+        try {
+            view.webContents.destroy();
+        } catch (err) { }
+        browserViews.delete(tabId);
+    }
+    if (activeTabId === tabId) {
+        activeTabId = null;
+    }
+}
+
+function getActiveTabId() {
+    return activeTabId;
+}
+
+function getBrowserViewTabs() {
+    return Array.from(browserViews.keys());
+}
 
 registerIpcHandlers({
     app,
@@ -979,7 +1183,15 @@ registerIpcHandlers({
         networkCaptureProcess = value;
     },
     applyWindowUi,
-    getDialogParentWindow: () => mainWindow
+    getDialogParentWindow: () => mainWindow,
+    showBrowserView,
+    hideBrowserView,
+    navigateBrowserView,
+    createBrowserViewForTab,
+    closeBrowserViewTab,
+    getActiveTabId,
+    getBrowserViewTabs,
+    browserViews
 });
 
 export { PRODUCTION };

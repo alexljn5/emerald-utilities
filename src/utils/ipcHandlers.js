@@ -507,4 +507,154 @@ export function registerIpcHandlers(context) {
     function ensureConfigEntries(files) {
         return context.ensureConfigEntries(files);
     }
+
+    ipcMain.handle('internet:show', async (_event, bounds = {}) => {
+        try {
+            context.showBrowserView(bounds);
+            return { ok: true };
+        } catch (err) {
+            console.error('[Internet] Failed to show browser:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('internet:hide', async () => {
+        try {
+            context.hideBrowserView();
+            return { ok: true };
+        } catch (err) {
+            console.error('[Internet] Failed to hide browser:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('internet:navigate', async (_event, options = {}) => {
+        try {
+            const url = typeof options === 'string' ? options : options.url;
+            const tabId = typeof options === 'object' ? options.tabId : null;
+            if (tabId) {
+                context.navigateBrowserView(tabId, url);
+            } else {
+                // Fallback to active tab
+                const activeId = context.getActiveTabId();
+                if (activeId) {
+                    context.navigateBrowserView(activeId, url);
+                }
+            }
+            return { ok: true };
+        } catch (err) {
+            console.error('[Internet] Failed to navigate:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    // ==================== TABS ====================
+    ipcMain.handle('internet:create-tab', async (_event, options = {}) => {
+        try {
+            const tabId = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const url = options.url || 'https://www.google.com';
+            const bounds = options.bounds || { x: 0, y: 0, width: 800, height: 600 };
+            context.createBrowserViewForTab(tabId, bounds, url);
+            return { ok: true, tabId };
+        } catch (err) {
+            console.error('[Internet] Failed to create tab:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('internet:close-tab', async (_event, tabId) => {
+        try {
+            context.closeBrowserViewTab(tabId);
+            return { ok: true };
+        } catch (err) {
+            console.error('[Internet] Failed to close tab:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('internet:switch-tab', async (_event, options = {}) => {
+        try {
+            const { tabId, bounds } = options;
+            context.showBrowserView(tabId, bounds);
+            return { ok: true };
+        } catch (err) {
+            console.error('[Internet] Failed to switch tab:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('internet:get-tabs', async () => {
+        try {
+            const tabs = context.getBrowserViewTabs();
+            const activeTabId = context.getActiveTabId();
+            return { ok: true, tabs, activeTabId };
+        } catch (err) {
+            console.error('[Internet] Failed to get tabs:', err);
+            return { ok: false, error: err.message, tabs: [], activeTabId: null };
+        }
+    });
+
+    // ==================== EXTENSIONS ====================
+    ipcMain.handle('internet:inject-script', async (_event, options = {}) => {
+        try {
+            const { tabId, script } = options;
+            const view = context.browserViews?.get(tabId);
+            if (view && !view.webContents.isDestroyed()) {
+                view.webContents.executeJavaScript(script);
+                return { ok: true };
+            }
+            return { ok: false, error: 'Tab not found' };
+        } catch (err) {
+            console.error('[Internet] Failed to inject script:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('internet:inject-css', async (_event, options = {}) => {
+        try {
+            const { tabId, css } = options;
+            const view = context.browserViews?.get(tabId);
+            if (view && !view.webContents.isDestroyed()) {
+                view.webContents.insertCSS(css);
+                return { ok: true };
+            }
+            return { ok: false, error: 'Tab not found' };
+        } catch (err) {
+            console.error('[Internet] Failed to inject CSS:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    // ==================== AUDIO / SOUNDWAVE ====================
+    ipcMain.handle('internet:get-audio-levels', async (_event, tabId) => {
+        try {
+            const view = context.browserViews?.get(tabId);
+            if (!view) {
+                console.log('[Internet Audio] No view for tab:', tabId);
+                return { ok: true, isPlaying: false, frequencies: [] };
+            }
+            if (view.webContents.isDestroyed()) {
+                console.log('[Internet Audio] View destroyed for tab:', tabId);
+                return { ok: true, isPlaying: false, frequencies: [] };
+            }
+
+            const result = await view.webContents.executeJavaScript(`
+                (function() {
+                    const data = window.__emeraldAudioData;
+                    if (!data) return { isPlaying: false, frequencies: new Uint8Array(128), hasData: false };
+                    return {
+                        isPlaying: data.isPlaying,
+                        frequencies: Array.from(data.frequencies || new Uint8Array(128)),
+                        hasData: true
+                    };
+                })()
+            `);
+
+            console.log('[Internet Audio] Tab:', tabId, 'isPlaying:', result?.isPlaying, 'hasData:', result?.hasData);
+            return { ok: true, isPlaying: result?.isPlaying || false, frequencies: result?.frequencies || [] };
+        } catch (err) {
+            console.error('[Internet] Failed to get audio levels:', err);
+            return { ok: false, error: err.message, isPlaying: false, frequencies: [] };
+        }
+    });
 }

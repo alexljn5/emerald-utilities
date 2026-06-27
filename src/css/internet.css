@@ -1,0 +1,252 @@
+/* ==================== INTERNET PAGE ==================== */
+.internetBrowserContainer {
+    width: 100%;
+    height: 100%;
+    background: var(--color-surface);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.internetAddressBar {
+    display: flex;
+    gap: clamp(0.4rem, 0.8vw, 0.75rem);
+    width: 100%;
+}
+
+.internetAddressBar input {
+    flex: 1;
+    padding: clamp(0.5rem, 1vw, 0.75rem) clamp(0.75rem, 1.5vw, 1.25rem);
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(1rem, 1.4vw, 1.3rem);
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    outline: none;
+    min-width: 0;
+}
+
+.internetAddressBar input:focus {
+    border-color: var(--color-accent);
+}
+
+.internetAddressBar button {
+    padding: clamp(0.5rem, 1vw, 0.75rem) clamp(0.75rem, 1.5vw, 1.25rem);
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(1rem, 1.4vw, 1.3rem);
+    color: var(--color-text);
+    background: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.internetAddressBar button:hover {
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+}
+
+/* ==================== TABS ==================== */
+.internetTabs {
+    display: flex;
+    gap: clamp(0.2rem, 0.4vw, 0.5rem);
+    margin-top: clamp(0.4rem, 0.8vw, 0.75rem);
+    flex-wrap: wrap;
+}
+
+.internetTab {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    padding: clamp(0.3rem, 0.6vw, 0.5rem) clamp(0.5rem, 1vw, 0.75rem);
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(0.8rem, 1.1vw, 1rem);
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    max-width: 150px;
+}
+
+.internetTab:hover {
+    background: var(--color-surface-hover);
+    border-color: var(--color-accent);
+}
+
+.internetTab.active {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+}
+
+.internetTabTitle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.internetTabClose {
+    background: none;
+    border: none;
+    color: var(--color-text);
+    font-size: clamp(1rem, 1.4vw, 1.3rem);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.internetTabClose:hover {
+    opacity: 1;
+}
+
+.internetTabNew {
+    padding: clamp(0.3rem, 0.6vw, 0.5rem) clamp(0.5rem, 1vw, 0.75rem);
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(0.8rem, 1.1vw, 1rem);
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.internetTabNew:hover {
+    background: var(--color-surface-hover);
+    border-color: var(--color-accent);
+}
+
+/* ==================== EXTENSIONS ==================== */
+.internetExtensions {
+    margin-top: clamp(0.4rem, 0.8vw, 0.75rem);
+}
+
+.internetExtensionsToggle {
+    width: 100%;
+    padding: clamp(0.4rem, 0.8vw, 0.6rem) clamp(0.75rem, 1.5vw, 1.25rem);
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(0.9rem, 1.2vw, 1.1rem);
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.internetExtensionsToggle:hover {
+    background: var(--color-surface-hover);
+    border-color: var(--color-accent);
+}
+
+.internetExtensionsList {
+    margin-top: clamp(0.3rem, 0.5vw, 0.5rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+}
+
+.internetExtensionItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    padding: clamp(0.3rem, 0.6vw, 0.5rem);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.internetExtensionItem label {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    font-size: clamp(0.8rem, 1.1vw, 1rem);
+    cursor: pointer;
+    flex: 1;
+}
+
+.internetExtensionItem button {
+    background: none;
+    border: none;
+    color: var(--color-text);
+    font-size: clamp(1rem, 1.4vw, 1.3rem);
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 0;
+}
+
+.internetExtensionItem button:hover {
+    opacity: 1;
+}
+
+.internetExtensionAdd {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    margin-top: clamp(0.3rem, 0.5vw, 0.5rem);
+}
+
+.internetExtensionAdd textarea {
+    width: 100%;
+    padding: clamp(0.4rem, 0.8vw, 0.6rem);
+    font-family: monospace;
+    font-size: clamp(0.7rem, 1vw, 0.9rem);
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    resize: vertical;
+    min-height: 60px;
+}
+
+.internetExtensionAdd textarea:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.internetExtensionAdd button {
+    padding: clamp(0.4rem, 0.8vw, 0.6rem);
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(0.9rem, 1.2vw, 1.1rem);
+    color: var(--color-text);
+    background: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.internetExtensionAdd button:hover {
+    background: var(--color-accent-hover);
+}
+
+/* ==================== SOUNDWAVE ==================== */
+.internetSoundwave {
+    margin-top: clamp(0.4rem, 0.8vw, 0.75rem);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(0.2rem, 0.4vw, 0.5rem);
+}
+
+.soundwaveCanvas {
+    width: 100%;
+    height: 60px;
+    border-radius: 6px;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+}
+
+.soundwaveLabel {
+    font-family: 'pixelSans', Arial, sans-serif;
+    font-size: clamp(0.7rem, 1vw, 0.9rem);
+    color: var(--color-text);
+    opacity: 0.7;
+}

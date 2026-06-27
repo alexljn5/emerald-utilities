@@ -183,7 +183,7 @@ export function registerXScraperIpcHandlers(context) {
     });
 
     // Export data from extension IndexedDB to filesystem
-    ipcMain.handle('xscraper:export-data', async (_event, exportData) => {
+    ipcMain.handle('xscraper:export-data', async (_event, exportData, filename) => {
         try {
             if (!exportData || typeof exportData !== 'object') {
                 return { success: false, error: 'No export data provided' };
@@ -196,13 +196,13 @@ export function registerXScraperIpcHandlers(context) {
             }
 
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const filename = `grok_export_${timestamp}_${exportData.totalMessages || 0}msgs.json`;
-            const filepath = path.join(exportDir, filename);
+            const finalFilename = filename || `grok_export_${timestamp}_${exportData.totalMessages || 0}msgs.json`;
+            const filepath = path.join(exportDir, finalFilename);
 
             writeFileSync(filepath, JSON.stringify(exportData, null, 2), 'utf8');
 
             pushScriptLog(`[XScraper] Exported ${exportData.totalMessages || 0} messages to ${filepath}`);
-            return { success: true, filepath, filename };
+            return { success: true, filepath, filename: finalFilename };
         } catch (err) {
             console.error('[XScraper] Export error:', err);
             return { success: false, error: err.message };

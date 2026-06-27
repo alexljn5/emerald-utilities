@@ -32,6 +32,7 @@
             scrapeAll,
             scrape,
             exportAsJSON,
+            exportIncrementalJSON,
             restart: () => {
                 startObserver();
                 forceScroll();
@@ -170,6 +171,37 @@
                 source: 'xscraper-page',
                 action: 'exportRequest',
                 requestId
+            }, '*');
+        });
+    }
+
+    async function exportIncrementalJSON(since) {
+        console.log('[XSCRAPER_HEAVENS] exportIncrementalJSON called, since:', since);
+        return new Promise((resolve, reject) => {
+            const requestId = `export-inc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const timeout = setTimeout(() => {
+                window.removeEventListener('message', handler);
+                console.error('[XSCRAPER_HEAVENS] incremental export timed out');
+                reject(new Error('Incremental export timed out'));
+            }, 15000);
+
+            function handler(event) {
+                if (event.source !== window) return;
+                const message = event.data;
+                if (!message || message.source !== 'xscraper-content' || message.requestId !== requestId) return;
+                if (message.action !== 'exportIncrementalResponse') return;
+                clearTimeout(timeout);
+                window.removeEventListener('message', handler);
+                console.log('[XSCRAPER_HEAVENS] incremental export response received, messages:', message.result?.data?.messages?.length);
+                resolve(message.result);
+            }
+
+            window.addEventListener('message', handler);
+            window.postMessage({
+                source: 'xscraper-page',
+                action: 'exportIncrementalRequest',
+                requestId,
+                since
             }, '*');
         });
     }

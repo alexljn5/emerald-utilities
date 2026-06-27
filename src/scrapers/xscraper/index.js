@@ -31,9 +31,9 @@ export function getDefaultPages() {
     ];
 }
 
-export async function exportData(exportData) {
+export async function exportData(exportData, filename) {
     try {
-        const result = await invoke('xscraper:export-data', exportData);
+        const result = await invoke('xscraper:export-data', exportData, filename);
         return result;
     } catch (err) {
         console.error('[XScraper] exportData error:', err);
@@ -99,6 +99,29 @@ export async function stopRealtimeCrawler(webview) {
         return { success: true };
     } catch (err) {
         console.error('[XScraper] stopRealtimeCrawler error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+export async function exportIncremental(webview, since) {
+    try {
+        if (!webview) {
+            return { success: false, error: 'No webview' };
+        }
+        if (typeof since !== 'number') {
+            return { success: false, error: 'Invalid since parameter' };
+        }
+        const result = await webview.executeJavaScript(`
+            (function() {
+                if (window.__grokScraper && typeof window.__grokScraper.exportIncrementalJSON === 'function') {
+                    return window.__grokScraper.exportIncrementalJSON(${since});
+                }
+                return { success: false, error: 'Incremental export not available' };
+            })()
+        `);
+        return result;
+    } catch (err) {
+        console.error('[XScraper] exportIncremental error:', err);
         return { success: false, error: err.message };
     }
 }

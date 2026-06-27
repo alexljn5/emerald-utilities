@@ -25,6 +25,9 @@ window.addEventListener('message', (event) => {
     } else if (message.action === 'exportRequest') {
         console.log('[XSCRAPER_CONTENT] exportRequest received:', message.requestId);
         handleExportRequest(message);
+    } else if (message.action === 'exportIncrementalRequest') {
+        console.log('[XSCRAPER_CONTENT] exportIncrementalRequest received:', message.requestId, 'since:', message.since);
+        handleIncrementalExportRequest(message);
     }
 });
 
@@ -46,6 +49,28 @@ async function handleExportRequest(message) {
             action: 'exportResponse',
             requestId: message.requestId,
             result: { success: false, error: err?.message || 'Export failed' }
+        }, '*');
+    }
+}
+
+async function handleIncrementalExportRequest(message) {
+    try {
+        console.log('[XSCRAPER_CONTENT] sending exportIncrementalData to background, since:', message.since);
+        const result = await chrome.runtime.sendMessage({ action: 'exportIncrementalData', since: message.since });
+        console.log('[XSCRAPER_CONTENT] exportIncrementalData response:', result);
+        window.postMessage({
+            source: 'xscraper-content',
+            action: 'exportIncrementalResponse',
+            requestId: message.requestId,
+            result
+        }, '*');
+    } catch (err) {
+        console.error('[XSCRAPER_CONTENT] exportIncrementalData error:', err);
+        window.postMessage({
+            source: 'xscraper-content',
+            action: 'exportIncrementalResponse',
+            requestId: message.requestId,
+            result: { success: false, error: err?.message || 'Incremental export failed' }
         }, '*');
     }
 }

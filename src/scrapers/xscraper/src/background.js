@@ -320,6 +320,30 @@ async function handleExportData() {
 }
 
 /**
+ * Incremental export (only messages saved after `since` timestamp)
+ */
+async function handleIncrementalExport(since = 0) {
+    if (!localDb) await initializeLocalDatabase();
+
+    return new Promise((resolve, reject) => {
+        const tx = localDb.transaction(['messages'], 'readonly');
+        const store = tx.objectStore('messages');
+        const req = store.getAll();
+
+        req.onsuccess = () => {
+            const newMessages = req.result.filter(m => (m.savedAt || 0) > since);
+            resolve({
+                version: '1.0',
+                exportDate: new Date().toISOString(),
+                messages: newMessages
+            });
+        };
+
+        req.onerror = () => reject(req.error);
+    });
+}
+
+/**
  * Init DB
  */
 chrome.runtime.onInstalled.addListener(() => {

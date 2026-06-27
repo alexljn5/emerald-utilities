@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import PageShell from './PageShell.jsx';
 import { invoke } from '../js/electronApi.js';
-import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler } from '../scrapers/xscraper/index.js';
+import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler, exportIncremental } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 import '../css/internet.css';
 
@@ -27,6 +27,8 @@ export default function Internet({ route, setRoute }) {
     const browserViewRef = useRef(null);
     const webviewRef = useRef(null);
     const realtimeIntervalRef = useRef(null);
+    const lastAutoExportRef = useRef(0);
+    const lastExportTimestampRef = useRef(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -80,7 +82,7 @@ export default function Internet({ route, setRoute }) {
         };
     }, [partition]);
 
-    // Real-time stats polling
+    // Real-time stats polling + auto-export
     useEffect(() => {
         if (!isRealtime || !webviewReady) {
             if (realtimeIntervalRef.current) {
@@ -99,6 +101,28 @@ export default function Internet({ route, setRoute }) {
                         ...prev,
                         messages: result.stats.seen || prev.messages
                     }));
+
+                    // Auto-export all messages every 5 seconds to a live file
+                    const now = Date.now();
+                    if (now - lastAutoExportRef.current > 5000 && webviewRef.current) {
+                        lastAutoExportRef.current = now;
+                        const exportResult = await webviewRef.current.executeJavaScript(`
+                            (function() {
+                                if (window.__grokScraper && typeof window.__grokScraper.exportAsJSON === 'function') {
+                                    return window.__grokScraper.exportAsJSON();
+                                }
+                                return { success: false, error: 'Export not available' };
+                            })()
+                        `);
+                        if (exportResult?.success && exportResult.data) {
+                            const fsResult = await exportData(exportResult.data, 'grok_export_live.json');
+                            if (fsResult?.success) {
+                                setScraperStatus(`Live export updated (${exportResult.data.totalMessages || 0} messages)`);
+                            } else {
+                                console.error('Auto-export failed:', fsResult?.error);
+                            }
+                        }
+                    }
                 }
             } catch (err) {
                 console.error('Real-time stats poll error:', err);

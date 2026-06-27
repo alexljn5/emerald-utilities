@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import PageShell from './PageShell.jsx';
 import { invoke } from '../js/electronApi.js';
 import { checkFirefoxInstalled, launchFirefox, getDefaultPages } from '../scrapers/xscraper/index.js';
-import emeraldFavicon from '../../img/favicons/favicon.png';
+import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 import '../css/internet.css';
 
 const DEFAULT_PAGES = [
@@ -93,8 +93,16 @@ export default function Internet({ route, setRoute }) {
                 const { width, height } = browserView.getBoundingClientRect();
                 if (width <= 0 || height <= 0) return;
 
-                webview.style.width = `${Math.floor(width)}px`;
-                webview.style.height = `${Math.floor(height)}px`;
+                const pixelWidth = Math.floor(width);
+                const pixelHeight = Math.floor(height);
+
+                webview.setAttribute('autosize', 'on');
+                webview.setAttribute('minwidth', String(pixelWidth));
+                webview.setAttribute('minheight', String(pixelHeight));
+                webview.setAttribute('maxwidth', String(pixelWidth));
+                webview.setAttribute('maxheight', String(pixelHeight));
+                webview.style.width = `${pixelWidth}px`;
+                webview.style.height = `${pixelHeight}px`;
             });
         };
 
@@ -240,7 +248,7 @@ export default function Internet({ route, setRoute }) {
             <div className="navBox">
                 <h2>XScraper</h2>
                 <div className="xscraper-icon-container">
-                    <img src={emeraldFavicon} alt="XScraper" className="xscraper-icon" width="48" height="48" />
+                    <img src={xscraperLogo} alt="XScraper" className="xscraper-icon" width="64" height="64" />
                 </div>
                 <div className="xscraper-status">
                     <span className={`status-indicator ${firefoxReady ? 'ready' : 'error'}`}>

@@ -17,10 +17,10 @@
 
 .status-indicator {
     display: inline-block;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
+    padding: 8px 20px;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 600;
 }
 
 .status-indicator.ready {
@@ -38,8 +38,8 @@
 .xscraper-stats {
     display: flex;
     justify-content: space-around;
-    padding: 8px 16px;
-    font-size: 11px;
+    padding: 12px 16px;
+    font-size: 18px;
     color: #888;
     border-bottom: 1px solid #2a0000;
     margin-bottom: 10px;
@@ -50,9 +50,9 @@
 }
 
 .page-selector h3 {
-    font-size: 12px;
+    font-size: 20px;
     color: #2aff2a;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
 }
 
 .page-buttons {
@@ -64,8 +64,8 @@
 .page-btn {
     flex: 1;
     min-width: 60px;
-    padding: 6px;
-    font-size: 11px;
+    padding: 10px;
+    font-size: 16px;
     background: #120000;
     color: #4dff4d;
     border: 1px solid #2a0000;
@@ -139,8 +139,8 @@
 }
 
 .browser-tab {
-    padding: 6px 12px;
-    font-size: 12px;
+    padding: 10px 18px;
+    font-size: 16px;
     background: #0a0000;
     color: #888;
     border: 1px solid #2a0000;
@@ -168,8 +168,8 @@
 
 .address-input {
     flex: 1;
-    padding: 8px;
-    font-size: 12px;
+    padding: 10px;
+    font-size: 16px;
     background: #050000;
     color: #ddd;
     border: 1px solid #2a0000;
@@ -182,8 +182,8 @@
 }
 
 .go-btn {
-    padding: 8px 16px;
-    font-size: 12px;
+    padding: 10px 20px;
+    font-size: 16px;
     background: #003a00;
     color: #2aff2a;
     border: 1px solid #2aff2a;

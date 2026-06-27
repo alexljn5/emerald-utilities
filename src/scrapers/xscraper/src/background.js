@@ -141,6 +141,14 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                     break;
                 }
 
+                case 'exportIncrementalData': {
+                    console.log('[XSCRAPER_BACKGROUND] exportIncrementalData requested, since:', req.since);
+                    const data = await handleIncrementalExport(req.since);
+                    console.log('[XSCRAPER_BACKGROUND] exportIncrementalData response ready, new messages:', data.messages.length);
+                    sendResponse({ success: true, data });
+                    break;
+                }
+
                 default:
                     sendResponse({ success: false, error: 'Unknown action' });
             }

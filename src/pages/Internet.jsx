@@ -102,7 +102,7 @@ export default function Internet({ route, setRoute }) {
                         messages: result.stats.seen || prev.messages
                     }));
 
-                    // Auto-export all messages every 5 seconds to a live file
+                    // Auto-export all messages every 5 seconds to live files (one per conversation)
                     const now = Date.now();
                     if (now - lastAutoExportRef.current > 5000 && webviewRef.current) {
                         lastAutoExportRef.current = now;
@@ -115,9 +115,10 @@ export default function Internet({ route, setRoute }) {
                             })()
                         `);
                         if (exportResult?.success && exportResult.data) {
-                            const fsResult = await exportData(exportResult.data, 'grok_export_live.json');
+                            const fsResult = await exportData(exportResult.data, 'grok_export_live');
                             if (fsResult?.success) {
-                                setScraperStatus(`Live export updated (${exportResult.data.totalMessages || 0} messages)`);
+                                const count = fsResult.files ? fsResult.files.length : 1;
+                                setScraperStatus(`Live export updated (${count} conversation files)`);
                             } else {
                                 console.error('Auto-export failed:', fsResult?.error);
                             }
@@ -360,7 +361,11 @@ export default function Internet({ route, setRoute }) {
                 // Write to filesystem via main process
                 const fsResult = await exportData(exportResult.data);
                 if (fsResult?.success) {
-                    setScraperStatus(`Exported to ${fsResult.filename}`);
+                    if (fsResult.files && fsResult.files.length > 1) {
+                        setScraperStatus(`Exported ${fsResult.files.length} conversations to database/grok/`);
+                    } else {
+                        setScraperStatus(`Exported to ${fsResult.filename}`);
+                    }
                 } else {
                     setError(fsResult?.error || 'Failed to write export to filesystem');
                 }

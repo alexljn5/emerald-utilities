@@ -20,6 +20,7 @@
         startObserver();
         startFlush();
         startWatchdog();
+        startMessageBridge();
         // NOTE: do NOT auto-start the crawler on page load. The crawler should
         // only run when manually triggered (via popup button or explicit API).
 
@@ -178,12 +179,48 @@
 
             const batch = queue.splice(0, 30);
 
-            chrome.runtime.sendMessage({
+            if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                chrome.runtime.sendMessage({
+                    action: 'saveMessages',
+                    messages: batch
+                }).catch(() => { });
+                return;
+            }
+
+            window.postMessage({
+                source: 'xscraper-page',
                 action: 'saveMessages',
                 messages: batch
-            }).catch(() => { });
+            }, '*');
 
         }, 1200);
+    }
+
+    function startMessageBridge() {
+        window.addEventListener('message', async (event) => {
+            if (event.source !== window) return;
+
+            const message = event.data;
+            if (!message || message.source !== 'xscraper-content') return;
+            if (message.action !== 'scrapeMessages') return;
+
+            try {
+                const result = await scrapeAll();
+                window.postMessage({
+                    source: 'xscraper-page',
+                    action: 'scrapeResponse',
+                    requestId: message.requestId,
+                    result
+                }, '*');
+            } catch (err) {
+                window.postMessage({
+                    source: 'xscraper-page',
+                    action: 'scrapeResponse',
+                    requestId: message.requestId,
+                    result: { success: false, error: err?.message || 'Scraper failed' }
+                }, '*');
+            }
+        });
     }
 
     /* ---------------- SCROLL FINDER ---------------- */

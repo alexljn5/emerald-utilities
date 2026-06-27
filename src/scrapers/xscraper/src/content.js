@@ -1,11 +1,32 @@
-// Content script - communicates between extension and heavensgate.js
+// Content script - bridges the page scraper and the extension background.
 
 console.log('[XSCRAPER_CONTENT] XScraper content script loaded');
+
+function injectPageScraper() {
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL('src/heavensgate.js');
+    script.onload = () => script.remove();
+    (document.head || document.documentElement).appendChild(script);
+}
+
+injectPageScraper();
+
+window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+
+    const message = event.data;
+    if (!message || message.source !== 'xscraper-page' || message.action !== 'saveMessages') return;
+
+    chrome.runtime.sendMessage({
+        action: 'saveMessages',
+        messages: Array.isArray(message.messages) ? message.messages : []
+    }).catch(() => { });
+});
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'scrapeMessages') {
-        scrapeViaScraper().then(result => {
+        requestPageScrape().then(result => {
             sendResponse(result);
         }).catch(error => {
             sendResponse({ success: false, error: error.message });
@@ -15,25 +36,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 /**
- * Communicate with heavensgate.js scraper in page context
+ * Communicate with heavensgate.js scraper in the page context.
  */
-async function scrapeViaScraper() {
-    // Wait briefly for heavensgate.js to be injected/initialized in the page context.
-    await new Promise(r => setTimeout(r, 100));
+async function requestPageScrape() {
+    const requestId = `xscraper-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-    if (!window.__grokScraper) {
-        throw new Error('Scraper not available');
-    }
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            window.removeEventListener('message', handleResponse);
+            reject(new Error('Scraper timed out'));
+        }, 15000);
 
-    if (typeof window.__grokScraper.scrapeAll === 'function') {
-        return await window.__grokScraper.scrapeAll();
-    }
+        function handleResponse(event) {
+            if (event.source !== window) return;
 
-    if (typeof window.__grokScraper.scrape === 'function') {
-        return window.__grokScraper.scrape();
-    }
+            const message = event.data;
+            if (!message || message.source !== 'xscraper-page' || message.requestId !== requestId) return;
+            if (message.action !== 'scrapeResponse') return;
 
-    throw new Error('Scraper not available');
+            clearTimeout(timeout);
+            window.removeEventListener('message', handleResponse);
+            resolve(message.result);
+        }
+
+        window.addEventListener('message', handleResponse);
+        window.postMessage({
+            source: 'xscraper-content',
+            action: 'scrapeMessages',
+            requestId
+        }, '*');
+    });
 }
 
 console.log('[XSCRAPER_CONTENT] Ready to communicate with heavensgate.js');

@@ -5,6 +5,7 @@ import { execSync } from 'child_process';
 
 // Firefox browser windows tracking
 const firefoxWindows = new Map();
+const loadedExtensionPartitions = new Set();
 
 export function registerXScraperIpcHandlers(context) {
     const { ipcMain, app, getDialogParentWindow, pushScriptLog } = context;
@@ -81,18 +82,24 @@ export function registerXScraperIpcHandlers(context) {
                 return { success: false, error: 'Firefox is not installed' };
             }
 
-            // Create a persistent session for the webview with the extension loaded
-            const partition = `xscraper-${Date.now()}`;
+            // Persistent partitions are required for extension loading and keep login cookies.
+            const partition = 'persist:xscraper';
             const browserSession = session.fromPartition(partition);
 
             // Load the XScraper extension into the session
-            if (extensionPath) {
+            if (extensionPath && !loadedExtensionPartitions.has(partition)) {
                 try {
                     const absoluteExtensionPath = path.join(app.getAppPath(), extensionPath);
-                    await browserSession.loadExtension(absoluteExtensionPath);
+                    if (browserSession.extensions?.loadExtension) {
+                        await browserSession.extensions.loadExtension(absoluteExtensionPath);
+                    } else {
+                        await browserSession.loadExtension(absoluteExtensionPath);
+                    }
+                    loadedExtensionPartitions.add(partition);
                     console.log('[XScraper] Extension loaded into partition:', absoluteExtensionPath);
                 } catch (extErr) {
                     console.error('[XScraper] Failed to load extension:', extErr);
+                    return { success: false, error: `Failed to load XScraper extension: ${extErr.message}` };
                 }
             }
 

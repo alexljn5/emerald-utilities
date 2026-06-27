@@ -191,10 +191,28 @@ export default function Internet({ route, setRoute }) {
         setScraperStatus('Scraping messages...');
         try {
             const result = await webviewRef.current.executeJavaScript(`
-                (function() {
-                    if (window.__grokScraper && typeof window.__grokScraper.scrapeAll === 'function') {
-                        return window.__grokScraper.scrapeAll();
+                (async function() {
+                    const waitForScraper = async () => {
+                        for (let attempt = 0; attempt < 50; attempt += 1) {
+                            if (window.__grokScraper) return window.__grokScraper;
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
+                        return null;
+                    };
+
+                    const scraper = await waitForScraper();
+                    if (!scraper) {
+                        return { success: false, error: 'Scraper not available' };
                     }
+
+                    if (typeof scraper.scrapeAll === 'function') {
+                        return scraper.scrapeAll();
+                    }
+
+                    if (typeof scraper.scrape === 'function') {
+                        return scraper.scrape();
+                    }
+
                     return { success: false, error: 'Scraper not available' };
                 })()
             `);

@@ -226,27 +226,3 @@
 .internetExtensionAdd button:hover {
     background: var(--color-accent-hover);
 }
-
-/* ==================== SOUNDWAVE ==================== */
-.internetSoundwave {
-    margin-top: clamp(0.4rem, 0.8vw, 0.75rem);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: clamp(0.2rem, 0.4vw, 0.5rem);
-}
-
-.soundwaveCanvas {
-    width: 100%;
-    height: 60px;
-    border-radius: 6px;
-    background: var(--color-surface);
-    border: 2px solid var(--color-border);
-}
-
-.soundwaveLabel {
-    font-family: 'pixelSans', Arial, sans-serif;
-    font-size: clamp(0.7rem, 1vw, 0.9rem);
-    color: var(--color-text);
-    opacity: 0.7;
-}

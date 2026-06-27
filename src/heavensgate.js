@@ -503,205 +503,34 @@ function logProcessOutput(data, prefix = '') {
     }
 }
 
-function setScriptRunning(file, isRunning) {
-    broadcast('script-running-changed', { file, isRunning });
-}
-
-function stopScript(file) {
-    const child = scriptRunners.get(file);
-    if (!child) return false;
-
-    scriptRunners.delete(file);
-    setScriptRunning(file, false);
-    killChildProcess(child, file);
-
-    child.once('exit', (code, signal) => {
-        pushScriptLog(`${file} stopped (${signal || code})`);
-    });
-
-    return true;
-}
-
-function stopCronJob(file) {
-    const job = cronJobs.get(file);
-    if (!job) return false;
-
-    pushScriptLog(`Stopping cron job for ${file}...`);
-    clearInterval(job.timer);
-
-    if (job.currentChild) {
-        killChildProcess(job.currentChild, `${file} cron process`);
+function startScript(file) {
+    const scriptPath = getScriptCommand(file);
+    if (!scriptPath) {
+        pushScriptLog(`Unsupported script type: ${file}`);
+        return { ok: false };
     }
 
-    cronJobs.delete(file);
-    setScriptRunning(file, false);
-    pushScriptLog(`Cron job stopped for ${file}`);
-    return true;
-}
-
-// ==================== AUTO HOTKEY DETECTION ====================
-function getAhkConfigPath() {
-    return getConfigPath();
-}
-
-function getConfiguredAhkPath() {
-    try {
-        const configPath = getAhkConfigPath();
-        if (existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            if (config.ahkPath && existsSync(config.ahkPath)) {
-                console.log(`[AHK] Using configured path: ${config.ahkPath}`);
-                return config.ahkPath;
-            }
-        }
-    } catch (e) {
-        // Ignore config read errors, fall back to auto-detect
-    }
-    return null;
-}
-
-function findAutoHotkey() {
-    // First check if user has configured a custom path
-    const configuredPath = getConfiguredAhkPath();
-    if (configuredPath) {
-        return configuredPath;
-    }
-
-    const commonPaths = [
-        'C:\\Program Files\\AutoHotkey\\AutoHotkey.exe',
-        'C:\\Program Files (x86)\\AutoHotkey\\AutoHotkey.exe',
-        path.join(process.env.LOCALAPPDATA || '', 'Programs\\AutoHotkey\\AutoHotkey.exe'),
-        path.join(process.env.ProgramFiles || '', 'AutoHotkey\\AutoHotkey.exe'),
-        path.join(process.env['ProgramFiles(x86)'] || '', 'AutoHotkey\\AutoHotkey.exe'),
-    ];
-
-    for (const p of commonPaths) {
-        if (existsSync(p)) {
-            console.log(`[AHK] Found at: ${p}`);
-            return p;
-        }
-    }
-
-    if (commandExists('AutoHotkey.exe')) {
-        console.log('[AHK] Found in PATH');
-        return 'AutoHotkey.exe';
-    }
-
-    console.warn('[AHK] AutoHotkey.exe not found');
-    return null;
-}
-
-function findPowerShell() {
-    if (process.platform === 'win32') {
-        if (commandExists('powershell.exe')) {
-            console.log('[PowerShell] Found powershell.exe in PATH');
-            return 'powershell.exe';
-        }
-
-        const windowsPowerShellPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32\\WindowsPowerShell\\v1.0\\powershell.exe');
-        if (existsSync(windowsPowerShellPath)) {
-            console.log(`[PowerShell] Found at: ${windowsPowerShellPath}`);
-            return windowsPowerShellPath;
-        }
-
-        console.warn('[PowerShell] powershell.exe not found');
-        return null;
-    }
-
-    if (commandExists('pwsh')) {
-        console.log('[PowerShell] Found pwsh in PATH');
-        return 'pwsh';
-    }
-
-    console.warn('[PowerShell] pwsh not found');
-    return null;
-}
-
-// ==================== GET SCRIPT COMMAND (Fixed) ====================
-function getScriptCommand(file, scriptPath) {
-    const ext = file.split('.').pop().toLowerCase();
-
-    switch (ext) {
-        case 'js':
-            return { command: 'node', args: [scriptPath] };
-        case 'sh': {
-            if (process.platform === 'win32') {
-                // === WINDOWS: Use WSL ===
-                let wslPath = scriptPath.replace(/\\/g, '/');
-                const driveMatch = wslPath.match(/^([A-Za-z]):\/(.*)$/);
-                if (driveMatch) {
-                    wslPath = `/mnt/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`;
-                }
-
-                return {
-                    command: 'wsl',
-                    args: ['bash', wslPath],
-                    useShell: false
-                };
-            } else {
-                // === Linux / macOS: Use native bash ===
-                return {
-                    command: 'bash',
-                    args: [scriptPath],
-                    useShell: false
-                };
-            }
-        }
-        case 'bat':
-            return { command: 'cmd.exe', args: ['/c', scriptPath] };
-        case 'ps1': {
-            const powershellPath = findPowerShell();
-            if (!powershellPath) {
-                pushScriptLog(process.platform === 'win32'
-                    ? 'PowerShell not found. Please install Windows PowerShell.'
-                    : 'PowerShell Core (pwsh) not found. Please install PowerShell.');
-                return null;
-            }
-
-            return {
-                command: powershellPath,
-                args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
-                useShell: process.platform === 'win32'
-            };
-        }
-        case 'exe':
-            return { command: scriptPath, args: [] };
-        case 'ahk': {
-            const ahkPath = findAutoHotkey();
-            if (!ahkPath) {
-                pushScriptLog('AutoHotkey.exe not found. Please install AutoHotkey.');
-                return null;
-            }
-            return { command: ahkPath, args: [scriptPath] };
-        }
-        default:
-            return null;
-    }
-}
-
-// ==================== START SCRIPT (CRITICAL FIX) ====================
-function startScript(file, scriptPath) {
-    const commandInfo = getScriptCommand(file, scriptPath);
-    if (!commandInfo) {
-        pushScriptLog('Unsupported script type or missing runtime.');
-        return { ok: false, running: false };
+    if (scriptRunners.has(file)) {
+        pushScriptLog(`${file} is already running`);
+        return { ok: false, alreadyRunning: true };
     }
 
     const isWindows = process.platform === 'win32';
+    const command = isWindows && scriptPath.command.includes(' ')
+        ? `"${scriptPath.command}"`
+        : scriptPath.command;
 
-    // Quote the command if it contains spaces (required when shell: true on Windows)
-    const command = isWindows && commandInfo.command.includes(' ')
-        ? `"${commandInfo.command}"`
-        : commandInfo.command;
+    const cwd = isWindows ? path.dirname(file).replace(/\\/g, '/') : path.dirname(file);
 
-    // Convert cwd to forward slashes on Windows for bash compatibility
-    const cwd = isWindows ? path.dirname(scriptPath).replace(/\\/g, '/') : path.dirname(scriptPath);
-
-    const child = spawn(command, commandInfo.args, {
-        shell: commandInfo.useShell !== false && isWindows,
-        windowsVerbatimArguments: true,   // Important for paths with spaces
-        cwd: cwd     // Run from script's directory
-    });
+    const child = spawn(
+        command,
+        scriptPath.args,
+        {
+            shell: scriptPath.useShell !== false && isWindows,
+            windowsVerbatimArguments: true,
+            cwd: cwd     // Run from script's directory
+        }
+    );
 
     scriptRunners.set(file, child);
     setScriptRunning(file, true);
@@ -719,6 +548,74 @@ function startScript(file, scriptPath) {
     });
 
     return { ok: true, running: true };
+}
+
+function stopScript(file) {
+    const child = scriptRunners.get(file);
+    if (!child) return { ok: false, notRunning: true };
+
+    pushScriptLog(`Stopping ${file}...`);
+    child.stdin?.destroy();
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+
+    if (child.pid) {
+        killProcessTree(child.pid);
+    } else {
+        child.kill('SIGTERM');
+    }
+
+    scriptRunners.delete(file);
+    setScriptRunning(file, false);
+    pushScriptLog(`Stopped ${file}`);
+
+    return { ok: true };
+}
+
+function getScriptCommand(file) {
+    const ext = path.extname(file).toLowerCase();
+    const isWindows = process.platform === 'win32';
+
+    switch (ext) {
+        case '.js':
+            if (commandExists('node')) {
+                return { command: 'node', args: [file], useShell: false };
+            }
+            break;
+        case '.sh':
+            if (isWindows) {
+                if (commandExists('wsl')) {
+                    const wslPath = toWslPath(file);
+                    return { command: 'wsl', args: ['bash', wslPath], useShell: false };
+                }
+            } else if (commandExists('bash')) {
+                return { command: 'bash', args: [file], useShell: false };
+            }
+            break;
+        case '.bat':
+            if (isWindows) {
+                return { command: file, args: [], useShell: true };
+            }
+            break;
+        case '.exe':
+            return { command: file, args: [], useShell: false };
+        case '.ahk':
+            if (commandExists('autohotkey')) {
+                return { command: 'autohotkey', args: [file], useShell: false };
+            }
+            break;
+        case '.ps1':
+            if (isWindows) {
+                return { command: 'powershell', args: ['-ExecutionPolicy', 'Bypass', '-File', file], useShell: false };
+            }
+            break;
+    }
+
+    return null;
+}
+
+function setScriptRunning(file, running) {
+    broadcast('script-running', { file, running });
 }
 
 function startCronScript(file, scriptPath, intervalMs) {
@@ -779,6 +676,23 @@ function startCronScript(file, scriptPath, intervalMs) {
     cronJobs.set(file, { timer, intervalMs, scriptPath });
     setScriptRunning(file, true);
     pushScriptLog(`Cron job started for ${file} (every ${intervalMs}ms)`);
+
+    return { ok: true };
+}
+
+function stopCronJob(file) {
+    const job = cronJobs.get(file);
+    if (!job) return { ok: false, notRunning: true };
+
+    clearInterval(job.timer);
+    cronJobs.delete(file);
+
+    if (job.currentChild && !job.currentChild.killed) {
+        killChildProcess(job.currentChild, `${file} cron process`);
+    }
+
+    setScriptRunning(file, false);
+    pushScriptLog(`Cron job stopped for ${file}`);
 
     return { ok: true };
 }
@@ -940,7 +854,7 @@ app.on('before-quit', () => {
         stopCronJob(file);
     }
 
-    destroyBrowserView();
+    destroyAllBrowserViews();
 });
 
 // ==================== BROWSER VIEW (INTERNET) ====================
@@ -963,83 +877,7 @@ function destroyAllBrowserViews() {
     activeTabId = null;
 }
 
-// Audio detection script injected into each BrowserView
-const AUDIO_DETECTION_SCRIPT = `
-    (function() {
-        if (window.__emeraldAudioInjected) return;
-        window.__emeraldAudioInjected = true;
-        window.__emeraldAudioData = { isPlaying: false, frequencies: new Uint8Array(128) };
 
-        let audioContext = null;
-        let analyser = null;
-        let source = null;
-
-        function setupAudio() {
-            if (audioContext) return;
-            try {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
-                analyser.connect(audioContext.destination);
-                console.log('[Emerald Audio] AudioContext created');
-
-                // Monitor for audio/video elements
-                document.addEventListener('play', function(e) {
-                    if (e.target.tagName === 'AUDIO' || e.target.tagName === 'VIDEO') {
-                        console.log('[Emerald Audio] Element playing:', e.target.tagName, e.target.src);
-                        connectElement(e.target);
-                    }
-                }, true);
-
-                document.addEventListener('pause', function(e) {
-                    if (e.target.tagName === 'AUDIO' || e.target.tagName === 'VIDEO') {
-                        console.log('[Emerald Audio] Element paused:', e.target.tagName);
-                    }
-                }, true);
-
-                // Connect existing elements
-                document.querySelectorAll('audio, video').forEach(function(el) {
-                    console.log('[Emerald Audio] Found existing element:', el.tagName, el.src, 'paused:', el.paused);
-                    if (!el.paused) connectElement(el);
-                });
-            } catch (err) {
-                console.error('[Emerald Audio] Setup failed:', err);
-            }
-        }
-
-        function connectElement(el) {
-            if (!audioContext) setupAudio();
-            if (!audioContext || !analyser) return;
-            try {
-                if (source) {
-                    try { source.disconnect(); } catch(e) {}
-                }
-                source = audioContext.createMediaElementSource(el);
-                source.connect(analyser);
-                window.__emeraldAudioData.isPlaying = true;
-                console.log('[Emerald Audio] Connected element to analyser');
-            } catch (err) {
-                console.error('[Emerald Audio] Failed to connect element:', err.message);
-            }
-        }
-
-        // Poll for audio state
-        setInterval(function() {
-            if (!analyser) {
-                window.__emeraldAudioData.isPlaying = false;
-                return;
-            }
-            const data = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(data);
-            window.__emeraldAudioData.frequencies = data;
-            const hasAudio = data.some(v => v > 0);
-            window.__emeraldAudioData.isPlaying = hasAudio;
-            if (hasAudio) {
-                console.log('[Emerald Audio] Audio detected, max freq:', Math.max(...data));
-            }
-        }, 100);
-    })();
-`;
 
 function createBrowserViewForTab(tabId, bounds, url = 'https://www.google.com') {
     if (!mainWindow || mainWindow.isDestroyed()) return null;
@@ -1062,18 +900,12 @@ function createBrowserViewForTab(tabId, bounds, url = 'https://www.google.com') 
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            sandbox: true,
-            audioCapture: true
+            sandbox: true
         }
     });
 
     view.setBounds(bounds);
     view.webContents.loadURL(url);
-
-    // Inject audio detection script after page loads
-    view.webContents.on('did-finish-load', () => {
-        view.webContents.executeJavaScript(AUDIO_DETECTION_SCRIPT).catch(() => { });
-    });
 
     browserViews.set(tabId, view);
 
@@ -1195,3 +1027,4 @@ registerIpcHandlers({
 });
 
 export { PRODUCTION };
+

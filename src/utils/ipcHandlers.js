@@ -45,7 +45,15 @@ export function registerIpcHandlers(context) {
         getNetworkCaptureProcess,
         setNetworkCaptureProcess,
         applyWindowUi,
-        getDialogParentWindow
+        getDialogParentWindow,
+        showBrowserView,
+        hideBrowserView,
+        navigateBrowserView,
+        createBrowserViewForTab,
+        closeBrowserViewTab,
+        getActiveTabId,
+        getBrowserViewTabs,
+        browserViews
     } = context;
 
     ipcMain.on('log', (message) => {
@@ -625,36 +633,4 @@ export function registerIpcHandlers(context) {
         }
     });
 
-    // ==================== AUDIO / SOUNDWAVE ====================
-    ipcMain.handle('internet:get-audio-levels', async (_event, tabId) => {
-        try {
-            const view = context.browserViews?.get(tabId);
-            if (!view) {
-                console.log('[Internet Audio] No view for tab:', tabId);
-                return { ok: true, isPlaying: false, frequencies: [] };
-            }
-            if (view.webContents.isDestroyed()) {
-                console.log('[Internet Audio] View destroyed for tab:', tabId);
-                return { ok: true, isPlaying: false, frequencies: [] };
-            }
-
-            const result = await view.webContents.executeJavaScript(`
-                (function() {
-                    const data = window.__emeraldAudioData;
-                    if (!data) return { isPlaying: false, frequencies: new Uint8Array(128), hasData: false };
-                    return {
-                        isPlaying: data.isPlaying,
-                        frequencies: Array.from(data.frequencies || new Uint8Array(128)),
-                        hasData: true
-                    };
-                })()
-            `);
-
-            console.log('[Internet Audio] Tab:', tabId, 'isPlaying:', result?.isPlaying, 'hasData:', result?.hasData);
-            return { ok: true, isPlaying: result?.isPlaying || false, frequencies: result?.frequencies || [] };
-        } catch (err) {
-            console.error('[Internet] Failed to get audio levels:', err);
-            return { ok: false, error: err.message, isPlaying: false, frequencies: [] };
-        }
-    });
 }

@@ -9,13 +9,9 @@ export default function Internet({ route, setRoute }) {
     const [tabs, setTabs] = useState([{ id: generateTabId(), url: 'https://www.google.com', title: 'New Tab' }]);
     const [activeTabId, setActiveTabId] = useState(tabs[0].id);
     const [inputValue, setInputValue] = useState('https://www.google.com');
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [frequencies, setFrequencies] = useState(new Uint8Array(128));
     const [extensions, setExtensions] = useState([]);
     const [showExtensions, setShowExtensions] = useState(false);
     const [newExtensionScript, setNewExtensionScript] = useState('');
-    const canvasRef = useRef(null);
-    const animationRef = useRef(null);
 
     const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
@@ -65,79 +61,7 @@ export default function Internet({ route, setRoute }) {
         };
     }, [activeTabId]);
 
-    // Poll real audio data from BrowserView for soundwave
-    useEffect(() => {
-        const interval = setInterval(async () => {
-            try {
-                const result = await window.electronAPI.invoke('internet:get-audio-levels', activeTabId);
-                if (result?.ok) {
-                    setIsPlaying(result.isPlaying);
-                    if (result.frequencies && result.frequencies.length > 0) {
-                        setFrequencies(new Uint8Array(result.frequencies));
-                    }
-                }
-            } catch (err) {
-                // Silently fail
-            }
-        }, 100);
 
-        return () => clearInterval(interval);
-    }, [activeTabId]);
-
-    // Soundwave visualizer using real frequency data from BrowserView
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const draw = () => {
-            if (!canvas || !ctx) return;
-
-            const width = canvas.width = canvas.offsetWidth * 2;
-            const height = canvas.height = canvas.offsetHeight * 2;
-            ctx.clearRect(0, 0, width, height);
-
-            if (isPlaying && frequencies.some(v => v > 0)) {
-                // Real audio visualization
-                const bufferLength = frequencies.length;
-                const barWidth = (width / bufferLength) * 2.5;
-                let x = 0;
-
-                for (let i = 0; i < bufferLength; i++) {
-                    const value = frequencies[i] || 0;
-                    const barHeight = (value / 255) * height;
-                    const alpha = Math.max(0.2, value / 255);
-                    ctx.fillStyle = `rgba(255, 34, 34, ${alpha})`;
-                    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-                    x += barWidth + 1;
-                }
-            } else {
-                // Idle animation - subtle wave when no audio
-                const time = Date.now() / 1000;
-                ctx.strokeStyle = 'rgba(255, 34, 34, 0.3)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                for (let x = 0; x < width; x++) {
-                    const y = height / 2 + Math.sin(x * 0.02 + time * 2) * 10;
-                    if (x === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.stroke();
-            }
-
-            animationRef.current = requestAnimationFrame(draw);
-        };
-
-        draw();
-
-        return () => {
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current);
-            }
-        };
-    }, [isPlaying, frequencies]);
 
     const navigateTo = useCallback((targetUrl) => {
         let normalized = targetUrl.trim();
@@ -283,11 +207,6 @@ export default function Internet({ route, setRoute }) {
                             </div>
                         </div>
                     )}
-                </div>
-
-                <div className="internetSoundwave">
-                    <canvas ref={canvasRef} className="soundwaveCanvas" />
-                    <span className="soundwaveLabel">{isPlaying ? '♪ Playing' : '○ Idle'}</span>
                 </div>
             </>
         }>

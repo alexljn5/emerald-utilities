@@ -22,6 +22,7 @@ export default function Internet({ route, setRoute }) {
     const [partition, setPartition] = useState(null);
     const [webviewUrl, setWebviewUrl] = useState('');
     const [webviewReady, setWebviewReady] = useState(false);
+    const browserViewRef = useRef(null);
     const webviewRef = useRef(null);
 
     useEffect(() => {
@@ -76,6 +77,42 @@ export default function Internet({ route, setRoute }) {
         };
     }, [partition]);
 
+    useEffect(() => {
+        const browserView = browserViewRef.current;
+        const webview = webviewRef.current;
+        if (!browserView || !webview) return;
+
+        let animationFrame = null;
+
+        const syncWebviewSize = () => {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+
+            animationFrame = requestAnimationFrame(() => {
+                const { width, height } = browserView.getBoundingClientRect();
+                if (width <= 0 || height <= 0) return;
+
+                webview.style.width = `${Math.floor(width)}px`;
+                webview.style.height = `${Math.floor(height)}px`;
+            });
+        };
+
+        syncWebviewSize();
+
+        const resizeObserver = new ResizeObserver(syncWebviewSize);
+        resizeObserver.observe(browserView);
+        window.addEventListener('resize', syncWebviewSize);
+
+        return () => {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+            resizeObserver.disconnect();
+            window.removeEventListener('resize', syncWebviewSize);
+        };
+    }, [partition, webviewUrl]);
+
     async function handleLaunchFirefox() {
         if (!firefoxReady) {
             setError('Firefox is not installed or not detected');
@@ -91,7 +128,10 @@ export default function Internet({ route, setRoute }) {
                 setWebviewUrl(browserUrl);
                 setScraperStatus('Navigating...');
             } else {
-                const result = await launchFirefox({ url: browserUrl });
+                const result = await launchFirefox({
+                    url: browserUrl,
+                    extensionPath: 'src/scrapers/xscraper'
+                });
                 if (result?.success) {
                     setPartition(result.partition);
                     setWebviewUrl(result.url);
@@ -302,13 +342,18 @@ export default function Internet({ route, setRoute }) {
                         </div>
                     </div>
 
-                    <div className="browser-view">
+                    <div className="browser-view" ref={browserViewRef}>
                         {partition && webviewUrl ? (
                             <webview
                                 ref={webviewRef}
                                 src={webviewUrl}
                                 partition={partition}
                                 className="browser-webview"
+                                autosize="on"
+                                minwidth="320"
+                                minheight="240"
+                                maxwidth="4096"
+                                maxheight="4096"
                                 style={{ width: '100%', height: '100%' }}
                             />
                         ) : (

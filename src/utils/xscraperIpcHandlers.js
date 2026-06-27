@@ -52,8 +52,32 @@ export function registerXScraperIpcHandlers(context) {
     // Launch Firefox with XScraper extension - returns partition for webview embedding
     ipcMain.handle('xscraper:launch-firefox', async (_event, { url, extensionPath }) => {
         try {
-            const firefoxCheck = await invoke('xscraper:check-firefox');
-            if (!firefoxCheck.installed) {
+            // Inline Firefox check (cannot use renderer-side invoke from main process)
+            let firefoxPath = null;
+            if (process.platform === 'win32') {
+                const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+                const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+                const possiblePaths = [
+                    path.join(programFiles, 'Mozilla Firefox', 'firefox.exe'),
+                    path.join(programFilesX86, 'Mozilla Firefox', 'firefox.exe'),
+                    path.join(process.env.LOCALAPPDATA || '', 'Mozilla Firefox', 'firefox.exe')
+                ];
+                for (const fp of possiblePaths) {
+                    if (existsSync(fp)) {
+                        firefoxPath = fp;
+                        break;
+                    }
+                }
+            } else {
+                try {
+                    const whichResult = execSync('which firefox', { stdio: 'pipe' }).toString().trim();
+                    if (whichResult) firefoxPath = whichResult;
+                } catch {
+                    // Firefox not found
+                }
+            }
+
+            if (!firefoxPath) {
                 return { success: false, error: 'Firefox is not installed' };
             }
 
@@ -183,10 +207,4 @@ export function registerXScraperIpcHandlers(context) {
             return { success: false, error: err.message };
         }
     });
-}
-
-// Helper function to invoke IPC (for internal use)
-async function invoke(channel, ...args) {
-    const { ipcRenderer } = require('electron');
-    return ipcRenderer.invoke(channel, ...args);
 }

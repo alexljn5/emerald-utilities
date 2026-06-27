@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { parseTcpdumpArgs } from './core/tcpdumpArgs.js';
 import { writePacket } from './core/networkFileWriter.js';
 import { registerIpcHandlers } from './utils/ipcHandlers.js';
+import { registerXScraperIpcHandlers } from './utils/xscraperIpcHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -981,6 +982,13 @@ registerIpcHandlers({
     },
     applyWindowUi,
     getDialogParentWindow: () => mainWindow
+});
+
+registerXScraperIpcHandlers({
+    ipcMain,
+    app,
+    getDialogParentWindow: () => mainWindow,
+    pushScriptLog
 });
 
 export { PRODUCTION };

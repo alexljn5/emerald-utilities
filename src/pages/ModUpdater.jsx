@@ -237,7 +237,7 @@ export default function ModUpdater({ route, setRoute }) {
 
         try {
             const result = await invoke('mod-updater:check', {
-                targetMCVersion: targetVersion,
+                targetMCVersion,
                 includeUnstable,
                 autoDetectMCVersion,
                 modsFolder: modsFolder || undefined

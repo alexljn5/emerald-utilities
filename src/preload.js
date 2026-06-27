@@ -1,4 +1,5 @@
 const { ipcRenderer } = require('electron');
+console.log('[preload] loaded');
 
 window.electronAPI = {
     invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),

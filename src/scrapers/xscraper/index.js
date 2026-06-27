@@ -10,7 +10,7 @@ export async function checkFirefoxInstalled() {
     }
 }
 
-export async function launchFirefox({ url, extensionPath = 'src/scrapers/xscraper' }) {
+export async function launchFirefox({ url, extensionPath = 'x_scraper' }) {
     try {
         const result = await invoke('xscraper:launch-firefox', {
             url: url || 'https://grok.com',
@@ -29,4 +29,76 @@ export function getDefaultPages() {
         { id: 'x', name: 'X', url: 'https://x.com' },
         { id: 'grok-x', name: 'Grok X', url: 'https://grok.x.com' }
     ];
+}
+
+export async function exportData(exportData) {
+    try {
+        const result = await invoke('xscraper:export-data', exportData);
+        return result;
+    } catch (err) {
+        console.error('[XScraper] exportData error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+export async function getRealtimeStats(webview) {
+    try {
+        if (!webview) {
+            return { success: false, stats: { seen: 0, queue: 0 } };
+        }
+        const result = await webview.executeJavaScript(`
+            (function() {
+                if (window.__grokScraper && typeof window.__grokScraper.debug === 'function') {
+                    return window.__grokScraper.debug();
+                }
+                return { seen: 0, queue: 0, stuck: 0, idle: 0 };
+            })()
+        `);
+        return { success: true, stats: result };
+    } catch (err) {
+        console.error('[XScraper] getRealtimeStats error:', err);
+        return { success: false, stats: { seen: 0, queue: 0 } };
+    }
+}
+
+export async function startRealtimeCrawler(webview) {
+    try {
+        if (!webview) {
+            return { success: false, error: 'No webview' };
+        }
+        await webview.executeJavaScript(`
+            (function() {
+                if (window.__grokScraper && typeof window.__grokScraper.startCrawler === 'function') {
+                    window.__grokScraper.startCrawler();
+                    return { success: true };
+                }
+                return { success: false, error: 'Crawler not available' };
+            })()
+        `);
+        return { success: true };
+    } catch (err) {
+        console.error('[XScraper] startRealtimeCrawler error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+export async function stopRealtimeCrawler(webview) {
+    try {
+        if (!webview) {
+            return { success: false, error: 'No webview' };
+        }
+        await webview.executeJavaScript(`
+            (function() {
+                if (window.__grokScraper && typeof window.__grokScraper.stopCrawler === 'function') {
+                    window.__grokScraper.stopCrawler();
+                    return { success: true };
+                }
+                return { success: false, error: 'Crawler not available' };
+            })()
+        `);
+        return { success: true };
+    } catch (err) {
+        console.error('[XScraper] stopRealtimeCrawler error:', err);
+        return { success: false, error: err.message };
+    }
 }

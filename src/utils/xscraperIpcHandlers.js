@@ -1,7 +1,7 @@
-import { BrowserWindow, session } from 'electron';
 import path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, writeFileSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';
+import { BrowserWindow, session } from 'electron';
 
 // Firefox browser windows tracking
 const firefoxWindows = new Map();
@@ -182,10 +182,37 @@ export function registerXScraperIpcHandlers(context) {
         }
     });
 
-    // Export data
-    ipcMain.handle('xscraper:export-data', async () => {
+    // Export data from extension IndexedDB to filesystem
+    ipcMain.handle('xscraper:export-data', async (_event, exportData) => {
         try {
-            // Find the active Firefox window
+            if (!exportData || typeof exportData !== 'object') {
+                return { success: false, error: 'No export data provided' };
+            }
+
+            // Write to src/database/grok/ with timestamp-based filename
+            const exportDir = path.join(process.cwd(), 'src', 'database', 'grok');
+            if (!existsSync(exportDir)) {
+                mkdirSync(exportDir, { recursive: true });
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const filename = `grok_export_${timestamp}.json`;
+            const filepath = path.join(exportDir, filename);
+
+            writeFileSync(filepath, JSON.stringify(exportData, null, 2), 'utf8');
+
+            pushScriptLog(`[XScraper] Exported ${exportData.totalMessages || 0} messages to ${filepath}`);
+            return { success: true, filepath, filename };
+        } catch (err) {
+            console.error('[XScraper] Export error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Get real-time stats from the webview
+    ipcMain.handle('xscraper:get-realtime-stats', async () => {
+        try {
+            // Find the active window with a webview
             let activeWindow = null;
             for (const entry of firefoxWindows.values()) {
                 if (!entry.window.isDestroyed()) {
@@ -195,22 +222,85 @@ export function registerXScraperIpcHandlers(context) {
             }
 
             if (!activeWindow) {
-                return { success: false, error: 'No active Firefox window found' };
+                return { success: false, error: 'No active browser window found' };
             }
 
-            // Execute export in the page context
             const result = await activeWindow.window.webContents.executeJavaScript(`
                 (function() {
-                    if (window.__grokScraper && typeof window.__grokScraper.exportAsJSON === 'function') {
-                        return window.__grokScraper.exportAsJSON();
+                    if (window.__grokScraper && typeof window.__grokScraper.debug === 'function') {
+                        return window.__grokScraper.debug();
                     }
-                    return { success: false, error: 'Export not available' };
+                    return { seen: 0, queue: 0, stuck: 0, idle: 0 };
                 })()
             `);
 
-            return result;
+            return { success: true, stats: result };
         } catch (err) {
-            console.error('[XScraper] Export error:', err);
+            console.error('[XScraper] Real-time stats error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Start real-time crawler
+    ipcMain.handle('xscraper:start-realtime', async () => {
+        try {
+            let activeWindow = null;
+            for (const entry of firefoxWindows.values()) {
+                if (!entry.window.isDestroyed()) {
+                    activeWindow = entry;
+                    break;
+                }
+            }
+
+            if (!activeWindow) {
+                return { success: false, error: 'No active browser window found' };
+            }
+
+            await activeWindow.window.webContents.executeJavaScript(`
+                (function() {
+                    if (window.__grokScraper && typeof window.__grokScraper.startCrawler === 'function') {
+                        window.__grokScraper.startCrawler();
+                        return { success: true };
+                    }
+                    return { success: false, error: 'Crawler not available' };
+                })()
+            `);
+
+            return { success: true };
+        } catch (err) {
+            console.error('[XScraper] Start real-time error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Stop real-time crawler
+    ipcMain.handle('xscraper:stop-realtime', async () => {
+        try {
+            let activeWindow = null;
+            for (const entry of firefoxWindows.values()) {
+                if (!entry.window.isDestroyed()) {
+                    activeWindow = entry;
+                    break;
+                }
+            }
+
+            if (!activeWindow) {
+                return { success: false, error: 'No active browser window found' };
+            }
+
+            await activeWindow.window.webContents.executeJavaScript(`
+                (function() {
+                    if (window.__grokScraper && typeof window.__grokScraper.stopCrawler === 'function') {
+                        window.__grokScraper.stopCrawler();
+                        return { success: true };
+                    }
+                    return { success: false, error: 'Crawler not available' };
+                })()
+            `);
+
+            return { success: true };
+        } catch (err) {
+            console.error('[XScraper] Stop real-time error:', err);
             return { success: false, error: err.message };
         }
     });

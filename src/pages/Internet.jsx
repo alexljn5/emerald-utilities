@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import PageShell from './PageShell.jsx';
 import { invoke } from '../js/electronApi.js';
-import { checkFirefoxInstalled, launchFirefox, getDefaultPages } from '../scrapers/xscraper/index.js';
+import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 import '../css/internet.css';
 
@@ -22,8 +22,11 @@ export default function Internet({ route, setRoute }) {
     const [partition, setPartition] = useState(null);
     const [webviewUrl, setWebviewUrl] = useState('');
     const [webviewReady, setWebviewReady] = useState(false);
+    const [isRealtime, setIsRealtime] = useState(false);
+    const [realtimeStats, setRealtimeStats] = useState({ seen: 0, queue: 0 });
     const browserViewRef = useRef(null);
     const webviewRef = useRef(null);
+    const realtimeIntervalRef = useRef(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -76,6 +79,42 @@ export default function Internet({ route, setRoute }) {
             webview.removeEventListener('did-navigate', handleDidNavigate);
         };
     }, [partition]);
+
+    // Real-time stats polling
+    useEffect(() => {
+        if (!isRealtime || !webviewReady) {
+            if (realtimeIntervalRef.current) {
+                clearInterval(realtimeIntervalRef.current);
+                realtimeIntervalRef.current = null;
+            }
+            return;
+        }
+
+        const pollStats = async () => {
+            try {
+                const result = await getRealtimeStats(webviewRef.current);
+                if (result?.success && result.stats) {
+                    setRealtimeStats(result.stats);
+                    setScraperStats(prev => ({
+                        ...prev,
+                        messages: result.stats.seen || prev.messages
+                    }));
+                }
+            } catch (err) {
+                console.error('Real-time stats poll error:', err);
+            }
+        };
+
+        pollStats();
+        realtimeIntervalRef.current = setInterval(pollStats, 1000);
+
+        return () => {
+            if (realtimeIntervalRef.current) {
+                clearInterval(realtimeIntervalRef.current);
+                realtimeIntervalRef.current = null;
+            }
+        };
+    }, [isRealtime, webviewReady]);
 
     useEffect(() => {
         const browserView = browserViewRef.current;
@@ -187,6 +226,26 @@ export default function Internet({ route, setRoute }) {
             return;
         }
 
+        if (isRealtime) {
+            // Stop real-time crawler
+            setLoading(true);
+            setScraperStatus('Stopping real-time scrape...');
+            try {
+                const result = await stopRealtimeCrawler(webviewRef.current);
+                if (result?.success) {
+                    setIsRealtime(false);
+                    setScraperStatus('Real-time scrape stopped');
+                } else {
+                    setError(result?.error || 'Failed to stop real-time scrape');
+                }
+            } catch (err) {
+                setError(err?.message || 'Failed to stop real-time scrape');
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
         setLoading(true);
         setScraperStatus('Scraping messages...');
         try {
@@ -232,6 +291,29 @@ export default function Internet({ route, setRoute }) {
         }
     }
 
+    async function handleStartRealtime() {
+        if (!webviewRef.current || !webviewReady) {
+            setError('Browser is not ready');
+            return;
+        }
+
+        setLoading(true);
+        setScraperStatus('Starting real-time scrape...');
+        try {
+            const result = await startRealtimeCrawler(webviewRef.current);
+            if (result?.success) {
+                setIsRealtime(true);
+                setScraperStatus('Real-time scraping active');
+            } else {
+                setError(result?.error || 'Failed to start real-time scrape');
+            }
+        } catch (err) {
+            setError(err?.message || 'Failed to start real-time scrape');
+        } finally {
+            setLoading(false);
+        }
+    }
+
     async function handleExport() {
         if (!webviewRef.current || !webviewReady) {
             setError('Browser is not ready');
@@ -241,7 +323,7 @@ export default function Internet({ route, setRoute }) {
         setLoading(true);
         setScraperStatus('Exporting data...');
         try {
-            const result = await webviewRef.current.executeJavaScript(`
+            const exportResult = await webviewRef.current.executeJavaScript(`
                 (function() {
                     if (window.__grokScraper && typeof window.__grokScraper.exportAsJSON === 'function') {
                         return window.__grokScraper.exportAsJSON();
@@ -249,10 +331,17 @@ export default function Internet({ route, setRoute }) {
                     return { success: false, error: 'Export not available' };
                 })()
             `);
-            if (result?.success) {
-                setScraperStatus('Export complete');
+
+            if (exportResult?.success && exportResult.data) {
+                // Write to filesystem via main process
+                const fsResult = await exportData(exportResult.data);
+                if (fsResult?.success) {
+                    setScraperStatus(`Exported to ${fsResult.filename}`);
+                } else {
+                    setError(fsResult?.error || 'Failed to write export to filesystem');
+                }
             } else {
-                setError(result?.error || 'Export failed');
+                setError(exportResult?.error || 'Export failed');
             }
         } catch (err) {
             setError(err?.message || 'Export failed');
@@ -269,13 +358,14 @@ export default function Internet({ route, setRoute }) {
                     <img src={xscraperLogo} alt="XScraper" className="xscraper-icon" width="64" height="64" />
                 </div>
                 <div className="xscraper-status">
-                    <span className={`status-indicator ${firefoxReady ? 'ready' : 'error'}`}>
-                        {firefoxReady ? 'Firefox Ready' : 'Firefox Not Found'}
+                    <span className={`status-indicator ${isRealtime ? 'realtime' : (firefoxReady ? 'ready' : 'error')}`}>
+                        {isRealtime ? 'Real-Time Scraping Active' : (firefoxReady ? 'Firefox Ready' : 'Firefox Not Found')}
                     </span>
                 </div>
                 <div className="xscraper-stats">
                     <span>Messages: {scraperStats.messages}</span>
-                    <span>Conversations: {scraperStats.conversations}</span>
+                    <span>Seen: {realtimeStats.seen}</span>
+                    <span>Queue: {realtimeStats.queue}</span>
                 </div>
                 <div className="navButtons">
                     <button
@@ -294,14 +384,25 @@ export default function Internet({ route, setRoute }) {
                     >
                         Close Browser
                     </button>
-                    <button
-                        className="nav-btn full"
-                        type="button"
-                        onClick={handleScrape}
-                        disabled={loading || !webviewReady}
-                    >
-                        Scrape Messages
-                    </button>
+                    {!isRealtime ? (
+                        <button
+                            className="nav-btn full"
+                            type="button"
+                            onClick={handleStartRealtime}
+                            disabled={loading || !webviewReady}
+                        >
+                            Start Real-Time Scrape
+                        </button>
+                    ) : (
+                        <button
+                            className="nav-btn full"
+                            type="button"
+                            onClick={handleScrape}
+                            disabled={loading || !webviewReady}
+                        >
+                            Stop Real-Time Scrape
+                        </button>
+                    )}
                     <button
                         className="nav-btn full"
                         type="button"

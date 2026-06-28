@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: emerald-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-emerald}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-emerald_local}
+      POSTGRES_DB: ${POSTGRES_DB:-emerald_utilities}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./envy.sql:/docker-entrypoint-initdb.d/01-envy.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-emerald} -d ${POSTGRES_DB:-emerald_utilities}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - emerald-network
+
+  # Optional: pgAdmin for database management UI
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: emerald-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@emerald.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_LISTEN_PORT: 8080
+    ports:
+      - "${PGADMIN_PORT:-8080}:8080"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - emerald-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  emerald-network:
+    driver: bridge

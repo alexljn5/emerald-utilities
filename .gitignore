@@ -15,6 +15,7 @@ out/
 src/logs/logs-network/ALL/*
 src/logs/logs-network/FILTERED/*
 src/database/grok/*
+src/database/.env
 
 #Unpushed Scripts
 start_build_emerald_utilities_windows.sh

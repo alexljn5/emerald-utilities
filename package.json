@@ -52,6 +52,14 @@
       {
         "from": "src/internal-scripts/network-capture.sh",
         "to": "internal-scripts/network-capture.sh"
+      },
+      {
+        "from": "src/internal-scripts/db-start.sh",
+        "to": "internal-scripts/db-start.sh"
+      },
+      {
+        "from": "src/internal-scripts/db-stop.sh",
+        "to": "internal-scripts/db-stop.sh"
       }
     ],
     "mac": {
@@ -70,6 +78,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
+    "pg": "^8.13.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   }

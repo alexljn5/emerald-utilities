@@ -9,6 +9,7 @@ import { parseTcpdumpArgs } from './core/tcpdumpArgs.js';
 import { writePacket } from './core/networkFileWriter.js';
 import { registerIpcHandlers } from './utils/ipcHandlers.js';
 import { registerXScraperIpcHandlers } from './utils/xscraperIpcHandlers.js';
+import databaseService from './database/wrath.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,6 +92,7 @@ const DEFAULT_UI_CONFIG = Object.freeze({
 });
 let nextScriptLogId = 1;
 let networkCaptureProcess = null;
+let databaseProcess = null;
 let currentWindowUi = null;
 
 function getDefaultUiConfig() {
@@ -393,6 +395,137 @@ function toWslPath(windowsPath) {
     }
 
     return normalized;
+}
+
+function getDatabaseScriptPath(scriptName) {
+    if (app.isPackaged && process.resourcesPath) {
+        return path.join(process.resourcesPath, 'internal-scripts', scriptName);
+    }
+    return path.join(__dirname, 'internal-scripts', scriptName);
+}
+
+function getDatabaseDir() {
+    // Derive database directory relative to the script location:
+    // src/internal-scripts/ -> src/database/
+    const scriptDir = app.isPackaged && process.resourcesPath
+        ? path.join(process.resourcesPath, 'internal-scripts')
+        : path.join(__dirname, 'internal-scripts');
+    return path.join(path.dirname(scriptDir), 'database');
+}
+
+export async function startDatabase() {
+    if (databaseProcess) {
+        console.log('[DB] Database process already running');
+        return;
+    }
+
+    const scriptPath = getDatabaseScriptPath('db-start.sh');
+    const dbDir = getDatabaseDir();
+
+    // Convert Windows path to WSL path if needed
+    let wslDbDir = dbDir;
+    if (process.platform === 'win32') {
+        wslDbDir = toWslPath(dbDir);
+    }
+
+    console.log(`[DB] Starting database... Script: ${scriptPath}, Dir: ${wslDbDir}`);
+
+    const proc = spawn(
+        'bash',
+        [scriptPath, wslDbDir],
+        { stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+
+    proc.stdout.setEncoding('utf8');
+    proc.stderr.setEncoding('utf8');
+
+    proc.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+            if (line.trim()) {
+                console.log(`[DB] ${line.trim()}`);
+                pushScriptLog(`[DB] ${line.trim()}`);
+            }
+        }
+    });
+
+    proc.stderr.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+            if (line.trim()) {
+                console.error(`[DB ERROR] ${line.trim()}`);
+                pushScriptLog(`[DB ERROR] ${line.trim()}`);
+            }
+        }
+    });
+
+    proc.on('close', (code) => {
+        console.log(`[DB] Database script exited with code ${code}`);
+        databaseProcess = null;
+    });
+
+    proc.on('error', (err) => {
+        console.error('[DB] Failed to start database script:', err.message);
+        pushScriptLog(`[DB] Failed to start: ${err.message}`);
+        databaseProcess = null;
+    });
+
+    // Give the script a moment to start
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    databaseProcess = proc;
+    console.log('[DB] Database start initiated');
+}
+
+export async function stopDatabase() {
+    const proc = databaseProcess;
+    if (!proc) {
+        console.log('[DB] No database process to stop');
+        return;
+    }
+
+    databaseProcess = null;
+    console.log('[DB] Stopping database...');
+
+    // Run the stop script
+    const scriptPath = getDatabaseScriptPath('db-stop.sh');
+    const dbDir = getDatabaseDir();
+
+    let wslDbDir = dbDir;
+    if (process.platform === 'win32') {
+        wslDbDir = toWslPath(dbDir);
+    }
+
+    try {
+        const stopProc = spawn('bash', [scriptPath, wslDbDir], {
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        stopProc.stdout.setEncoding('utf8');
+        stopProc.stderr.setEncoding('utf8');
+
+        stopProc.stdout.on('data', (data) => {
+            console.log(`[DB] ${data.toString().trim()}`);
+        });
+
+        stopProc.stderr.on('data', (data) => {
+            console.error(`[DB ERROR] ${data.toString().trim()}`);
+        });
+
+        await new Promise((resolve, reject) => {
+            stopProc.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`Stop script exited with code ${code}`));
+            });
+            stopProc.on('error', reject);
+            setTimeout(resolve, 10000); // Timeout after 10s
+        });
+    } catch (err) {
+        console.error('[DB] Error stopping database:', err.message);
+    }
+
+    // Kill the start script process if still running
+    killChildProcess(proc, 'database');
 }
 
 export function startCapture(iface = 'any', tcpdumpArgs = []) {
@@ -904,6 +1037,15 @@ function createTray() {
 }
 
 app.whenReady().then(async () => {
+    // Start PostgreSQL database in WSL Docker
+    try {
+        await startDatabase();
+        console.log("[Emerald] Database started successfully");
+    } catch (err) {
+        console.error("[Emerald] Failed to start database:", err.message);
+        pushScriptLog(`[DB] Failed to auto-start: ${err.message}`);
+    }
+
     await createWindow();
     createTray();
     console.log("[Emerald] Running in background (tray only)");
@@ -926,7 +1068,7 @@ app.on('window-all-closed', () => {
     }
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
     const captureProcess = networkCaptureProcess;
     if (captureProcess) {
         networkCaptureProcess = null;
@@ -938,6 +1080,14 @@ app.on('before-quit', () => {
     }
     for (const file of Array.from(cronJobs.keys())) {
         stopCronJob(file);
+    }
+
+    // Stop PostgreSQL database
+    try {
+        await stopDatabase();
+        console.log("[Emerald] Database stopped");
+    } catch (err) {
+        console.error("[Emerald] Error stopping database:", err.message);
     }
 });
 
@@ -980,6 +1130,8 @@ registerIpcHandlers({
     setNetworkCaptureProcess: (value) => {
         networkCaptureProcess = value;
     },
+    startDatabase,
+    stopDatabase,
     applyWindowUi,
     getDialogParentWindow: () => mainWindow
 });

@@ -102,6 +102,14 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Database button
+    const databaseBtn = document.getElementById("databaseButton");
+    if (databaseBtn) {
+        databaseBtn.addEventListener("click", () => {
+            window.location.href = "./pages/database.html";
+        });
+    }
+
     // Background auto-run scripts (this is what prints the creepy message)
     scriptManager.init({ bindUI: false });
     renderTerminal(terminalLog);

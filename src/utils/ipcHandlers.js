@@ -45,7 +45,8 @@ export function registerIpcHandlers(context) {
         getNetworkCaptureProcess,
         setNetworkCaptureProcess,
         applyWindowUi,
-        getDialogParentWindow
+        getDialogParentWindow,
+        databaseService
     } = context;
 
     ipcMain.on('log', (message) => {
@@ -507,4 +508,124 @@ export function registerIpcHandlers(context) {
     function ensureConfigEntries(files) {
         return context.ensureConfigEntries(files);
     }
+
+    ipcMain.handle('database:get-stats', async () => {
+        try {
+            if (!databaseService) {
+                return {
+                    connected: false,
+                    totalPackets: 0,
+                    grokMessages: 0,
+                    grokConversations: 0,
+                    activeThreats: 0,
+                    blacklistedPackets: 0
+                };
+            }
+            return await databaseService.getStats();
+        } catch (err) {
+            console.error('[Database] get-stats error:', err);
+            return {
+                connected: false,
+                totalPackets: 0,
+                grokMessages: 0,
+                grokConversations: 0,
+                activeThreats: 0,
+                blacklistedPackets: 0
+            };
+        }
+    });
+
+    ipcMain.handle('database:import-network-log', async (_event, { file }) => {
+        try {
+            if (!databaseService) {
+                return { ok: false, error: 'Database service not available' };
+            }
+            const safeFile = sanitizeNetworkLogFile(file);
+            if (!safeFile) {
+                return { ok: false, error: 'Invalid network log file' };
+            }
+
+            const filePath = path.join(getNetworkLogFolder('ALL'), safeFile);
+            const content = await fsPromises.readFile(filePath, 'utf8');
+            const lines = content.split(/\r?\n/).filter((line) => line.trim());
+
+            const events = [];
+            for (const line of lines) {
+                try {
+                    const parsed = JSON.parse(line);
+                    events.push({
+                        raw: parsed.raw || line,
+                        source: parsed.source || 'tcpdump',
+                        interface: parsed.interface || 'unknown',
+                        capturedAt: parsed.ts ? new Date(parsed.ts) : new Date(),
+                        payload: parsed
+                    });
+                } catch {
+                    events.push({
+                        raw: line,
+                        source: 'tcpdump',
+                        interface: 'unknown',
+                        capturedAt: new Date(),
+                        payload: { raw: line }
+                    });
+                }
+            }
+
+            const ids = await databaseService.insertPacketEventsBatch(events);
+            return { ok: true, imported: ids.length, failed: events.length - ids.length };
+        } catch (err) {
+            console.error('[Database] import-network-log error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('database:import-grok-export', async () => {
+        try {
+            if (!databaseService) {
+                return { ok: false, error: 'Database service not available' };
+            }
+
+            const result = await dialog.showOpenDialog(getDialogParentWindow(), {
+                title: 'Select Grok Export JSON',
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+                properties: ['openFile']
+            });
+
+            if (result.canceled || !result.filePaths?.length) {
+                return { ok: false, error: 'No file selected' };
+            }
+
+            const filePath = result.filePaths[0];
+            const content = await fsPromises.readFile(filePath, 'utf8');
+            const data = JSON.parse(content);
+
+            const importResult = await databaseService.importGrokIndexedDBExport(data);
+            return {
+                ok: true,
+                importedConversations: importResult.conversations,
+                importedMessages: importResult.messages
+            };
+        } catch (err) {
+            console.error('[Database] import-grok-export error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('database:import-blacklist', async () => {
+        try {
+            if (!databaseService) {
+                return { ok: false, error: 'Database service not available' };
+            }
+
+            const blacklistPath = path.join(process.cwd(), 'src/database/network/blackisted-ips.json');
+            const content = await fsPromises.readFile(blacklistPath, 'utf8');
+            const ips = JSON.parse(content);
+
+            const count = await databaseService.importIPBlacklist(ips);
+            return { ok: true, count };
+        } catch (err) {
+            console.error('[Database] import-blacklist error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
 }

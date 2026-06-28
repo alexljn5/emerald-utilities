@@ -1152,6 +1152,7 @@ registerIpcHandlers({
     },
     startDatabase,
     stopDatabase,
+    databaseService,
     applyWindowUi,
     getDialogParentWindow: () => mainWindow
 });

@@ -104,6 +104,18 @@ fi
 
 cd "$DB_DIR"
 
+# Load environment variables from .env
+if [[ -f .env ]]; then
+    echo "[DB] Loading environment from .env"
+    set -a
+    source .env
+    set +a
+fi
+
+# Use defaults if not set
+POSTGRES_USER="${POSTGRES_USER:-emerald}"
+POSTGRES_DB="${POSTGRES_DB:-emerald_utilities}"
+
 echo "[DB] Starting PostgreSQL..."
 docker compose up -d
 
@@ -111,7 +123,7 @@ docker compose up -d
 # Wait for Postgres
 # =========================
 for i in {1..30}; do
-    if docker compose exec -T postgres pg_isready -U emerald -d emerald_utilities >/dev/null 2>&1; then
+    if docker compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
         echo "[DB] PostgreSQL ready."
         exit 0
     fi

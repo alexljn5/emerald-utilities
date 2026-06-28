@@ -18,34 +18,7 @@ services:
       timeout: 10s
       retries: 12
       start_period: 60s
-    networks:
-      - emerald-network
-
-  # Optional: pgAdmin for database management UI
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: emerald-pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@emerald.local}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-      PGADMIN_LISTEN_PORT: 8080
-    ports:
-      - "${PGADMIN_PORT:-8080}:8080"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - emerald-network
-    depends_on:
-      postgres:
-        condition: service_healthy
 
 volumes:
   postgres_data:
     driver: local
-  pgadmin_data:
-    driver: local
-
-networks:
-  emerald-network:
-    driver: bridge

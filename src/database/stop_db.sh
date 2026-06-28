@@ -14,7 +14,7 @@ if [[ -f .env ]]; then
 fi
 
 # Use defaults if not set
-POSTGRES_USER="${POSTGRES_USER:-emerald}"
+POSTGRES_USER="${POSTGRES_USER:-alexljn5}"
 POSTGRES_DB="${POSTGRES_DB:-emerald_utilities}"
 
 echo "[DB] Running: docker compose down"

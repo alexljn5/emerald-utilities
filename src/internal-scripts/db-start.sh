@@ -4,18 +4,13 @@ set -euo pipefail
 # =========================
 # WSL detection
 # =========================
-IS_WSL=false
-if grep -qi microsoft /proc/version 2>/dev/null; then
-    IS_WSL=true
-fi
-
-if [ "$IS_WSL" = false ]; then
+if ! grep -qi microsoft /proc/version 2>/dev/null; then
     echo "[DB] ERROR: This script must run inside WSL." >&2
     exit 1
 fi
 
 # =========================
-# Ensure Docker CLI exists
+# Docker CLI check
 # =========================
 if ! command -v docker >/dev/null 2>&1; then
     echo "[DB] ERROR: docker not found in PATH." >&2
@@ -25,54 +20,34 @@ fi
 # =========================
 # Ensure Docker daemon is ready
 # =========================
-ensure_docker_daemon() {
-    echo "[DB] Checking Docker daemon..."
-
+ensure_docker() {
     if docker info >/dev/null 2>&1; then
-        echo "[DB] Docker daemon is ready."
+        echo "[DB] Docker is ready."
         return 0
     fi
 
-    echo "[DB] Docker daemon is not reachable. Attempting to start..."
+    echo "[DB] Docker not ready, attempting start..."
 
-    # Try systemd service first
-    if sudo service docker start 2>/dev/null; then
-        echo "[DB] Docker service started via systemd."
+    if sudo service docker start >/dev/null 2>&1; then
+        echo "[DB] Docker service started."
     else
-        echo "[DB] systemd unavailable, starting dockerd directly..."
         nohup sudo dockerd --host=unix:///var/run/docker.sock > /tmp/dockerd.log 2>&1 &
-        echo "[DB] dockerd launched in background (log: /tmp/dockerd.log)"
+        echo "[DB] dockerd started (fallback)."
     fi
 
-    # Wait for socket
-    echo "[DB] Waiting for Docker socket..."
-    for i in {1..30}; do
-        if [ -S /var/run/docker.sock ]; then
-            echo "[DB] Docker socket appeared."
-            break
-        fi
-        sleep 1
-    done
-
-    # Wait for daemon to respond
-    echo "[DB] Waiting for Docker daemon to respond..."
     for i in {1..30}; do
         if docker info >/dev/null 2>&1; then
-            echo "[DB] Docker daemon is ready."
+            echo "[DB] Docker ready."
             return 0
         fi
         sleep 1
     done
 
-    echo "[DB] ERROR: Docker daemon failed to start." >&2
-    echo "[DB] Check /tmp/dockerd.log for details." >&2
-    echo "[DB] You can also start Docker Desktop on Windows and enable WSL integration." >&2
-    return 1
+    echo "[DB] ERROR: Docker failed to start." >&2
+    exit 1
 }
 
-if ! ensure_docker_daemon; then
-    exit 1
-fi
+ensure_docker
 
 # =========================
 # Resolve database directory
@@ -113,7 +88,7 @@ if [[ -f .env ]]; then
 fi
 
 # Use defaults if not set
-POSTGRES_USER="${POSTGRES_USER:-emerald}"
+POSTGRES_USER="${POSTGRES_USER:-alexljn5}"
 POSTGRES_DB="${POSTGRES_DB:-emerald_utilities}"
 
 echo "[DB] Starting PostgreSQL..."
@@ -125,6 +100,16 @@ docker compose up -d
 for i in {1..30}; do
     if docker compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
         echo "[DB] PostgreSQL ready."
+        
+        # =========================
+        # Apply database schema (envy.sql)
+        # =========================
+        if [[ -f envy.sql ]]; then
+            echo "[DB] Applying database schema from envy.sql..."
+            cat envy.sql | docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" 2>/dev/null || \
+                echo "[DB] Note: Schema may already be applied (this is normal for existing databases)"
+        fi
+        
         exit 0
     fi
     echo "[DB] Waiting... ($i/30)"

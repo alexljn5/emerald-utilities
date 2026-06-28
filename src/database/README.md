@@ -32,7 +32,6 @@ usermod -aG docker $USER
 
 ## Quick Start
 
-### 1. Navigate to the database directory
 
 ```bash
 # From the project root

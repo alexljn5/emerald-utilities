@@ -202,45 +202,60 @@ export function registerXScraperIpcHandlers(context) {
             // Ensure filename has .json extension
             const ensureJson = (name) => name.endsWith('.json') ? name : `${name}.json`;
 
-            // If there are multiple conversations, create one file per conversation
-            if (conversations.length > 1) {
-                const messagesByConv = {};
-                for (const msg of messages) {
-                    const cid = msg.conversationId || 'default';
-                    if (!messagesByConv[cid]) messagesByConv[cid] = [];
-                    messagesByConv[cid].push(msg);
-                }
-
-                const results = [];
-                for (const conv of conversations) {
-                    const cid = conv.id || 'default';
-                    const convMessages = messagesByConv[cid] || [];
-                    const convData = {
-                        version: exportData.version || '1.0',
-                        exportDate: exportData.exportDate || new Date().toISOString(),
-                        totalMessages: convMessages.length,
-                        totalConversations: 1,
-                        messages: convMessages,
-                        conversations: [conv]
-                    };
-                    const safeTitle = (conv.title || cid).replace(/[^a-z0-9_]/gi, '_').slice(0, 30) || cid;
-                    const baseName = filename ? filename.replace(/\.json$/i, '') : `grok_export_${timestamp}`;
-                    const convFilename = ensureJson(`${baseName}_${safeTitle}`);
-                    const filepath = path.join(exportDir, convFilename);
-                    writeFileSync(filepath, JSON.stringify(convData, null, 2), 'utf8');
-                    pushScriptLog(`[XScraper] Exported ${convMessages.length} messages to ${filepath}`);
-                    results.push({ success: true, filepath, filename: convFilename });
-                }
-                return { success: true, files: results };
+            // Group messages by conversationId
+            const messagesByConv = {};
+            for (const msg of messages) {
+                const cid = msg.conversationId || 'default';
+                if (!messagesByConv[cid]) messagesByConv[cid] = [];
+                messagesByConv[cid].push(msg);
             }
 
-            const finalFilename = ensureJson(filename || `grok_export_${timestamp}_${exportData.totalMessages || 0}msgs.json`);
-            const filepath = path.join(exportDir, finalFilename);
+            // Build conversation lookup from conversations array + discovered message groups
+            const convMap = {};
+            for (const conv of conversations) {
+                convMap[conv.id || 'default'] = conv;
+            }
+            // Also add any conversation IDs found in messages but not in conversations array
+            for (const cid of Object.keys(messagesByConv)) {
+                if (!convMap[cid]) {
+                    convMap[cid] = { id: cid, title: cid };
+                }
+            }
 
-            writeFileSync(filepath, JSON.stringify(exportData, null, 2), 'utf8');
+            // Create messages subfolder
+            const messagesDir = path.join(exportDir, 'messages');
+            if (!existsSync(messagesDir)) {
+                mkdirSync(messagesDir, { recursive: true });
+            }
 
-            pushScriptLog(`[XScraper] Exported ${exportData.totalMessages || 0} messages to ${filepath}`);
-            return { success: true, filepath, filename: finalFilename };
+            const results = [];
+
+            // Export each conversation as its own JSON file in messages/
+            for (const [cid, convMessages] of Object.entries(messagesByConv)) {
+                const conv = convMap[cid] || { id: cid, title: cid };
+                const convData = {
+                    version: exportData.version || '1.0',
+                    exportDate: exportData.exportDate || new Date().toISOString(),
+                    totalMessages: convMessages.length,
+                    totalConversations: 1,
+                    messages: convMessages,
+                    conversations: [conv]
+                };
+                const convFilename = ensureJson(`${cid}.json`);
+                const filepath = path.join(messagesDir, convFilename);
+                writeFileSync(filepath, JSON.stringify(convData, null, 2), 'utf8');
+                pushScriptLog(`[XScraper] Exported ${convMessages.length} messages to ${filepath}`);
+                results.push({ success: true, filepath, filename: convFilename });
+            }
+
+            // Also create a compilation grok_export_<date>.json in the root
+            const compilationFilename = ensureJson(filename || `grok_export_${timestamp}_${messages.length}msgs.json`);
+            const compilationPath = path.join(exportDir, compilationFilename);
+            writeFileSync(compilationPath, JSON.stringify(exportData, null, 2), 'utf8');
+            pushScriptLog(`[XScraper] Exported compilation ${messages.length} messages to ${compilationPath}`);
+            results.push({ success: true, filepath: compilationPath, filename: compilationFilename });
+
+            return { success: true, files: results };
         } catch (err) {
             console.error('[XScraper] Export error:', err);
             return { success: false, error: err.message };

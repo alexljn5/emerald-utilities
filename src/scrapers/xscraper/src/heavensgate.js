@@ -14,9 +14,143 @@
     const WATCHDOG_INTERVAL = 2000;
     const IDLE_THRESHOLD = 6000;
 
+    // Current conversation ID extracted from the page
+    let currentConversationId = 'default';
+    let currentConversationTitle = 'Chat';
+
+    function extractConversationId() {
+        // 1. Try URL first: https://grok.com/app?conversationId=<UUID> or /c/<UUID> or hash
+        try {
+            const url = window.location.href;
+            // Query param
+            const urlMatch = url.match(/conversationId=([a-f0-9-]+)/i) || url.match(/\/c\/([a-f0-9-]+)/i);
+            if (urlMatch && urlMatch[1]) {
+                console.log('[XSCRAPER_DAEMON] conversationId from URL:', urlMatch[1]);
+                return urlMatch[1];
+            }
+            // Hash fragment: #<UUID> or #conversation/<UUID>
+            const hashMatch = url.match(/#([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i) ||
+                url.match(/#conversation\/([a-f0-9-]+)/i);
+            if (hashMatch && hashMatch[1]) {
+                console.log('[XSCRAPER_DAEMON] conversationId from URL hash:', hashMatch[1]);
+                return hashMatch[1];
+            }
+        } catch (e) { /* ignore */ }
+
+        // 2. Try window.__NEXT_DATA__ or similar state objects (deep search for UUID)
+        try {
+            const state = window.__NEXT_DATA__ || window.__APP_STATE__ || window.__GROK_STATE__;
+            if (state) {
+                if (state.conversationId) {
+                    console.log('[XSCRAPER_DAEMON] conversationId from state.conversationId:', state.conversationId);
+                    return state.conversationId;
+                }
+                if (state.chat && state.chat.id) {
+                    console.log('[XSCRAPER_DAEMON] conversationId from state.chat.id:', state.chat.id);
+                    return state.chat.id;
+                }
+                if (state.currentConversationId) {
+                    console.log('[XSCRAPER_DAEMON] conversationId from state.currentConversationId:', state.currentConversationId);
+                    return state.currentConversationId;
+                }
+                // Deep search for any UUID-like string in state
+                const json = JSON.stringify(state);
+                const uuidMatch = json.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+                if (uuidMatch) {
+                    console.log('[XSCRAPER_DAEMON] conversationId from deep state search:', uuidMatch[1]);
+                    return uuidMatch[1];
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        // 3. Try to find in DOM: data attributes, meta tags, or any element with UUID-like content
+        try {
+            const selectors = [
+                '[data-conversation-id]',
+                '[data-chat-id]',
+                '[data-thread-id]',
+                '[data-session-id]',
+                '[data-current-conversation]',
+                'meta[name="conversation-id"]',
+                'meta[name="chat-id"]',
+                '[id*="conversation"]',
+                '[id*="chat-"]',
+                '[id*="thread-"]'
+            ];
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    const id = el.getAttribute('data-conversation-id') ||
+                        el.getAttribute('data-chat-id') ||
+                        el.getAttribute('data-thread-id') ||
+                        el.getAttribute('data-session-id') ||
+                        el.getAttribute('data-current-conversation') ||
+                        el.getAttribute('content') ||
+                        el.id;
+                    if (id && /^[a-f0-9-]+$/i.test(id)) {
+                        console.log('[XSCRAPER_DAEMON] conversationId from DOM selector', sel, ':', id);
+                        return id;
+                    }
+                }
+            }
+
+            // Search all elements for UUID-like text content or attributes
+            const allElements = document.querySelectorAll('*');
+            for (const el of allElements) {
+                for (const attr of ['id', 'data-id', 'data-conversation', 'data-thread', 'data-conversation-id']) {
+                    const val = el.getAttribute(attr);
+                    if (val && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(val)) {
+                        console.log('[XSCRAPER_DAEMON] conversationId from DOM attr', attr, ':', val);
+                        return val;
+                    }
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        // 4. Try to find in script tags or inline scripts
+        try {
+            const scripts = document.querySelectorAll('script');
+            for (const script of scripts) {
+                const text = script.textContent || script.innerText;
+                const uuidMatch = text.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+                if (uuidMatch) {
+                    console.log('[XSCRAPER_DAEMON] conversationId from script tag:', uuidMatch[1]);
+                    return uuidMatch[1];
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        console.log('[XSCRAPER_DAEMON] conversationId not found, using default');
+        return 'default';
+    }
+
+    function extractConversationTitle() {
+        try {
+            // Try to get title from page
+            const titleEl = document.querySelector('h1, h2, [data-title]');
+            if (titleEl) {
+                const title = titleEl.textContent?.trim() || titleEl.getAttribute('data-title');
+                if (title && title.length > 0 && title.length < 100) return title;
+            }
+
+            // Try URL or state
+            const state = window.__NEXT_DATA__ || window.__APP_STATE__ || window.__GROK_STATE__;
+            if (state && state.title) return state.title;
+            if (state && state.chat && state.chat.title) return state.chat.title;
+        } catch (e) { /* ignore */ }
+
+        return 'Chat';
+    }
+
+    function updateConversationContext() {
+        currentConversationId = extractConversationId();
+        currentConversationTitle = extractConversationTitle();
+    }
+
     function init() {
         console.log('[XSCRAPER_DAEMON] starting');
 
+        updateConversationContext();
         startObserver();
         startFlush();
         startWatchdog();
@@ -46,6 +180,9 @@
 
         observer = new MutationObserver((mutations) => {
             lastMutationTime = Date.now();
+
+            // Refresh conversation context on any DOM mutation (chat switch, nav, etc.)
+            updateConversationContext();
 
             for (const m of mutations) {
                 for (const n of m.addedNodes) {
@@ -82,7 +219,9 @@
         return {
             id: hash(text),
             content: text,
-            ts: Date.now()
+            ts: Date.now(),
+            conversationId: currentConversationId,
+            conversationTitle: currentConversationTitle
         };
     }
 
@@ -232,6 +371,9 @@
         const c = findScroll();
         if (!c) return;
 
+        // Refresh conversation context before scrolling (chat might have changed)
+        updateConversationContext();
+
         c.scrollTop = 0;
         c.dispatchEvent(new Event('scroll', { bubbles: true }));
     }
@@ -242,12 +384,24 @@
         setInterval(() => {
             if (!queue.length) return;
 
+            // Refresh conversation context before flushing
+            updateConversationContext();
+
             const batch = queue.splice(0, 30);
+
+            // Ensure all messages in batch have current conversationId
+            const enrichedBatch = batch.map(m => ({
+                ...m,
+                conversationId: currentConversationId,
+                conversationTitle: currentConversationTitle
+            }));
 
             if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
                 chrome.runtime.sendMessage({
                     action: 'saveMessages',
-                    messages: batch
+                    messages: enrichedBatch,
+                    conversationId: currentConversationId,
+                    conversationTitle: currentConversationTitle
                 }).catch(() => { });
                 return;
             }
@@ -255,7 +409,9 @@
             window.postMessage({
                 source: 'xscraper-page',
                 action: 'saveMessages',
-                messages: batch
+                messages: enrichedBatch,
+                conversationId: currentConversationId,
+                conversationTitle: currentConversationTitle
             }, '*');
 
         }, 1200);
@@ -315,7 +471,9 @@
             seen: seen.size,
             queue: queue.length,
             stuck: scrollStuckCounter,
-            idle: Date.now() - lastMutationTime
+            idle: Date.now() - lastMutationTime,
+            conversationId: currentConversationId,
+            conversationTitle: currentConversationTitle
         };
     }
 

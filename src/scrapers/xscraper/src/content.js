@@ -20,7 +20,9 @@ window.addEventListener('message', (event) => {
     if (message.action === 'saveMessages') {
         chrome.runtime.sendMessage({
             action: 'saveMessages',
-            messages: Array.isArray(message.messages) ? message.messages : []
+            messages: Array.isArray(message.messages) ? message.messages : [],
+            conversationId: message.conversationId || 'default',
+            conversationTitle: message.conversationTitle || 'Chat'
         }).catch(() => { });
     } else if (message.action === 'exportRequest') {
         console.log('[XSCRAPER_CONTENT] exportRequest received:', message.requestId);

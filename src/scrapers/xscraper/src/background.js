@@ -115,6 +115,15 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                     break;
                 }
 
+                case 'saveConversation': {
+                    const result = await handleSaveConversation(
+                        req.conversationId || 'default',
+                        req.conversationTitle || 'Chat'
+                    );
+                    sendResponse({ success: true, result });
+                    break;
+                }
+
                 case 'getMessages': {
                     const messages = await handleGetMessages();
                     sendResponse({ success: true, messages });
@@ -161,6 +170,33 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
 });
 
 /**
+ * Save conversation metadata
+ */
+async function handleSaveConversation(conversationId, conversationTitle) {
+    if (!localDb) await initializeLocalDatabase();
+
+    const tx = localDb.transaction(['conversations'], 'readwrite');
+    const store = tx.objectStore('conversations');
+
+    const conv = {
+        id: conversationId,
+        title: conversationTitle || 'Chat',
+        savedAt: Date.now()
+    };
+
+    store.put(conv);
+
+    return new Promise((resolve, reject) => {
+        tx.oncomplete = () => {
+            console.log(`[XSCRAPER_BACKGROUND] Saved conversation: ${conversationId}`);
+            resolve({ success: true, conversationId });
+        };
+
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+/**
  * Save messages (offline-first)
  */
 async function handleSaveMessages(messages, conversationId, conversationTitle) {
@@ -174,6 +210,9 @@ async function handleSaveMessages(messages, conversationId, conversationTitle) {
         lastServerAttempt = now;
         serverResult = await saveToSQLiteServer(messages, conversationId, conversationTitle);
     }
+
+    // Also save conversation metadata
+    await handleSaveConversation(conversationId, conversationTitle);
 
     const tx = localDb.transaction(['messages'], 'readwrite');
     const store = tx.objectStore('messages');

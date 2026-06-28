@@ -727,8 +727,8 @@ class DatabaseService {
             throw new Error('Invalid export data format');
         }
 
-        const conversations = exportData.conversations || [];
-        const messages = exportData.messages || [];
+        const conversations = exportData.conversations || exportData.data?.conversations || [];
+        const messages = exportData.messages || exportData.data?.messages || [];
 
         let importedConversations = 0;
         let importedMessages = 0;
@@ -738,15 +738,15 @@ class DatabaseService {
         for (const conv of conversations) {
             try {
                 await this.upsertGrokConversation({
-                    id: conv.id,
-                    title: conv.title,
+                    id: conv.id || conv.conversationId,
+                    title: conv.title || conv.conversationTitle,
                     message_count: conv.message_count || 0,
-                    last_scraped: conv.last_scraped || conv.last_updated,
+                    last_scraped: conv.last_scraped || conv.last_updated || conv.exportDate,
                     metadata: conv,
                 });
                 importedConversations++;
             } catch (err) {
-                console.error(`[Database] Failed to import conversation ${conv.id}:`, err.message);
+                console.error(`[Database] Failed to import conversation ${conv.id || conv.conversationId}:`, err.message);
                 failed++;
             }
         }
@@ -755,7 +755,12 @@ class DatabaseService {
         const BATCH_SIZE = 500;
         for (let i = 0; i < messages.length; i += BATCH_SIZE) {
             const batch = messages.slice(i, i + BATCH_SIZE).map(msg => ({
-                ...msg,
+                id: msg.id,
+                conversation_id: msg.conversationId || msg.conversation_id,
+                content: msg.content,
+                author: msg.author || 'unknown',
+                timestamp: msg.ts ? new Date(msg.ts) : (msg.timestamp ? new Date(msg.timestamp) : null),
+                scraped_at: msg.savedAt ? new Date(msg.savedAt) : new Date(),
                 payload: msg,
             }));
 

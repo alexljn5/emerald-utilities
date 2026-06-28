@@ -673,7 +673,18 @@ export function registerIpcHandlers(context) {
 
             const blacklistPath = path.join(process.cwd(), 'src/database/network/blackisted-ips.json');
             const content = await fsPromises.readFile(blacklistPath, 'utf8');
-            const ips = JSON.parse(content);
+
+            let ips;
+            try {
+                ips = JSON.parse(content);
+            } catch {
+                // Fallback: treat as newline-separated IP list
+                ips = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            }
+
+            if (!Array.isArray(ips)) {
+                ips = [ips];
+            }
 
             const count = await databaseService.importIPBlacklist(ips);
             return { ok: true, count };

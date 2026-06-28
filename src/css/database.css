@@ -140,6 +140,81 @@
     font-size: 13px;
 }
 
+/* Database Browser */
+.dbBrowser {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+}
+
+.tableList {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.tableList h4 {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.tableList ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tableBtn {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.8);
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+.tableBtn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.tableBtn.active {
+    background: rgba(255, 68, 68, 0.15);
+    color: #ff4444;
+}
+
+.noTables {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+}
+
+.tableViewer {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 200px;
+}
+
+.placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+    text-align: center;
+    padding: 40px;
+}
+
 /* Query */
 .queryBox {
     display: flex;

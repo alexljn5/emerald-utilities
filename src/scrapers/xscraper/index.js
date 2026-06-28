@@ -1,4 +1,4 @@
-import { invoke } from '../../js/electronApi.js';
+import { invoke } from '../../utils/electronApi.js';
 
 export async function checkFirefoxInstalled() {
     try {

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { scriptManager } from '../core/scriptManager.js';
-import { invoke } from '../js/electronApi.js';
-import { useTerminalLog } from '../js/terminalHooks.js';
+import { invoke } from '../utils/electronApi.js';
+import { useTerminalLog } from '../utils/terminalHooks.js';
 import '../css/script_tool.css';
 
 function TerminalLines({ terminalLog, terminalHidden, terminalRef }) {

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import PageShell from './PageShell.jsx';
-import { invoke } from '../js/electronApi.js';
+import { invoke } from '../utils/electronApi.js';
 import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler, exportIncremental } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 import '../css/internet.css';

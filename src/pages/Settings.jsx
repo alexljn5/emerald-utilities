@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import PageShell from './PageShell.jsx';
-import { invoke } from '../js/electronApi.js';
+import { invoke } from '../utils/electronApi.js';
 import '../css/settings.css';
 
 const DEFAULT_UI = {

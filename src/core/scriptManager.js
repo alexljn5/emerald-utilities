@@ -1,4 +1,4 @@
-import { invoke, on } from '../js/electronApi.js';
+import { invoke, on } from '../utils/electronApi.js';
 
 export class ScriptManager {
     constructor() {

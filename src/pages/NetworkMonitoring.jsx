@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { parseTcpdumpArgs } from '../core/tcpdumpArgs.js';
 import { networkManager } from '../core/networkManager.js';
-import { invoke } from '../js/electronApi.js';
+import { invoke } from '../utils/electronApi.js';
 import eye from '../../img/network-overseer/network-overseer-eye.png';
 import hand from '../../img/network-overseer/network-overseer-hand.png';
 import wing from '../../img/network-overseer/network-overseer-wing.png';

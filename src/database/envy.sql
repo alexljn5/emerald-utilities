@@ -65,6 +65,23 @@ CREATE TABLE IF NOT EXISTS grok_conversations (
 );
 
 -- ============================================================
+-- RAW GROK DUMP LAYER (CRITICAL FIX)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS grok_raw_imports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    filename TEXT NOT NULL,
+    imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    raw JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_grok_raw_imports_filename
+ON grok_raw_imports(filename);
+
+CREATE INDEX IF NOT EXISTS idx_grok_raw_imports_raw_gin
+ON grok_raw_imports USING GIN (raw);
+
+-- ============================================================
 -- GROK MESSAGES
 -- ============================================================
 

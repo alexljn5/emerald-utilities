@@ -90,7 +90,7 @@ export default function Database({ route, setRoute }) {
         setImportLog(prev => [...prev, 'Importing Grok export...']);
         try {
             const result = await invoke('database:import-grok-export');
-            setImportLog(prev => [...prev, `Imported ${result.importedMessages} messages from ${result.importedConversations} conversations`]);
+            setImportLog(prev => [...prev, `Imported ${result.importedMessages} messages from ${result.importedConversations} conversations${result.failed > 0 ? ` (${result.failed} failed)` : ''}`]);
             await loadStats();
         } catch (err) {
             setImportLog(prev => [...prev, `Error: ${err.message}`]);

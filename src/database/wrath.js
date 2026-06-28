@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DATABASE SERVICE - PostgreSQL JSONB Storage Layer
  * Main-process-only database access for Emerald Utilities.
  *
@@ -21,6 +21,40 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// ============================================================
+// Payload Size Helper
+// ============================================================
+
+const MAX_PAYLOAD_SIZE = 1024 * 1024; // 1MB max payload size
+
+/**
+ * Safely serialize payload, truncating if too large
+ * Returns a safe payload object for database storage
+ */
+function safePayload(obj) {
+    try {
+        const jsonStr = JSON.stringify(obj);
+        if (jsonStr.length > MAX_PAYLOAD_SIZE) {
+            console.warn(`[Database] Payload too large (${jsonStr.length} bytes), truncating`);
+            // Store a truncated version with metadata about truncation
+            const truncated = {
+                _truncated: true,
+                _originalSize: jsonStr.length,
+                _truncatedAt: MAX_PAYLOAD_SIZE,
+                content: obj.content || '',
+                author: obj.author,
+                id: obj.id,
+                conversationId: obj.conversationId || obj.conversation_id,
+            };
+            return truncated;
+        }
+        return obj;
+    } catch (err) {
+        console.error('[Database] Failed to serialize payload:', err.message);
+        return { _error: true, id: obj.id };
+    }
+}
 
 // ============================================================
 // Configuration
@@ -517,7 +551,7 @@ class DatabaseService {
             message.author,
             message.timestamp ? new Date(message.timestamp) : null,
             message.scrapedAt ? new Date(message.scrapedAt) : new Date(),
-            message.payload || message,
+            safePayload(message.payload || message),
         ];
 
         const result = await this.query(sql, params);
@@ -555,7 +589,7 @@ class DatabaseService {
                     message.author,
                     message.timestamp ? new Date(message.timestamp) : null,
                     message.scrapedAt ? new Date(message.scrapedAt) : new Date(),
-                    message.payload || message,
+                    safePayload(message.payload || message),
                 ];
 
                 const result = await client.query(sql, params);
@@ -730,6 +764,9 @@ class DatabaseService {
         const conversations = exportData.conversations || exportData.data?.conversations || [];
         const messages = exportData.messages || exportData.data?.messages || [];
 
+        console.log(`[Database] Importing Grok export: ${conversations.length} conversations, ${messages.length} messages`);
+        console.log(`[Database] Export data size: ${JSON.stringify(exportData).length} bytes`);
+
         let importedConversations = 0;
         let importedMessages = 0;
         let failed = 0;
@@ -737,9 +774,17 @@ class DatabaseService {
         // Import conversations first
         for (const conv of conversations) {
             try {
+                const convId = conv.id || conv.conversationId;
+                if (!convId) {
+                    console.warn('[Database] Skipping conversation with no id:', conv);
+                    failed++;
+                    continue;
+                }
+                const convSize = JSON.stringify(conv).length;
+                console.log(`[Database] Importing conversation ${convId} (${convSize} bytes)`);
                 await this.upsertGrokConversation({
-                    id: conv.id || conv.conversationId,
-                    title: conv.title || conv.conversationTitle,
+                    id: convId,
+                    title: conv.title || conv.conversationTitle || 'Untitled',
                     message_count: conv.message_count || 0,
                     last_scraped: conv.last_scraped || conv.last_updated || conv.exportDate,
                     metadata: conv,
@@ -752,23 +797,38 @@ class DatabaseService {
         }
 
         // Import messages in batches
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 200;
         for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-            const batch = messages.slice(i, i + BATCH_SIZE).map(msg => ({
-                id: msg.id,
-                conversation_id: msg.conversationId || msg.conversation_id,
-                content: msg.content,
-                author: msg.author || 'unknown',
-                timestamp: msg.ts ? new Date(msg.ts) : (msg.timestamp ? new Date(msg.timestamp) : null),
-                scraped_at: msg.savedAt ? new Date(msg.savedAt) : new Date(),
-                payload: msg,
-            }));
+            const batch = messages.slice(i, i + BATCH_SIZE).map((msg, idx) => {
+                const convId = msg.conversationId || msg.conversation_id;
+                if (!convId) {
+                    console.warn(`[Database] Skipping message ${msg.id} with no conversationId`);
+                    return null;
+                }
+                const msgSize = JSON.stringify(msg).length;
+                const contentLength = msg.content ? msg.content.length : 0;
+                console.log(`[Database] Processing message ${msg.id} (conv: ${convId}, size: ${msgSize} bytes, content: ${contentLength} chars)`);
+                return {
+                    id: msg.id,
+                    conversation_id: convId,
+                    content: msg.content,
+                    author: msg.author || 'unknown',
+                    timestamp: msg.ts ? new Date(msg.ts) : (msg.timestamp ? new Date(msg.timestamp) : null),
+                    scraped_at: msg.savedAt ? new Date(msg.savedAt) : new Date(),
+                    payload: msg,
+                };
+            }).filter(Boolean);
+
+            if (batch.length === 0) continue;
 
             try {
+                console.log(`[Database] Saving message batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} messages)`);
                 await this.saveGrokMessagesBatch(batch);
                 importedMessages += batch.length;
+                console.log(`[Database] Batch saved. Total messages imported: ${importedMessages}/${messages.length}`);
             } catch (err) {
                 console.error(`[Database] Failed to import message batch at ${i}:`, err.message);
+                console.error(`[Database] Batch error details:`, err.stack || err);
                 failed += batch.length;
             }
         }
@@ -781,6 +841,8 @@ class DatabaseService {
             failed,
             importedAt: new Date().toISOString(),
         });
+
+        console.log(`[Database] Grok import complete: ${importedConversations} conversations, ${importedMessages} messages, ${failed} failed`);
 
         return {
             importedConversations,

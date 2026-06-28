@@ -1,4 +1,4 @@
-// src/pages/js/database.js
+﻿// src/pages/js/database.js
 import { versionNumber } from "../../globals.js";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -94,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
         addLogEntry("Select Grok export JSON file...");
         try {
             const result = await window.electronAPI.invoke("database:import-grok-export");
-            addLogEntry(`Imported ${result.importedMessages} messages from ${result.importedConversations} conversations`);
+            addLogEntry(`Imported ${result.importedMessages} messages from ${result.importedConversations} conversations${result.failed > 0 ? ` (${result.failed} failed)` : ''}`);
             await loadStats();
         } catch (err) {
             addLogEntry(`Error: ${err.message}`);

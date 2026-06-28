@@ -650,18 +650,34 @@ export function registerIpcHandlers(context) {
             }
 
             const filePath = result.filePaths[0];
+            console.log(`[Database] Reading Grok export file: ${filePath}`);
+
             const content = await fsPromises.readFile(filePath, 'utf8');
-            const data = JSON.parse(content);
+            console.log(`[Database] File size: ${content.length} bytes`);
+
+            let data;
+            try {
+                data = JSON.parse(content);
+            } catch (parseErr) {
+                console.error('[Database] Failed to parse JSON:', parseErr.message);
+                return { ok: false, error: `JSON parse error: ${parseErr.message}` };
+            }
+
+            const messageCount = data.messages?.length || data.data?.messages?.length || 0;
+            const convCount = data.conversations?.length || data.data?.conversations?.length || 0;
+            console.log(`[Database] Parsed ${convCount} conversations, ${messageCount} messages`);
 
             const importResult = await databaseService.importGrokIndexedDBExport(data);
             return {
                 ok: true,
                 importedConversations: importResult.importedConversations,
-                importedMessages: importResult.importedMessages
+                importedMessages: importResult.importedMessages,
+                failed: importResult.failed
             };
         } catch (err) {
             console.error('[Database] import-grok-export error:', err);
-            return { ok: false, error: err.message };
+            console.error('[Database] Error stack:', err.stack || err);
+            return { ok: false, error: err.message, stack: err.stack };
         }
     });
 

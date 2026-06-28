@@ -92,3 +92,143 @@
     font-size: 12px;
     line-height: 1.5;
 }
+
+/* Stat Cards */
+.statCard {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+}
+
+.statLabel {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.statValue {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+}
+
+/* Connection Status */
+.statusConnected {
+    color: #44ff44;
+}
+
+.statusDisconnected {
+    color: #ff4444;
+}
+
+/* Table Browser */
+.tableList h4 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.tableList ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tableBtn {
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tableBtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tableBtn.active {
+    background: rgba(255, 68, 68, 0.2);
+    border-color: rgba(255, 68, 68, 0.4);
+}
+
+.noTables {
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+    font-size: 13px;
+}
+
+/* Table Viewer */
+.tableViewer {
+    min-height: 100px;
+}
+
+.queryError {
+    padding: 12px;
+    background: rgba(255, 68, 68, 0.15);
+    border: 1px solid rgba(255, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #ff6666;
+    font-size: 13px;
+}
+
+.queryResult h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #fff;
+}
+
+.placeholder {
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+}
+
+/* Clear Log Button */
+.clearLogBtn {
+    margin-top: 12px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.clearLogBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Log Entry */
+.logEntry {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.logEntry:last-child {
+    border-bottom: none;
+}
+
+/* Buttons */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .dbBrowser {
+        grid-template-columns: 1fr;
+    }
+}

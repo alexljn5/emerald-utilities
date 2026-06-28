@@ -413,6 +413,27 @@ function getDatabaseDir() {
     return path.join(path.dirname(scriptDir), 'database');
 }
 
+function getDatabaseCommand(scriptPath, dbDir) {
+    const wslDbDir = toWslPath(dbDir);
+
+    if (process.platform === 'win32') {
+        // On Windows, run the script inside WSL via `wsl bash -s`
+        const stdin = fs.readFileSync(scriptPath, 'utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        return {
+            command: 'wsl',
+            args: ['bash', '-s', wslDbDir],
+            stdin
+        };
+    }
+
+    // On Linux/macOS, run directly
+    return {
+        command: 'bash',
+        args: [scriptPath, dbDir],
+        stdin: null
+    };
+}
+
 export async function startDatabase() {
     if (databaseProcess) {
         console.log('[DB] Database process already running');
@@ -421,20 +442,19 @@ export async function startDatabase() {
 
     const scriptPath = getDatabaseScriptPath('db-start.sh');
     const dbDir = getDatabaseDir();
+    const { command, args, stdin } = getDatabaseCommand(scriptPath, dbDir);
 
-    // Convert Windows path to WSL path if needed
-    let wslDbDir = dbDir;
-    if (process.platform === 'win32') {
-        wslDbDir = toWslPath(dbDir);
-    }
-
-    console.log(`[DB] Starting database... Script: ${scriptPath}, Dir: ${wslDbDir}`);
+    console.log(`[DB] Starting database... Script: ${scriptPath}, Dir: ${toWslPath(dbDir)}`);
 
     const proc = spawn(
-        'bash',
-        [scriptPath, wslDbDir],
+        command,
+        args,
         { stdio: ['pipe', 'pipe', 'pipe'] }
     );
+
+    if (stdin) {
+        proc.stdin.end(stdin);
+    }
 
     proc.stdout.setEncoding('utf8');
     proc.stderr.setEncoding('utf8');
@@ -490,16 +510,16 @@ export async function stopDatabase() {
     // Run the stop script
     const scriptPath = getDatabaseScriptPath('db-stop.sh');
     const dbDir = getDatabaseDir();
-
-    let wslDbDir = dbDir;
-    if (process.platform === 'win32') {
-        wslDbDir = toWslPath(dbDir);
-    }
+    const { command, args, stdin } = getDatabaseCommand(scriptPath, dbDir);
 
     try {
-        const stopProc = spawn('bash', [scriptPath, wslDbDir], {
+        const stopProc = spawn(command, args, {
             stdio: ['pipe', 'pipe', 'pipe']
         });
+
+        if (stdin) {
+            stopProc.stdin.end(stdin);
+        }
 
         stopProc.stdout.setEncoding('utf8');
         stopProc.stderr.setEncoding('utf8');

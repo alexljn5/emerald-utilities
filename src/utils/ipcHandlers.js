@@ -6,6 +6,7 @@ import {
     processModDownloads,
     resolveModsFolder
 } from '../core/modUpdater.js';
+import { shell } from 'electron';
 
 export function registerIpcHandlers(context) {
     const {
@@ -535,6 +536,59 @@ export function registerIpcHandlers(context) {
         }
     });
 
+    ipcMain.handle('database:get-connection-info', async () => {
+        try {
+            if (!databaseService) {
+                return {
+                    host: 'localhost',
+                    port: 5432,
+                    database: 'emerald_utilities',
+                    user: 'emerald',
+                    connected: false
+                };
+            }
+            return databaseService.getConnectionInfo();
+        } catch (err) {
+            console.error('[Database] get-connection-info error:', err);
+            return {
+                host: 'localhost',
+                port: 5432,
+                database: 'emerald_utilities',
+                user: 'emerald',
+                connected: false
+            };
+        }
+    });
+
+    ipcMain.handle('database:query', async (_event, { sql }) => {
+        try {
+            if (!databaseService) {
+                throw new Error('Database service not available');
+            }
+            const result = await databaseService.executeQuery(sql);
+            return {
+                ok: true,
+                rows: result.rows,
+                fields: result.fields,
+                rowCount: result.rowCount
+            };
+        } catch (err) {
+            console.error('[Database] query error:', err);
+            throw err;
+        }
+    });
+
+    ipcMain.handle('database:open-pgadmin', async () => {
+        try {
+            const url = 'http://localhost:5050';
+            await shell.openExternal(url);
+            return { ok: true };
+        } catch (err) {
+            console.error('[Database] open-pgadmin error:', err);
+            throw err;
+        }
+    });
+
     ipcMain.handle('database:import-network-log', async (_event, { file }) => {
         try {
             if (!databaseService) {
@@ -602,8 +656,8 @@ export function registerIpcHandlers(context) {
             const importResult = await databaseService.importGrokIndexedDBExport(data);
             return {
                 ok: true,
-                importedConversations: importResult.conversations,
-                importedMessages: importResult.messages
+                importedConversations: importResult.importedConversations,
+                importedMessages: importResult.importedMessages
             };
         } catch (err) {
             console.error('[Database] import-grok-export error:', err);

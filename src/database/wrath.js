@@ -813,6 +813,34 @@ class DatabaseService {
             return { healthy: false, error: err.message };
         }
     }
+
+    getConnectionInfo() {
+        return {
+            host: this.config.host,
+            port: this.config.port,
+            database: this.config.database,
+            user: this.config.user,
+            connected: this.connected,
+        };
+    }
+
+    async executeQuery(sql) {
+        if (!sql || typeof sql !== 'string') {
+            throw new Error('Query must be a non-empty string');
+        }
+
+        const trimmed = sql.trim();
+        if (!trimmed) {
+            throw new Error('Query must be a non-empty string');
+        }
+
+        const upper = trimmed.toUpperCase();
+        if (!upper.startsWith('SELECT') && !upper.startsWith('WITH')) {
+            throw new Error('Only SELECT queries are allowed from the UI');
+        }
+
+        return this.query(trimmed);
+    }
 }
 
 // ============================================================

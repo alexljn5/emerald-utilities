@@ -10,10 +10,16 @@ export default function Database({ route, setRoute }) {
     const [importLog, setImportLog] = useState([]);
     const [networkFiles, setNetworkFiles] = useState([]);
     const [selectedFile, setSelectedFile] = useState('');
+    const [query, setQuery] = useState('');
+    const [queryResult, setQueryResult] = useState(null);
+    const [queryError, setQueryError] = useState('');
+    const [querying, setQuerying] = useState(false);
+    const [connectionInfo, setConnectionInfo] = useState(null);
 
     useEffect(() => {
         loadStats();
         loadNetworkFiles();
+        loadConnectionInfo();
     }, []);
 
     async function loadStats() {
@@ -33,6 +39,15 @@ export default function Database({ route, setRoute }) {
             setNetworkFiles(result.files || []);
         } catch (err) {
             console.error('Failed to load network files:', err);
+        }
+    }
+
+    async function loadConnectionInfo() {
+        try {
+            const result = await invoke('database:get-connection-info');
+            setConnectionInfo(result);
+        } catch (err) {
+            console.error('Failed to load connection info:', err);
         }
     }
 
@@ -80,11 +95,69 @@ export default function Database({ route, setRoute }) {
         }
     }
 
+    async function runQuery() {
+        if (!query.trim()) return;
+        setQuerying(true);
+        setQueryError('');
+        setQueryResult(null);
+        try {
+            const result = await invoke('database:query', { sql: query.trim() });
+            setQueryResult(result);
+        } catch (err) {
+            setQueryError(err.message);
+        } finally {
+            setQuerying(false);
+        }
+    }
+
+    async function openPgAdmin() {
+        try {
+            await invoke('database:open-pgadmin');
+        } catch (err) {
+            setImportLog(prev => [...prev, `Error opening pgAdmin: ${err.message}`]);
+        }
+    }
+
     return (
         <PageShell title="Database" route={route} setRoute={setRoute}>
             <div className="databasePage">
                 <section className="dbSection">
-                    <h2>Connection Status</h2>
+                    <h2>Connection</h2>
+                    {connectionInfo ? (
+                        <div className="connectionBox">
+                            <div className="connRow">
+                                <span className="connLabel">Host:</span>
+                                <span className="connValue">{connectionInfo.host}</span>
+                            </div>
+                            <div className="connRow">
+                                <span className="connLabel">Port:</span>
+                                <span className="connValue">{connectionInfo.port}</span>
+                            </div>
+                            <div className="connRow">
+                                <span className="connLabel">Database:</span>
+                                <span className="connValue">{connectionInfo.database}</span>
+                            </div>
+                            <div className="connRow">
+                                <span className="connLabel">User:</span>
+                                <span className="connValue">{connectionInfo.user}</span>
+                            </div>
+                            <div className="connRow">
+                                <span className="connLabel">Status:</span>
+                                <span className={`connValue ${connectionInfo.connected ? 'statusConnected' : 'statusDisconnected'}`}>
+                                    {connectionInfo.connected ? 'Connected' : 'Disconnected'}
+                                </span>
+                            </div>
+                            <button type="button" onClick={openPgAdmin} className="actionBtn" style={{ marginTop: '12px' }}>
+                                Open pgAdmin
+                            </button>
+                        </div>
+                    ) : (
+                        <p>Loading connection info...</p>
+                    )}
+                </section>
+
+                <section className="dbSection">
+                    <h2>Statistics</h2>
                     {loading ? (
                         <p>Loading...</p>
                     ) : stats ? (
@@ -108,10 +181,6 @@ export default function Database({ route, setRoute }) {
                             <div className="statCard">
                                 <span className="statLabel">Blacklisted Packets</span>
                                 <span className="statValue">{stats.blacklistedPackets ?? 0}</span>
-                            </div>
-                            <div className="statCard">
-                                <span className="statLabel">Connected</span>
-                                <span className="statValue">{stats.connected ? 'Yes' : 'No'}</span>
                             </div>
                         </div>
                     ) : (
@@ -162,6 +231,62 @@ export default function Database({ route, setRoute }) {
                             </button>
                         </div>
                     </div>
+                </section>
+
+                <section className="dbSection">
+                    <h2>SQL Query</h2>
+                    <div className="queryBox">
+                        <textarea
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="SELECT * FROM network_packet_events LIMIT 10;"
+                            rows={4}
+                            className="queryInput"
+                        />
+                        <button
+                            type="button"
+                            onClick={runQuery}
+                            disabled={querying || !query.trim()}
+                            className="actionBtn"
+                            style={{ marginTop: '8px' }}
+                        >
+                            {querying ? 'Running...' : 'Run Query'}
+                        </button>
+                    </div>
+                    {queryError && (
+                        <div className="queryError">
+                            <strong>Error:</strong> {queryError}
+                        </div>
+                    )}
+                    {queryResult && (
+                        <div className="queryResult">
+                            <h4>Result ({queryResult.rows?.length ?? 0} rows)</h4>
+                            {queryResult.rows && queryResult.rows.length > 0 ? (
+                                <div className="tableWrapper">
+                                    <table className="resultTable">
+                                        <thead>
+                                            <tr>
+                                                {Object.keys(queryResult.rows[0]).map(key => (
+                                                    <th key={key}>{key}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {queryResult.rows.map((row, i) => (
+                                                <tr key={i}>
+                                                    {Object.values(row).map((val, j) => (
+                                                        <td key={j}>{typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}</td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <p>No rows returned.</p>
+                            )}
+                        </div>
+                    )}
                 </section>
 
                 {importLog.length > 0 && (

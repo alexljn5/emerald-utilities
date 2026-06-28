@@ -28,3 +28,4 @@ start_dev.sh
 src/database/POSTGRES_JSON_PROPOSAL.md
 INTERNET_BROWSER.md
 src/database/nuhuh.sh
+src/database/README.md

@@ -616,75 +616,160 @@ export function registerXScraperIpcHandlers(context) {
 
     // Reconcile the local XScraper store (SQLite + any legacy JSON exports)
     // against PostgreSQL. Idempotent: repeated runs converge to pending = 0.
+    //
+    // Extracted so the background ticker can reuse exactly the same path as
+    // the manual button - one reconciliation implementation, not two.
+    async function reconcileLocalStoreToPostgres({ quiet = false } = {}) {
+        const log = quiet ? () => { } : pushScriptLog;
+
+        const local = await readLocalXScraperSource({});
+
+        log(
+            `[XScraper→Postgres] Local sources: sqlite=${local.sources.sqlite.total} json=${local.sources.json.total}`
+        );
+
+        if (local.byConversation.size === 0) {
+            return {
+                success: true,
+                inserted: 0, skipped: 0, errors: 0,
+                localTotal: 0, alreadyInPostgres: 0, pendingToInsert: 0,
+                results: [],
+                message: 'No locally stored XScraper messages found — nothing to reconcile'
+            };
+        }
+
+        const totals = {
+            localTotal: 0, alreadyInPostgres: 0, pendingToInsert: 0,
+            inserted: 0, skipped: 0, invalid: 0, duplicatesInLocalSource: 0, errors: 0
+        };
+        const results = [];
+
+        for (const [conversationId, messages] of local.byConversation) {
+            const title = local.titles.get(conversationId) || 'Scraped Conversation';
+            try {
+                const r = await forwardScrapedMessagesToPostgres(messages, conversationId, title);
+                if (r.success) {
+                    totals.localTotal += r.localTotal || 0;
+                    totals.alreadyInPostgres += r.alreadyInPostgres || 0;
+                    totals.pendingToInsert += r.pendingToInsert || 0;
+                    totals.inserted += r.inserted || 0;
+                    totals.skipped += r.skipped || 0;
+                    totals.invalid += r.invalid || 0;
+                    totals.duplicatesInLocalSource += r.duplicatesInLocalSource || 0;
+                    log(
+                        `[XScraper→Postgres] ${conversationId}: local=${r.localTotal} already=${r.alreadyInPostgres} ` +
+                        `pending=${r.pendingToInsert} inserted=${r.inserted} skipped=${r.skipped}`
+                    );
+                    results.push({ conversationId, ...r });
+                } else {
+                    totals.errors++;
+                    log(`[XScraper→Postgres] ${conversationId}: FAILED - ${r.error}`);
+                    results.push({ conversationId, error: r.error });
+                }
+            } catch (err) {
+                totals.errors++;
+                log(`[XScraper→Postgres] ${conversationId}: Exception - ${err.message}`);
+                results.push({ conversationId, error: err.message });
+            }
+        }
+
+        log(
+            `[XScraper→Postgres] Complete: local_total=${totals.localTotal} already_in_postgres=${totals.alreadyInPostgres} ` +
+            `pending_to_insert=${totals.pendingToInsert} inserted=${totals.inserted} skipped=${totals.skipped} errors=${totals.errors}`
+        );
+
+        return {
+            success: totals.errors === 0,
+            ...totals,
+            results,
+            message: `Reconciled ${totals.localTotal} local messages: inserted ${totals.inserted}, already present ${totals.alreadyInPostgres}`
+        };
+    }
+
     ipcMain.handle('xscraper:forward-exported-to-postgres', async () => {
         try {
-            const local = await readLocalXScraperSource({});
-
-            pushScriptLog(
-                `[XScraper→Postgres] Local sources: sqlite=${local.sources.sqlite.total} json=${local.sources.json.total}`
-            );
-
-            if (local.byConversation.size === 0) {
-                return {
-                    success: true,
-                    inserted: 0, skipped: 0, errors: 0,
-                    localTotal: 0, alreadyInPostgres: 0, pendingToInsert: 0,
-                    results: [],
-                    message: 'No locally stored XScraper messages found — nothing to reconcile'
-                };
-            }
-
-            const totals = {
-                localTotal: 0, alreadyInPostgres: 0, pendingToInsert: 0,
-                inserted: 0, skipped: 0, invalid: 0, duplicatesInLocalSource: 0, errors: 0
-            };
-            const results = [];
-
-            for (const [conversationId, messages] of local.byConversation) {
-                const title = local.titles.get(conversationId) || 'Scraped Conversation';
-                try {
-                    const r = await forwardScrapedMessagesToPostgres(messages, conversationId, title);
-                    if (r.success) {
-                        totals.localTotal += r.localTotal || 0;
-                        totals.alreadyInPostgres += r.alreadyInPostgres || 0;
-                        totals.pendingToInsert += r.pendingToInsert || 0;
-                        totals.inserted += r.inserted || 0;
-                        totals.skipped += r.skipped || 0;
-                        totals.invalid += r.invalid || 0;
-                        totals.duplicatesInLocalSource += r.duplicatesInLocalSource || 0;
-                        pushScriptLog(
-                            `[XScraper→Postgres] ${conversationId}: local=${r.localTotal} already=${r.alreadyInPostgres} ` +
-                            `pending=${r.pendingToInsert} inserted=${r.inserted} skipped=${r.skipped}`
-                        );
-                        results.push({ conversationId, ...r });
-                    } else {
-                        totals.errors++;
-                        pushScriptLog(`[XScraper→Postgres] ${conversationId}: FAILED - ${r.error}`);
-                        results.push({ conversationId, error: r.error });
-                    }
-                } catch (err) {
-                    totals.errors++;
-                    pushScriptLog(`[XScraper→Postgres] ${conversationId}: Exception - ${err.message}`);
-                    results.push({ conversationId, error: err.message });
-                }
-            }
-
-            pushScriptLog(
-                `[XScraper→Postgres] Complete: local_total=${totals.localTotal} already_in_postgres=${totals.alreadyInPostgres} ` +
-                `pending_to_insert=${totals.pendingToInsert} inserted=${totals.inserted} skipped=${totals.skipped} errors=${totals.errors}`
-            );
-
-            return {
-                success: totals.errors === 0,
-                ...totals,
-                results,
-                message: `Reconciled ${totals.localTotal} local messages: inserted ${totals.inserted}, already present ${totals.alreadyInPostgres}`
-            };
+            return await reconcileLocalStoreToPostgres();
         } catch (err) {
             console.error('[XScraper] Reconcile local store to PostgreSQL error:', err);
             return { success: false, error: err.message, inserted: 0, skipped: 0, errors: 1 };
         }
     });
+
+    // ---------------------------------------------------------------------
+    // Background reconciler.
+    //
+    // The renderer poll loop only exists while the Internet page is mounted.
+    // This keeps draining the local store into PostgreSQL after the user
+    // navigates away, so anything the extension already flushed to SQLite
+    // still lands in the database. It is the same idempotent reconciliation,
+    // so it can never duplicate or retransmit known messages.
+    // ---------------------------------------------------------------------
+    let backgroundSyncTimer = null;
+    let backgroundSyncBusy = false;
+    let backgroundSyncLastRun = null;
+    let backgroundSyncLastResult = null;
+
+    async function backgroundSyncTick() {
+        if (backgroundSyncBusy) return;
+        backgroundSyncBusy = true;
+        try {
+            const r = await reconcileLocalStoreToPostgres({ quiet: true });
+            backgroundSyncLastRun = new Date().toISOString();
+            backgroundSyncLastResult = {
+                localTotal: r.localTotal || 0,
+                alreadyInPostgres: r.alreadyInPostgres || 0,
+                inserted: r.inserted || 0,
+                pendingToInsert: r.pendingToInsert || 0,
+                errors: r.errors || 0
+            };
+            // Only speak up when something actually changed.
+            if ((r.inserted || 0) > 0 || (r.errors || 0) > 0) {
+                pushScriptLog(
+                    `[XScraper→Postgres] background: inserted ${r.inserted || 0}, ` +
+                    `already present ${r.alreadyInPostgres || 0}, errors ${r.errors || 0}`
+                );
+            }
+        } catch (err) {
+            console.warn('[XScraper] background sync tick failed:', err.message);
+        } finally {
+            backgroundSyncBusy = false;
+        }
+    }
+
+    ipcMain.handle('xscraper:background-sync', async (_event, { enabled = true, intervalMs = 60000 } = {}) => {
+        try {
+            if (!enabled) {
+                if (backgroundSyncTimer) {
+                    clearInterval(backgroundSyncTimer);
+                    backgroundSyncTimer = null;
+                    pushScriptLog('[XScraper→Postgres] background sync stopped');
+                }
+                return { success: true, running: false, lastRun: backgroundSyncLastRun };
+            }
+
+            if (backgroundSyncTimer) {
+                return { success: true, running: true, lastRun: backgroundSyncLastRun, alreadyRunning: true };
+            }
+
+            const ms = Math.max(10000, Number(intervalMs) || 60000);
+            backgroundSyncTimer = setInterval(backgroundSyncTick, ms);
+            if (typeof backgroundSyncTimer.unref === 'function') backgroundSyncTimer.unref();
+            pushScriptLog(`[XScraper→Postgres] background sync started (every ${Math.round(ms / 1000)}s)`);
+            backgroundSyncTick();
+            return { success: true, running: true, intervalMs: ms };
+        } catch (err) {
+            console.error('[XScraper] background sync error:', err);
+            return { success: false, error: err.message, running: !!backgroundSyncTimer };
+        }
+    });
+
+    ipcMain.handle('xscraper:background-sync-status', async () => ({
+        success: true,
+        running: !!backgroundSyncTimer,
+        busy: backgroundSyncBusy,
+        lastRun: backgroundSyncLastRun,
+        lastResult: backgroundSyncLastResult
+    }));
 
     // Read-only XScraper sync diagnostic (never writes)
     ipcMain.handle('xscraper:diagnose', async (_event, { conversationId } = {}) => {

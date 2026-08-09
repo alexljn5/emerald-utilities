@@ -2,6 +2,15 @@ import { useEffect, useState, useRef } from 'react';
 import PageShell from './PageShell.jsx';
 import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler, exportIncremental, getNewMessages, forwardToPostgres, startLocalServer, forwardExportedToPostgres, clearExports, clearLocalStore } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
+
+/** Automatic forwarding worker tick. */
+const SYNC_TICK_MS = 2000;
+/** Messages per PostgreSQL round-trip. */
+const FORWARD_CHUNK = 250;
+/** When nothing is pending, only re-read the local store every N ticks. */
+const IDLE_READ_TICKS = 4;
+/** Upper bound for reconnect backoff. */
+const MAX_BACKOFF_MS = 60000;
 import '../css/internet.css';
 
 const DEFAULT_PAGES = [
@@ -24,19 +33,58 @@ export default function Internet({ route, setRoute }) {
     const [isScraping, setIsScraping] = useState(false);
     const [realtimeStats, setRealtimeStats] = useState({ seen: 0, queue: 0 });
     const [forwardStats, setForwardStats] = useState({ inserted: 0, skipped: 0, errors: 0 });
+    // Real pipeline state, so the UI can never show "Inserted: 0" without
+    // saying whether work is waiting, running, blocked or simply done.
+    const [syncState, setSyncState] = useState({
+        connection: 'idle',   // idle | syncing | connected | retrying
+        discovered: 0,        // messages present in the local store
+        pending: 0,           // not yet confirmed by PostgreSQL
+        processing: 0,        // in flight right now
+        failed: 0,            // failed transmissions (still retryable)
+        lastSyncAt: null
+    });
+    // Automatic sync is normal operation and is ON by default. Persisted as an
+    // ordinary app setting — deliberately not an environment variable.
+    const [liveSyncEnabled, setLiveSyncEnabled] = useState(() => {
+        try {
+            return localStorage.getItem('xscraper.liveSyncEnabled') !== 'false';
+        } catch {
+            return true;
+        }
+    });
     const [showAdvanced, setShowAdvanced] = useState(false);
     const browserViewRef = useRef(null);
     const webviewRef = useRef(null);
     const scrapeIntervalRef = useRef(null);
     const lastAutoExportRef = useRef(0);
     const lastExportTimestampRef = useRef(0);
-    const lastForwardTimestampRef = useRef(Date.now());
+    // Canonical identities PostgreSQL has confirmed during this session.
+    // The live loop is identity-based, NOT timestamp-based: `savedAt` is
+    // rewritten on every re-save of the same message, and a single bogus or
+    // future `savedAt` used to poison the watermark permanently, which left
+    // the loop silent and forced a manual "Forward to PostgreSQL" click.
+    const forwardedIdsRef = useRef(new Set());
+    // Exactly one flush may run at a time. The manual button and the automatic
+    // worker share this lock, so clicking "Forward now" during a live sync
+    // cannot produce a second pipeline or a double insert attempt.
+    const flushBusyRef = useRef(false);
+    const flushPendingRef = useRef(async () => null);
+    const pendingCountRef = useRef(0);
+    // Cheap short-circuit so a fully reconciled store does not cause a
+    // full IndexedDB read + PostgreSQL round-trip on every single tick.
+    const idleTicksRef = useRef(0);
+    // Bounded reconnect backoff when PostgreSQL is unreachable.
+    const backoffUntilRef = useRef(0);
+    const backoffMsRef = useRef(0);
     // Prevents overlapping poll ticks: a slow PostgreSQL round-trip must not
     // cause the same delta to be read and forwarded twice concurrently.
     const pollBusyRef = useRef(false);
     // Set when Live Sync is requested before the webview exists, so the sync
     // starts by itself as soon as the browser is ready (one button -> all).
     const autoStartRef = useRef(false);
+    // One automatic start per ready browser, so a failing crawler start does
+    // not retry on every render.
+    const autoStartedRef = useRef(false);
 
     /**
      * Read messages the extension has stored locally since `since`.
@@ -66,6 +114,163 @@ export default function Internet({ route, setRoute }) {
         }
         return res?.data?.messages || res?.messages || [];
     }
+
+    /**
+     * Canonical identity of a locally stored message.
+     *
+     * Must mirror the backend: PostgreSQL identity is
+     * (conversation_id, source_message_id) and the scraper's `m.id` IS the
+     * source_message_id. Position, array index and savedAt are deliberately
+     * NOT part of the identity — they change on every re-save and re-export.
+     */
+    function identityOf(m) {
+        const cid = m.conversationId || 'default';
+        const sid = m.id || m.messageId || m.sourceMessageId || '';
+        return `${cid}::${sid}`;
+    }
+
+    /**
+     * THE authoritative queue flush.
+     *
+     * Both the automatic worker and the manual "Forward now" button call this
+     * exact function, so a manual click never spawns a second pipeline and can
+     * never race the timer: `flushBusyRef` serialises them.
+     *
+     * Returns { discovered, pending, attempted, inserted, skipped, failed, pendingAfter }.
+     */
+    async function flushPending({ force = false, reason = 'auto' } = {}) {
+        if (flushBusyRef.current) return null;
+
+        // Bounded backoff: PostgreSQL unreachable -> wait, do not hammer it and
+        // do not spawn overlapping retries. A manual click bypasses the wait.
+        if (!force && backoffUntilRef.current > Date.now()) return null;
+
+        flushBusyRef.current = true;
+        try {
+            // Reading the whole local store is the only way to be correct
+            // (identities, not timestamps). Once the store is fully reconciled
+            // we back off to one read every IDLE_READ_TICKS ticks so a large
+            // history does not get serialised out of the webview every 2s.
+            if (!force && pendingCountRef.current === 0 && idleTicksRef.current > 0) {
+                idleTicksRef.current -= 1;
+                return null;
+            }
+            idleTicksRef.current = IDLE_READ_TICKS;
+
+            let localMessages = [];
+            try {
+                localMessages = await readLocalDelta(webviewRef.current, 0);
+            } catch (err) {
+                console.warn('[XScraper] IndexedDB read failed, trying SQLite mirror:', err.message);
+                const fallback = await getNewMessages(0);
+                if (fallback?.success && fallback.messages?.length) {
+                    localMessages = fallback.messages;
+                }
+            }
+
+            // Subtract what PostgreSQL already confirmed this session.
+            const pending = [];
+            for (const m of localMessages) {
+                if (!forwardedIdsRef.current.has(identityOf(m))) pending.push(m);
+            }
+
+            pendingCountRef.current = pending.length;
+            setSyncState(prev => ({
+                ...prev,
+                discovered: localMessages.length,
+                pending: pending.length
+            }));
+
+            if (pending.length === 0) {
+                setSyncState(prev => ({ ...prev, connection: 'idle' }));
+                return {
+                    discovered: localMessages.length, pending: 0, attempted: 0,
+                    inserted: 0, skipped: 0, failed: 0, pendingAfter: 0
+                };
+            }
+
+            setSyncState(prev => ({ ...prev, connection: 'syncing', processing: pending.length }));
+
+            const byConv = {};
+            for (const m of pending) {
+                const cid = m.conversationId || 'default';
+                (byConv[cid] ||= []).push(m);
+            }
+
+            let inserted = 0;
+            let skipped = 0;
+            let failed = 0;
+            let anyFailure = false;
+
+            for (const [convId, msgs] of Object.entries(byConv)) {
+                // Chunked so one huge conversation cannot stall the worker or
+                // blow the IPC payload limit.
+                for (let i = 0; i < msgs.length; i += FORWARD_CHUNK) {
+                    const chunk = msgs.slice(i, i + FORWARD_CHUNK);
+                    const r = await forwardToPostgres(chunk, convId);
+
+                    if (r?.success) {
+                        inserted += r.inserted || 0;
+                        skipped += r.skipped || 0;
+                        // Durable: PostgreSQL confirmed the row is present
+                        // (inserted now, or already there). Only now may the
+                        // message leave the pending set.
+                        for (const m of chunk) forwardedIdsRef.current.add(identityOf(m));
+                    } else {
+                        anyFailure = true;
+                        failed += chunk.length;
+                        console.warn('[XScraper] forward failed, staying pending for retry:', r?.error);
+                    }
+                }
+            }
+
+            const pendingAfter = Math.max(0, pending.length - (inserted + skipped));
+            pendingCountRef.current = pendingAfter;
+
+            setForwardStats(prev => ({
+                inserted: prev.inserted + inserted,
+                skipped: prev.skipped + skipped,
+                errors: prev.errors + (anyFailure ? 1 : 0)
+            }));
+
+            if (anyFailure) {
+                // Exponential, capped. Nothing is lost: the messages stay in
+                // IndexedDB and stay out of forwardedIds.
+                backoffMsRef.current = Math.min((backoffMsRef.current || 2000) * 2, MAX_BACKOFF_MS);
+                backoffUntilRef.current = Date.now() + backoffMsRef.current;
+                setSyncState(prev => ({
+                    ...prev, processing: 0, failed: prev.failed + failed,
+                    pending: pendingAfter, connection: 'retrying'
+                }));
+                setScraperStatus(`PostgreSQL unreachable — ${pendingAfter} pending, retry in ${Math.round(backoffMsRef.current / 1000)}s`);
+            } else {
+                backoffMsRef.current = 0;
+                backoffUntilRef.current = 0;
+                setSyncState(prev => ({
+                    ...prev, processing: 0, pending: pendingAfter,
+                    connection: 'connected', lastSyncAt: Date.now()
+                }));
+                setScraperStatus(`Live sync: +${inserted} new, ${skipped} already in PostgreSQL`);
+            }
+
+            console.log(
+                `[XScraper] flush(${reason}) discovered=${localMessages.length} ` +
+                `attempted=${pending.length} inserted=${inserted} skipped=${skipped} ` +
+                `failed=${failed} pendingAfter=${pendingAfter}`
+            );
+
+            return {
+                discovered: localMessages.length, pending: pending.length,
+                attempted: pending.length, inserted, skipped, failed, pendingAfter
+            };
+        } finally {
+            flushBusyRef.current = false;
+        }
+    }
+
+    // Keep the ref pointing at the latest closure so the interval never calls
+    // a stale version holding old state.
+    flushPendingRef.current = flushPending;
 
     useEffect(() => {
         let cancelled = false;
@@ -133,14 +338,28 @@ export default function Internet({ route, setRoute }) {
         };
     }, [partition]);
 
-    // One-button continuation: Live Sync was requested while the browser was
-    // still starting, so kick it off the moment the webview is usable.
+    // PLUG-AND-PLAY: automatic sync is normal operation. As soon as the
+    // browser is usable, the pipeline starts by itself — no Export click, no
+    // Forward click, no manual scrape. `autoStartRef` still covers the case
+    // where the user pressed the button before the webview existed.
+    //
+    // Stopping sets `liveSyncEnabled = false`, so a deliberate Stop is not
+    // immediately undone by this effect.
     useEffect(() => {
-        if (!autoStartRef.current) return;
-        if (!webviewReady || isScraping || loading) return;
+        if (!webviewReady) {
+            // Browser went away; allow one auto-start again when it returns.
+            autoStartedRef.current = false;
+            return;
+        }
+        if (isScraping || loading) return;
+        if (!liveSyncEnabled && !autoStartRef.current) return;
+        // Only one automatic attempt per ready browser. Without this a failing
+        // crawler start would retry on every render forever.
+        if (autoStartedRef.current && !autoStartRef.current) return;
+        autoStartedRef.current = true;
         autoStartRef.current = false;
         startLiveSync();
-    }, [webviewReady, isScraping, loading]);
+    }, [webviewReady, isScraping, loading, liveSyncEnabled]);
 
     // Scrape + Forward polling loop
     useEffect(() => {
@@ -175,73 +394,17 @@ export default function Internet({ route, setRoute }) {
                 //    recreated files that were deliberately deleted and spammed
                 //    the log. Use the "Export Data" button for a manual snapshot.
 
-                // 3. Forward new messages to PostgreSQL (direct from extension IndexedDB)
-                const since = lastForwardTimestampRef.current;
-                let newMessages = [];
-                try {
-                    newMessages = await readLocalDelta(webviewRef.current, since);
-                } catch (err) {
-                    console.warn('[XScraper] Incremental export failed, falling back to local server:', err.message);
-                    // Fallback: try local server (SQLite mirror written by the
-                    // extension's HTTP flush).
-                    const fallbackResult = await getNewMessages(since);
-                    if (fallbackResult?.success && fallbackResult.messages?.length > 0) {
-                        newMessages = fallbackResult.messages;
-                    }
-                }
-
-                if (newMessages.length > 0) {
-                    console.log(`[XScraper] ${newMessages.length} local messages to reconcile`);
-
-                    const messagesByConv = {};
-                    for (const msg of newMessages) {
-                        const cid = msg.conversationId || 'default';
-                        if (!messagesByConv[cid]) messagesByConv[cid] = [];
-                        messagesByConv[cid].push(msg);
-                    }
-
-                    let totalInserted = 0;
-                    let totalSkipped = 0;
-                    let totalErrors = 0;
-                    let allConfirmed = true;
-
-                    for (const [convId, msgs] of Object.entries(messagesByConv)) {
-                        const fwdResult = await forwardToPostgres(msgs, convId);
-                        if (fwdResult?.success) {
-                            totalInserted += fwdResult.inserted || 0;
-                            totalSkipped += fwdResult.skipped || 0;
-                            totalErrors += fwdResult.errors?.length || 0;
-                        } else {
-                            // PostgreSQL did not confirm persistence for this batch.
-                            allConfirmed = false;
-                            totalErrors += 1;
-                            console.warn('[XScraper] Forward failed, keeping messages local for retry:', fwdResult?.error);
-                        }
-                    }
-
-                    setForwardStats(prev => ({
-                        inserted: prev.inserted + totalInserted,
-                        skipped: prev.skipped + totalSkipped,
-                        errors: prev.errors + totalErrors,
-                    }));
-
-                    // DURABLE CHECKPOINT: only advance once PostgreSQL confirmed
-                    // persistence, and only up to the newest message we actually
-                    // handled — never to "now", which would silently drop any
-                    // message saved locally while the request was in flight.
-                    if (allConfirmed) {
-                        const maxSavedAt = newMessages.reduce(
-                            (acc, m) => Math.max(acc, Number(m.savedAt) || 0),
-                            0
-                        );
-                        if (maxSavedAt > lastForwardTimestampRef.current) {
-                            lastForwardTimestampRef.current = maxSavedAt;
-                        }
-                        setScraperStatus(`PostgreSQL: inserted ${totalInserted}, already present ${totalSkipped}`);
-                    } else {
-                        setScraperStatus('PostgreSQL unavailable — retrying, nothing lost');
-                    }
-                }
+                // 3. Flush pending local messages to PostgreSQL.
+                //
+                //    This is the ONE authoritative forwarding worker. It is
+                //    identity-based, never timestamp-based: the extension
+                //    rewrites `savedAt` every time it re-saves a message, and a
+                //    single bogus/future `savedAt` used to push the watermark
+                //    past everything, after which the loop went permanently
+                //    silent and only a manual "Forward" (which reads from 0)
+                //    still worked. That is the bug behind
+                //    "Queue: 575 / Inserted: 0".
+                await flushPendingRef.current();
             } catch (err) {
                 console.error('[XScraper] Poll error:', err);
             } finally {
@@ -251,7 +414,7 @@ export default function Internet({ route, setRoute }) {
 
         pollBusyRef.current = false;
         pollAndForward();
-        scrapeIntervalRef.current = setInterval(pollAndForward, 2000);
+        scrapeIntervalRef.current = setInterval(pollAndForward, SYNC_TICK_MS);
 
         return () => {
             if (scrapeIntervalRef.current) {
@@ -399,10 +562,10 @@ export default function Internet({ route, setRoute }) {
             if (result?.success) {
                 setIsScraping(true);
                 setForwardStats({ inserted: 0, skipped: 0, errors: 0 });
-                // Start from 0: the first pass reconciles the WHOLE local store
-                // against PostgreSQL. Already-persisted messages are detected by
+                // First pass reconciles the WHOLE local store against
+                // PostgreSQL. Already-persisted messages are detected by
                 // canonical identity and skipped, so this is cheap and converges.
-                lastForwardTimestampRef.current = 0;
+                idleTicksRef.current = 0;
                 setScraperStatus('Scraping + reconciling with PostgreSQL');
             } else {
                 setError(result?.error || 'Failed to start scrape');
@@ -469,27 +632,20 @@ export default function Internet({ route, setRoute }) {
 
             // 1. Extension IndexedDB — the store the scraper itself writes to.
             //    It lives in the webview partition, so only the renderer can
-            //    read it; the main process sees SQLite/JSON only. Without this
-            //    step the button reports "sqlite=0 json=0" even though the
-            //    extension is holding a freshly scraped conversation.
+            //    read it; the main process sees SQLite/JSON only.
+            //
+            //    This calls THE SAME flush the automatic worker uses, forced
+            //    past the backoff. It is a recovery/force-sync control, never a
+            //    second pipeline: `flushBusyRef` serialises it against the
+            //    timer, so a click during a live sync cannot double-send.
             if (webviewRef.current && webviewReady) {
-                const msgs = await readLocalDelta(webviewRef.current, 0);
-                if (msgs.length > 0) {
-                    const byConv = {};
-                    for (const msg of msgs) {
-                        const cid = msg.conversationId || 'default';
-                        if (!byConv[cid]) byConv[cid] = [];
-                        byConv[cid].push(msg);
-                    }
-                    for (const [cid, list] of Object.entries(byConv)) {
-                        const r = await forwardToPostgres(list, cid);
-                        if (r?.success) {
-                            add(r);
-                        } else {
-                            totals.errors += 1;
-                            console.warn('[XScraper] IndexedDB reconcile failed:', r?.error);
-                        }
-                    }
+                const r = await flushPendingRef.current({ force: true, reason: 'manual' });
+                if (r) {
+                    totals.localTotal += r.discovered || 0;
+                    totals.alreadyInPostgres += r.skipped || 0;
+                    // flushPending already updated forwardStats; only report here.
+                    totals.reportedInserted = (totals.reportedInserted || 0) + (r.inserted || 0);
+                    totals.reportedSkipped = (totals.reportedSkipped || 0) + (r.skipped || 0);
                 }
             }
 
@@ -531,6 +687,16 @@ export default function Internet({ route, setRoute }) {
      * streaming every new message straight into PostgreSQL. Clicking it again
      * stops the live sync.
      */
+    /** Persist the automatic-sync flag as an ordinary app setting. */
+    function persistLiveSync(enabled) {
+        setLiveSyncEnabled(enabled);
+        try {
+            localStorage.setItem('xscraper.liveSyncEnabled', String(enabled));
+        } catch {
+            /* storage unavailable: in-memory default still applies */
+        }
+    }
+
     async function handleLiveSync() {
         if (isScraping) {
             setLoading(true);
@@ -541,14 +707,19 @@ export default function Internet({ route, setRoute }) {
                 console.warn('[XScraper] stopCrawler failed:', err?.message);
             } finally {
                 autoStartRef.current = false;
+                // A deliberate Stop turns automatic sync OFF, otherwise the
+                // plug-and-play effect would restart it on the next render.
+                persistLiveSync(false);
                 setIsScraping(false);
                 setScraperStatus('Live sync stopped');
+                setSyncState(prev => ({ ...prev, connection: 'idle', processing: 0 }));
                 setLoading(false);
             }
             return;
         }
 
         setError('');
+        persistLiveSync(true);
 
         // No browser yet: launch it and pick up automatically as soon as the
         // webview reports dom-ready, so the user still only pressed once.
@@ -605,8 +776,11 @@ export default function Internet({ route, setRoute }) {
             const scrapeResult = await startRealtimeCrawler(webviewRef.current);
             if (scrapeResult?.success) {
                 setIsScraping(true);
-                // Reconcile the full local store on the first pass.
-                lastForwardTimestampRef.current = 0;
+                // Force a full local read on the very next tick so the first
+                // pass reconciles the entire store.
+                idleTicksRef.current = 0;
+                backoffUntilRef.current = 0;
+                backoffMsRef.current = 0;
                 setScraperStatus('Live: scraping and streaming to PostgreSQL');
             } else {
                 setError(scrapeResult?.error || 'Failed to start scrape');
@@ -648,9 +822,15 @@ export default function Internet({ route, setRoute }) {
         try {
             const result = await clearLocalStore({ sqlite: true, indexeddb: true, exports: true });
             if (result?.success) {
-                // The local checkpoint is meaningless once the local store is
-                // empty; reset it so the next pass reconciles from scratch.
-                lastForwardTimestampRef.current = 0;
+                // The session's "already confirmed" identity set describes a
+                // store that no longer exists; drop it so the next pass
+                // reconciles whatever is re-scraped from scratch.
+                forwardedIdsRef.current = new Set();
+                pendingCountRef.current = 0;
+                idleTicksRef.current = 0;
+                setSyncState(prev => ({
+                    ...prev, discovered: 0, pending: 0, processing: 0, connection: 'idle'
+                }));
 
                 // The injected scraper keeps an in-memory `seen` set of message
                 // ids, and the extension caches an open IndexedDB handle.
@@ -709,13 +889,28 @@ export default function Internet({ route, setRoute }) {
                     </span>
                 </div>
                 <div className="xscraper-stats">
-                    <span>Messages: {scraperStats.messages}</span>
+                    {/* Scraper side: what the page crawler has found. */}
                     <span>Seen: {realtimeStats.seen}</span>
-                    <span>Queue: {realtimeStats.queue}</span>
+                    <span>Scrape queue: {realtimeStats.queue}</span>
+                    {/* Sync side: what PostgreSQL has actually confirmed. */}
+                    <span>Local: {syncState.discovered}</span>
+                    <span className="forwarding-stat">
+                        Pending: {syncState.pending}
+                        {syncState.processing > 0 ? ` (${syncState.processing} sending)` : ''}
+                    </span>
                     <span className="forwarding-stat">Inserted: {forwardStats.inserted}</span>
-                    <span className="forwarding-stat">Skipped: {forwardStats.skipped}</span>
-                    {forwardStats.errors > 0 && (
-                        <span className="forwarding-stat error">Errors: {forwardStats.errors}</span>
+                    <span className="forwarding-stat">Already in DB: {forwardStats.skipped}</span>
+                    {syncState.failed > 0 && (
+                        <span className="forwarding-stat error">Failed: {syncState.failed}</span>
+                    )}
+                    <span className={`forwarding-stat sync-${syncState.connection}`}>
+                        {syncState.connection === 'connected' && 'PostgreSQL: connected'}
+                        {syncState.connection === 'syncing' && 'PostgreSQL: syncing...'}
+                        {syncState.connection === 'retrying' && 'PostgreSQL: retrying'}
+                        {syncState.connection === 'idle' && (liveSyncEnabled ? 'Auto-sync: on' : 'Auto-sync: off')}
+                    </span>
+                    {syncState.lastSyncAt && (
+                        <span>Last sync: {new Date(syncState.lastSyncAt).toLocaleTimeString()}</span>
                     )}
                 </div>
                 <div className="navButtons">

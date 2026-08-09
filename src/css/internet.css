@@ -147,6 +147,27 @@
     border-color: #4a0000 !important;
 }
 
+/* Connection state of the automatic PostgreSQL sync worker. */
+.forwarding-stat.sync-connected {
+    color: #55ff55 !important;
+    border-color: #00aa00 !important;
+}
+
+.forwarding-stat.sync-syncing {
+    color: #ffd24d !important;
+    border-color: #7a5c00 !important;
+}
+
+.forwarding-stat.sync-retrying {
+    color: #ff9d4d !important;
+    border-color: #7a3300 !important;
+}
+
+.forwarding-stat.sync-idle {
+    color: #9a9a9a !important;
+    border-color: #333 !important;
+}
+
 .nav-btn.active {
     background: #005a00 !important;
     border-color: #55ff55 !important;

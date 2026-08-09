@@ -410,7 +410,12 @@
             // Refresh conversation context before flushing
             updateConversationContext();
 
-            const batch = queue.splice(0, 30);
+            // 30 per 1200ms (25/s) was slower than the crawler could enqueue
+            // while auto-scrolling a long conversation, so the in-page queue
+            // grew instead of draining ("Queue: 575" that never went down).
+            // 200 per 500ms (400/s) outruns the crawler and a 200-record
+            // IndexedDB put still fits comfortably in one transaction.
+            const batch = queue.splice(0, 200);
 
             // Ensure all messages in batch have current conversationId
             const enrichedBatch = batch.map(m => ({
@@ -441,7 +446,7 @@
                 conversationTitle: currentConversationTitle
             }, '*');
 
-        }, 1200);
+        }, 500);
     }
 
     function startMessageBridge() {

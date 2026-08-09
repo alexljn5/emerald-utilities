@@ -16,6 +16,7 @@
 import { pool, checkDbHealth } from './db-pool.js';
 import { ragLog } from '../utils/logger.js';
 import { reconcileScrapedMessages, contentHashOf } from './xscraper-sync.js';
+import { normalizeModelResponse } from './response-normalizer.js';
 
 // ============================================================
 // Configuration
@@ -386,18 +387,27 @@ export function buildConversationContext({
     ];
     if (current) messages.push({ role: current.role, content: current.content });
 
-    // Debug logging
-    ragLog.info('context-assembly', {
-        conversationId,
-        systemCount: system.length,
-        recentCount: recentList.length,
-        retrievedCount: retrievedList.length,
-        currentCount: current ? 1 : 0,
-        totalMessages: messages.length,
-        recentAuthors: recentList.map(m => m.author),
-        retrievedConversations: [...new Set(retrievedList.map(m => m.sourceConversation))],
-        hasDuplicateCurrent: recent.some(m => m.content === current?.content),
-    }, 'Context bundle assembled');
+    // Defensive: ensure recent messages are never empty when we have history.
+    // If truncation would drop all recent messages, force at least the last
+    // few turns into the context so the model has conversational state.
+    if (recentList.length > 0 && messages.filter(m => m.role === 'user' || m.role === 'assistant').length === 0) {
+        // This shouldn't happen with correct ordering, but guard against it.
+        messages.push(...recentList.slice(-4).map(({ role, content }) => ({ role, content })));
+        if (current) messages.push({ role: current.role, content: current.content });
+    }
+
+    // Concise debug logging
+    if (process.env.EMERALD_DEBUG || process.env.DEBUG) {
+        const roles = messages.map(m => m.role).join(',');
+        const lastUser = messages.filter(m => m.role === 'user').pop()?.content || '';
+        ragLog.info('[AI][CONTEXT]', {
+            recent: recentList.length,
+            retrieved: retrievedList.length,
+            total: messages.length,
+            roles,
+            latestUser: lastUser.length > 80 ? lastUser.substring(0, 80) + '...' : lastUser,
+        });
+    }
 
     return {
         system,
@@ -482,6 +492,7 @@ export async function prepareChatRequest({
 
 /**
  * Save assistant response and return updated state.
+ * Normalizes the response to strip accidental role-label prefixes.
  */
 export async function saveAssistantResponse({
     conversationId,
@@ -489,10 +500,11 @@ export async function saveAssistantResponse({
     messageId = null,
     metadata = {},
 }) {
+    const cleanedContent = normalizeModelResponse(responseContent);
     const assistantMsgId = await saveMessage({
         conversationId,
         role: 'assistant',
-        content: responseContent,
+        content: cleanedContent,
         messageId,
         metadata,
     });

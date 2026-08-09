@@ -11,6 +11,7 @@ import { pool } from './db-pool.js';
 import { resolveDatabasePath, resolveEnvPath } from '../utils/pathResolver.js';
 import { ragLog, ollamaLog, configLog } from '../utils/logger.js';
 import { LOCAL_AI_ENABLED } from '../globals.js';
+import { normalizeModelResponse } from './response-normalizer.js';
 
 // Load .env so OLLAMA_HOST / model overrides are available.
 // Single source of truth: src/.env (dev) / <resources>/.env (prod).
@@ -506,7 +507,9 @@ When Lune describes a physical action (e.g., "straps your arms behind your back"
 
 Keep answers natural, concise, and never copy the provided context verbatim. Only use context to inform your answer, not to quote it.
 
-If Lune asks for a short factoid, give just one sentence.`;
+If Lune asks for a short factoid, give just one sentence.
+
+CRITICAL: Do NOT prefix your response with any role label such as "assistant", "user", or "system". Respond directly as Cream with no label.`;
 
     // --- 5. Build messages for the API ---
     let apiMessages;
@@ -553,7 +556,20 @@ If Lune asks for a short factoid, give just one sentence.`;
         ];
     }
 
-    // --- 6. Call the API ---
+    // --- 6. Concise debug logging ---
+    if (process.env.EMERALD_DEBUG || process.env.DEBUG) {
+        const recentCount = apiMessages.filter(m => m.role === 'user' || m.role === 'assistant').length;
+        const lastRoles = apiMessages.slice(-6).map(m => m.role).join(',');
+        const lastUserContent = apiMessages.filter(m => m.role === 'user').pop()?.content || '';
+        ragLog.info('[AI][CONTEXT]', {
+            messageCount: apiMessages.length,
+            recentTurns: recentCount,
+            roles: lastRoles,
+            latestUser: lastUserContent.length > 80 ? lastUserContent.substring(0, 80) + '...' : lastUserContent,
+        });
+    }
+
+    // --- 7. Call the API ---
     const temperature = wantsShort ? 0.4 : 0.85;
 
     const chatBody = {
@@ -568,9 +584,12 @@ If Lune asks for a short factoid, give just one sentence.`;
         timeoutMs: 120000,
         label: `${AI_PROVIDER}-chat`,
     });
-    const rawAnswer = AI_PROVIDER === 'ollama'
+    let rawAnswer = AI_PROVIDER === 'ollama'
         ? data.message?.content
         : data.choices?.[0]?.message?.content;
+
+    // --- 8. Normalize response: strip accidental role-label prefixes ---
+    rawAnswer = normalizeModelResponse(rawAnswer);
 
     return rawAnswer;
 }
@@ -614,4 +633,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     main().finally(() => pool.end());
 }
 
-export { queryRAG, queryRAGWithContext, generateEmbedding, assembleContext, queryWithLLM };
+export { queryRAG, queryRAGWithContext, generateEmbedding, assembleContext, queryWithLLM, normalizeModelResponse };

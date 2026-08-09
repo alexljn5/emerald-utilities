@@ -2,6 +2,7 @@ import PageShell from './PageShell.jsx';
 import '../css/the-ai.css';
 import { useState, useRef, useEffect } from 'react';
 import scaryBunny from '../../img/the-ai/scary_bunny.png';
+import { normalizeModelResponse } from '../database/response-normalizer.js';
 
 const STORAGE_KEY = 'ai-chat-messages';
 const ACTIVE_CONVERSATION_KEY = 'ai-active-conversation-id';
@@ -189,7 +190,8 @@ export default function TheAI({ route, setRoute }) {
             });
 
             if (result.ok) {
-                setMessages(prev => [...prev, { role: 'assistant', content: result.response, timestamp: new Date().toISOString() }]);
+                const cleanedResponse = normalizeModelResponse(result.response);
+                setMessages(prev => [...prev, { role: 'assistant', content: cleanedResponse, timestamp: new Date().toISOString() }]);
                 setConversationId(result.conversationId);
                 // Persist active conversation ID for next app restart
                 try {

@@ -20,6 +20,7 @@ import {
     buildContext,
     roleOf,
 } from '../../src/database/ai-persistence.js';
+import { normalizeModelResponse } from '../../src/database/response-normalizer.js';
 
 // ============================================================
 // roleOf tests
@@ -376,4 +377,59 @@ test('buildConversationContext logs debug info', () => {
 
     assert.ok(bundle);
     assert.ok(bundle.messages.length > 0);
+});
+
+// ============================================================
+// normalizeModelResponse tests
+// ============================================================
+
+test('normalizeModelResponse strips single leading assistant label', () => {
+    const input = 'assistant\nHello there!';
+    const result = normalizeModelResponse(input);
+    assert.equal(result, 'Hello there!');
+});
+
+test('normalizeModelResponse strips double leading assistant labels', () => {
+    const input = 'assistant\nassistant\nHello there!';
+    const result = normalizeModelResponse(input);
+    assert.equal(result, 'Hello there!');
+});
+
+test('normalizeModelResponse strips assistant label with CRLF', () => {
+    const input = 'assistant\r\n\r\nHello there!';
+    const result = normalizeModelResponse(input);
+    assert.equal(result, 'Hello there!');
+});
+
+test('normalizeModelResponse preserves legitimate assistant word in content', () => {
+    const input = 'The assistant role is important in this conversation.';
+    const result = normalizeModelResponse(input);
+    assert.equal(result, input);
+});
+
+test('normalizeModelResponse handles empty string', () => {
+    assert.equal(normalizeModelResponse(''), '');
+});
+
+test('normalizeModelResponse handles null/undefined', () => {
+    assert.equal(normalizeModelResponse(null), null);
+    assert.equal(normalizeModelResponse(undefined), undefined);
+});
+
+test('normalizeModelResponse strips assistant-only response', () => {
+    const input = 'assistant';
+    const result = normalizeModelResponse(input);
+    assert.equal(result, '');
+});
+
+test('normalizeModelResponse is case-insensitive for leading label', () => {
+    const input = 'ASSISTANT\nHello!';
+    const result = normalizeModelResponse(input);
+    assert.equal(result, 'Hello!');
+});
+
+test('normalizeModelResponse does not strip assistant from middle of text', () => {
+    const input = 'First, assistant says hello. Then user replies.';
+    const result = normalizeModelResponse(input);
+    assert.equal(result, input);
 });

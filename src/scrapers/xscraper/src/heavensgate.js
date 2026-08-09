@@ -167,7 +167,9 @@
             scrape,
             exportAsJSON,
             exportIncrementalJSON,
+            resetSeen,
             restart: () => {
+                seen.clear();
                 startObserver();
                 forceScroll();
             }
@@ -210,6 +212,27 @@
 
         seen.add(msg.id);
         queue.push(msg);
+    }
+
+    /**
+     * Drop the in-memory dedupe cache.
+     *
+     * `seen` is what stops the same DOM node being queued twice, but it also
+     * means that once the local store is wiped the scraper will never re-emit
+     * anything it already looked at — the page keeps scrolling and nothing is
+     * ever saved again. Clearing local storage MUST clear this too.
+     */
+    function resetSeen() {
+        const had = seen.size;
+        seen.clear();
+        queue.length = 0;
+        console.log(`[XSCRAPER_DAEMON] seen cache reset (dropped ${had} ids)`);
+        // Re-walk what is already on screen so the current view is captured
+        // again without waiting for new mutations.
+        try {
+            document.querySelectorAll('article, div, p').forEach(processNode);
+        } catch (e) { /* ignore */ }
+        return { success: true, dropped: had, queued: queue.length };
     }
 
     function extract(el) {
@@ -402,7 +425,11 @@
                     messages: enrichedBatch,
                     conversationId: currentConversationId,
                     conversationTitle: currentConversationTitle
-                }).catch(() => { });
+                }).catch((err) => {
+                    // Do not fail silently — a broken save path is
+                    // indistinguishable from "not scraping" otherwise.
+                    console.warn('[XSCRAPER_DAEMON] saveMessages failed:', err?.message || err);
+                });
                 return;
             }
 

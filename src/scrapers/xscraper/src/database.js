@@ -18,7 +18,7 @@ class XScraperDatabase {
      * Initialize IndexedDB
      */
     async init() {
-        if (this.initialized) return this.db;
+        if (this.initialized && this.db) return this.db;
 
         this.db = await new Promise((resolve, reject) => {
             const request = indexedDB.open(this.dbName, this.version);
@@ -44,24 +44,56 @@ class XScraperDatabase {
             };
         });
 
+        // The host app can wipe this database from the outside (Electron's
+        // session.clearStorageData). That force-closes the connection, and
+        // every later transaction throws InvalidStateError. Drop the handle so
+        // the next call transparently reopens it instead of failing forever.
+        this.db.onclose = () => {
+            console.warn('[XSCRAPER_DB] connection closed by the browser — will reopen on next use');
+            this.initialized = false;
+            this.db = null;
+        };
+        this.db.onversionchange = () => {
+            console.warn('[XSCRAPER_DB] version change / storage wiped — closing handle');
+            try { this.db.close(); } catch { /* already gone */ }
+            this.initialized = false;
+            this.db = null;
+        };
+
         this.initialized = true;
         return this.db;
+    }
+
+    /**
+     * Open a transaction, transparently reopening the database once if the
+     * previous connection was force-closed (storage cleared by the host app).
+     */
+    async _tx(storeNames, mode) {
+        await this.init();
+        try {
+            return this.db.transaction(storeNames, mode);
+        } catch (err) {
+            console.warn('[XSCRAPER_DB] stale connection, reopening:', err?.name || err);
+            this.initialized = false;
+            this.db = null;
+            await this.init();
+            return this.db.transaction(storeNames, mode);
+        }
     }
 
     /**
      * Save single message
      */
     async saveMessage(message) {
-        await this.init();
-
         const msg = {
             ...message,
             id: message.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
             savedAt: Date.now()
         };
 
+        const tx = await this._tx(['messages'], 'readwrite');
+
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['messages'], 'readwrite');
             const store = tx.objectStore('messages');
 
             const req = store.put(msg); // put = upsert (prevents duplicates)
@@ -78,14 +110,22 @@ class XScraperDatabase {
         await this.init();
 
         const results = [];
+        let failed = 0;
 
         for (const message of messages) {
             try {
                 const saved = await this.saveMessage(message);
                 results.push(saved);
             } catch (e) {
+                failed++;
                 console.warn('[XSCRAPER_DB] Failed to save message:', e);
             }
+        }
+
+        // Never fail silently: a batch that saved nothing means the local
+        // store is broken, which used to look exactly like "not scraping".
+        if (failed > 0 && results.length === 0) {
+            console.error(`[XSCRAPER_DB] ALL ${failed} messages in this batch failed to save`);
         }
 
         return results;
@@ -95,10 +135,9 @@ class XScraperDatabase {
      * Get all messages
      */
     async getAllMessages() {
-        await this.init();
+        const tx = await this._tx(['messages'], 'readonly');
 
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['messages'], 'readonly');
             const store = tx.objectStore('messages');
 
             const req = store.getAll();
@@ -112,10 +151,9 @@ class XScraperDatabase {
      * Get messages by conversation
      */
     async getMessagesByConversation(conversationId) {
-        await this.init();
+        const tx = await this._tx(['messages'], 'readonly');
 
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['messages'], 'readonly');
             const store = tx.objectStore('messages');
             const index = store.index('conversationId');
 
@@ -130,15 +168,14 @@ class XScraperDatabase {
      * Save conversation metadata
      */
     async saveConversation(conversation) {
-        await this.init();
-
         const conv = {
             ...conversation,
             savedAt: Date.now()
         };
 
+        const tx = await this._tx(['conversations'], 'readwrite');
+
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['conversations'], 'readwrite');
             const store = tx.objectStore('conversations');
 
             const req = store.put(conv);
@@ -152,10 +189,9 @@ class XScraperDatabase {
      * Get all conversations
      */
     async getAllConversations() {
-        await this.init();
+        const tx = await this._tx(['conversations'], 'readonly');
 
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['conversations'], 'readonly');
             const store = tx.objectStore('conversations');
 
             const req = store.getAll();
@@ -169,10 +205,9 @@ class XScraperDatabase {
      * Count messages
      */
     async getMessageCount() {
-        await this.init();
+        const tx = await this._tx(['messages'], 'readonly');
 
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['messages'], 'readonly');
             const store = tx.objectStore('messages');
 
             const req = store.count();
@@ -186,11 +221,9 @@ class XScraperDatabase {
      * Clear all data
      */
     async clearAll() {
-        await this.init();
+        const tx = await this._tx(['messages', 'conversations'], 'readwrite');
 
         return new Promise((resolve, reject) => {
-            const tx = this.db.transaction(['messages', 'conversations'], 'readwrite');
-
             tx.objectStore('messages').clear();
             tx.objectStore('conversations').clear();
 

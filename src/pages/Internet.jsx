@@ -411,20 +411,74 @@ export default function Internet({ route, setRoute }) {
 
     async function handleForwardToPostgres() {
         setLoading(true);
-        setScraperStatus('Forwarding to PostgreSQL...');
+        setScraperStatus('Reconciling local XScraper store with PostgreSQL...');
         setError('');
         try {
+            const totals = { localTotal: 0, alreadyInPostgres: 0, inserted: 0, skipped: 0, errors: 0 };
+            const add = (r) => {
+                totals.localTotal += r.localTotal || 0;
+                totals.alreadyInPostgres += r.alreadyInPostgres || 0;
+                totals.inserted += r.inserted || 0;
+                totals.skipped += r.skipped || 0;
+                totals.errors += r.errors || 0;
+            };
+
+            // 1. Extension IndexedDB — the store the scraper itself writes to.
+            //    It lives in the webview partition, so only the renderer can
+            //    read it; the main process sees SQLite/JSON only. Without this
+            //    step the button reports "sqlite=0 json=0" even though the
+            //    extension is holding a freshly scraped conversation.
+            if (webviewRef.current && webviewReady) {
+                const incResult = await webviewRef.current.executeJavaScript(`
+                    (async () => {
+                        if (window.__grokScraper && typeof window.__grokScraper.exportIncrementalJSON === 'function') {
+                            return await window.__grokScraper.exportIncrementalJSON(0);
+                        }
+                        return { success: false, messages: [] };
+                    })()
+                `);
+                const msgs = incResult?.messages || [];
+                if (msgs.length > 0) {
+                    const byConv = {};
+                    for (const msg of msgs) {
+                        const cid = msg.conversationId || 'default';
+                        if (!byConv[cid]) byConv[cid] = [];
+                        byConv[cid].push(msg);
+                    }
+                    for (const [cid, list] of Object.entries(byConv)) {
+                        const r = await forwardToPostgres(list, cid);
+                        if (r?.success) {
+                            add(r);
+                        } else {
+                            totals.errors += 1;
+                            console.warn('[XScraper] IndexedDB reconcile failed:', r?.error);
+                        }
+                    }
+                }
+            }
+
+            // 2. SQLite cache + any legacy JSON snapshots (main process side).
             const result = await forwardExportedToPostgres();
             if (result?.success) {
-                setForwardStats(prev => ({
-                    inserted: prev.inserted + (result.inserted || 0),
-                    skipped: prev.skipped + (result.skipped || 0),
-                    errors: prev.errors + (result.errors || 0),
-                }));
-                setScraperStatus(result.message || `Forwarded ${result.inserted} messages to PostgreSQL`);
+                add(result);
             } else {
-                setError(result?.error || 'Failed to forward to PostgreSQL');
-                setScraperStatus('Forward failed');
+                totals.errors += 1;
+                setError(result?.error || 'Failed to reconcile local store');
+            }
+
+            setForwardStats(prev => ({
+                inserted: prev.inserted + totals.inserted,
+                skipped: prev.skipped + totals.skipped,
+                errors: prev.errors + totals.errors,
+            }));
+
+            if (totals.localTotal === 0) {
+                setScraperStatus('No local XScraper messages found — nothing to reconcile');
+            } else {
+                setScraperStatus(
+                    `Reconciled ${totals.localTotal} local messages: inserted ${totals.inserted}, ` +
+                    `already present ${totals.alreadyInPostgres}`
+                );
             }
         } catch (err) {
             setError(err?.message || 'Forward failed');
@@ -454,7 +508,25 @@ export default function Internet({ route, setRoute }) {
                 }));
             }
 
-            // 2. Start the real-time scraper
+            // 2. Drop the scraper's in-memory dedupe cache so the messages
+            //    currently on screen are captured again. Without this, a
+            //    scraper that already "saw" them after a local wipe would never
+            //    re-emit anything. Re-emitting is harmless: IndexedDB upserts by
+            //    id and PostgreSQL reconciliation is identity based.
+            try {
+                await webviewRef.current.executeJavaScript(`
+                    (function () {
+                        if (window.__grokScraper && typeof window.__grokScraper.resetSeen === 'function') {
+                            return window.__grokScraper.resetSeen();
+                        }
+                        return null;
+                    })()
+                `);
+            } catch (err) {
+                console.warn('[XScraper] resetSeen before scrape failed:', err?.message);
+            }
+
+            // 3. Start the real-time scraper
             const scrapeResult = await startRealtimeCrawler(webviewRef.current);
             if (scrapeResult?.success) {
                 setIsScraping(true);
@@ -503,6 +575,35 @@ export default function Internet({ route, setRoute }) {
                 // The local checkpoint is meaningless once the local store is
                 // empty; reset it so the next pass reconciles from scratch.
                 lastForwardTimestampRef.current = 0;
+
+                // The injected scraper keeps an in-memory `seen` set of message
+                // ids, and the extension caches an open IndexedDB handle.
+                // Wiping the storage underneath them leaves the scraper running
+                // but unable to record anything — it looks exactly like
+                // "scraping but nothing arrives". Reset the dedupe cache, then
+                // reload the webview so a fresh IndexedDB connection is opened.
+                if (webviewRef.current && webviewReady) {
+                    try {
+                        await webviewRef.current.executeJavaScript(`
+                            (function () {
+                                if (window.__grokScraper && typeof window.__grokScraper.resetSeen === 'function') {
+                                    return window.__grokScraper.resetSeen();
+                                }
+                                return null;
+                            })()
+                        `);
+                    } catch (err) {
+                        console.warn('[XScraper] resetSeen failed:', err?.message);
+                    }
+                    try {
+                        webviewRef.current.reload();
+                    } catch (err) {
+                        console.warn('[XScraper] webview reload failed:', err?.message);
+                    }
+                }
+
+                // Scraping has to be restarted after the reload.
+                setIsScraping(false);
                 setScraperStats(prev => ({ ...prev, messages: 0 }));
                 setRealtimeStats({ seen: 0, queue: 0, stuck: 0, idle: 0 });
                 setForwardStats({ inserted: 0, skipped: 0, errors: 0 });

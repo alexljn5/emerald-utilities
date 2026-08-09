@@ -40,3 +40,4 @@ src/database/README.md
 src/database/commands.md
 src/database/cream/chat-history.json
 postgres_volume.tar.gz
+QUERY_COMMANDS.md

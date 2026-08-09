@@ -607,10 +607,53 @@ export function registerXScraperIpcHandlers(context) {
         }
     });
 
+    // Content-script-initiated scrape+forward cycle acknowledgement.
+    // The content script calls this after completing a scrape+persist cycle.
+    ipcMain.handle('xscraper:content-scrape-and-forward', async (_event, result) => {
+        try {
+            console.log('[XScraper] Content script scrape+forward cycle:', result);
+            // Trigger the batch worker to drain any new SQLite entries
+            const batchResult = await forwarderRunBatch();
+            return { success: true, content: result, batch: batchResult };
+        } catch (err) {
+            console.error('[XScraper] content-scrape-and-forward error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
     // Shared server start logic (used by IPC handler and auto-restart)
     async function startLocalServer() {
+        // 1. If we have a process handle, verify it's actually alive and responding.
         if (localServerProcess) {
-            return { success: true, message: 'Local server already running', port: LOCAL_SERVER_PORT };
+            try {
+                const healthCheck = await fetch(`http://localhost:${LOCAL_SERVER_PORT}/health`, {
+                    signal: AbortSignal.timeout(2000)
+                });
+                if (healthCheck.ok) {
+                    return { success: true, message: 'Local server already running', port: LOCAL_SERVER_PORT, reused: true };
+                }
+            } catch {
+                // Process handle exists but server is not responding — fall through to restart
+                console.warn('[XScraper] Local server process exists but not responding, restarting...');
+                if (localServerProcess && !localServerProcess.killed) {
+                    try { localServerProcess.kill('SIGTERM'); } catch { /* ignore */ }
+                }
+                localServerProcess = null;
+            }
+        }
+
+        // 2. Check if something else is already listening on port 3000
+        try {
+            const healthCheck = await fetch(`http://localhost:${LOCAL_SERVER_PORT}/health`, {
+                signal: AbortSignal.timeout(2000)
+            });
+            if (healthCheck.ok) {
+                // Some other instance is running — reuse it
+                console.log('[XScraper] Reusing existing server on port', LOCAL_SERVER_PORT);
+                return { success: true, message: 'Reusing existing local server', port: LOCAL_SERVER_PORT, reused: true };
+            }
+        } catch {
+            // Port is free, proceed with start
         }
 
         const serverPath = path.join(process.cwd(), 'src', 'scrapers', 'xscraper', 'src', 'server', 'server.js');

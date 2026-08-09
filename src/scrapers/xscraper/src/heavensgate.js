@@ -168,6 +168,7 @@
             exportAsJSON,
             exportIncrementalJSON,
             resetSeen,
+            scrapeAndForward,
             restart: () => {
                 seen.clear();
                 startObserver();
@@ -283,8 +284,18 @@
         const text = el.textContent?.trim();
         if (!text || text.length < 3) return null;
 
+        // Try to preserve original message ID from DOM attributes
+        const originalId = el.getAttribute?.('data-message-id') ||
+            el.getAttribute?.('data-msg-id') ||
+            el.getAttribute?.('data-id') ||
+            null;
+
+        // Deterministic identity: conversation-scoped, stable across re-scrapes.
+        // Preference: original DOM id > content-hash (conversation-scoped).
+        const stableId = originalId || `m_${hash(`${currentConversationId}\u0000${text}`)}`;
+
         return {
-            id: hash(text),
+            id: stableId,
             content: text,
             author: detectAuthor(el),
             ts: Date.now(),
@@ -338,10 +349,80 @@
 
     async function scrapeAll(timeout = 8000) {
         // Start the crawler, let it run for `timeout` ms, then stop and return a summary.
+        console.log(`[XScraper][AUTO+SCRAPE] Starting cycle targetConv=${currentConversationId}`);
         startAutoScrollLoop();
         await new Promise(r => setTimeout(r, timeout));
         stopAutoScrollLoop();
-        return { success: true, duration: timeout, seen: seen.size, queued: queue.length };
+        const result = { success: true, duration: timeout, seen: seen.size, queued: queue.length };
+        console.log(`[XScraper][AUTO+SCRAPE] Scrape complete: seen=${result.seen} queued=${result.queued}`);
+        return result;
+    }
+
+    /**
+     * Complete AUTO+SCRAPE cycle: scrape current conversation, persist to SQLite,
+     * forward to PostgreSQL, drain transient queue.
+     */
+    async function scrapeAndForward(timeout = 8000) {
+        const cycleId = `cycle_${Date.now()}`;
+        console.log(`[XScraper][AUTO+SCRAPE][${cycleId}] Starting cycle targetConv=${currentConversationId}`);
+
+        try {
+            // 1. Scrape current conversation
+            updateConversationContext();
+            const scrapeResult = await scrapeAll(timeout);
+            const discovered = scrapeResult.seen;
+            const queued = scrapeResult.queued;
+
+            console.log(`[XScraper][QUEUE] before: scrape=${queued} pending=${queue.length}`);
+
+            // 2. Force-flush any remaining in-memory messages to the durable SQLite server
+            // The startFlush interval handles this normally, but we force it here to
+            // ensure no messages are lost when the cycle ends.
+            if (queue.length > 0) {
+                const batch = queue.splice(0, 200);
+                const enrichedBatch = batch.map(m => ({
+                    ...m,
+                    conversationId: currentConversationId,
+                    conversationTitle: currentConversationTitle
+                }));
+                const now = Date.now();
+                if (now - serverLastAttempt >= SERVER_COOLDOWN_MS) {
+                    serverLastAttempt = now;
+                    await saveToServer(enrichedBatch, currentConversationId, currentConversationTitle);
+                }
+                console.log(`[XScraper][AUTO+SCRAPE][${cycleId}] Force-flushed ${batch.length} messages to SQLite`);
+            }
+
+            console.log(`[XScraper][QUEUE] after persistence: scrape=0 pending=${queue.length}`);
+
+            // 3. Notify the main process to run the batch worker
+            // The worker will drain SQLite → PostgreSQL automatically
+            if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                chrome.runtime.sendMessage({
+                    action: 'scrapeAndForward'
+                }).catch((err) => {
+                    console.warn(`[XScraper][AUTO+SCRAPE][${cycleId}] scrapeAndForward IPC failed:`, err?.message || err);
+                });
+            }
+
+            console.log(`[XScraper][AUTO+SCRAPE][${cycleId}] Cycle complete: discovered=${discovered} queued=${queued} remaining=${queue.length}`);
+            return {
+                success: true,
+                cycleId,
+                discovered,
+                queued,
+                remaining: queue.length,
+                conversationId: currentConversationId
+            };
+        } catch (err) {
+            console.error(`[XScraper][AUTO+SCRAPE][${cycleId}] ERROR:`, err?.message || err);
+            return {
+                success: false,
+                cycleId,
+                error: err?.message || err,
+                conversationId: currentConversationId
+            };
+        }
     }
 
     function scrape() {
@@ -353,63 +434,83 @@
     async function exportAsJSON() {
         console.log('[XSCRAPER_HEAVENS] exportAsJSON called');
         return new Promise((resolve, reject) => {
-            const requestId = `export-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const timeout = setTimeout(() => {
-                window.removeEventListener('message', handler);
                 console.error('[XSCRAPER_HEAVENS] export timed out');
                 reject(new Error('Export timed out'));
             }, 15000);
 
-            function handler(event) {
-                if (event.source !== window) return;
-                const message = event.data;
-                console.log('[XSCRAPER_HEAVENS] received message:', message);
-                if (!message || message.source !== 'xscraper-content' || message.requestId !== requestId) return;
-                if (message.action !== 'exportResponse') return;
-                clearTimeout(timeout);
-                window.removeEventListener('message', handler);
-                console.log('[XSCRAPER_HEAVENS] export response received');
-                resolve(message.result);
+            if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                chrome.runtime.sendMessage(
+                    { action: 'exportData' },
+                    (response) => {
+                        clearTimeout(timeout);
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                            return;
+                        }
+                        resolve(response?.data || { messages: [], conversations: [] });
+                    }
+                );
+            } else {
+                // Fallback: read from in-memory queue + current DOM
+                const messages = [...queue].map(m => ({
+                    id: m.id,
+                    content: m.content,
+                    author: m.author,
+                    timestamp: m.ts,
+                    conversationId: m.conversationId,
+                    conversationTitle: m.conversationTitle
+                }));
+                resolve({
+                    version: '1.0',
+                    exportDate: new Date().toISOString(),
+                    totalMessages: messages.length,
+                    totalConversations: 1,
+                    messages,
+                    conversations: [{ id: currentConversationId, title: currentConversationTitle }]
+                });
             }
-
-            window.addEventListener('message', handler);
-            console.log('[XSCRAPER_HEAVENS] sending exportRequest');
-            window.postMessage({
-                source: 'xscraper-page',
-                action: 'exportRequest',
-                requestId
-            }, '*');
         });
     }
 
     async function exportIncrementalJSON(since) {
         console.log('[XSCRAPER_HEAVENS] exportIncrementalJSON called, since:', since);
         return new Promise((resolve, reject) => {
-            const requestId = `export-inc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const timeout = setTimeout(() => {
-                window.removeEventListener('message', handler);
                 console.error('[XSCRAPER_HEAVENS] incremental export timed out');
                 reject(new Error('Incremental export timed out'));
             }, 15000);
 
-            function handler(event) {
-                if (event.source !== window) return;
-                const message = event.data;
-                if (!message || message.source !== 'xscraper-content' || message.requestId !== requestId) return;
-                if (message.action !== 'exportIncrementalResponse') return;
-                clearTimeout(timeout);
-                window.removeEventListener('message', handler);
-                console.log('[XSCRAPER_HEAVENS] incremental export response received, messages:', message.result?.data?.messages?.length);
-                resolve(message.result);
+            if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                chrome.runtime.sendMessage(
+                    { action: 'exportIncrementalData', since },
+                    (response) => {
+                        clearTimeout(timeout);
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                            return;
+                        }
+                        resolve(response?.data || { messages: [] });
+                    }
+                );
+            } else {
+                // Fallback: filter in-memory queue by timestamp
+                const cutoff = typeof since === 'number' ? since : 0;
+                const messages = queue.filter(m => (m.ts || 0) > cutoff).map(m => ({
+                    id: m.id,
+                    content: m.content,
+                    author: m.author,
+                    timestamp: m.ts,
+                    conversationId: m.conversationId,
+                    conversationTitle: m.conversationTitle,
+                    savedAt: m.ts
+                }));
+                resolve({
+                    version: '1.0',
+                    exportDate: new Date().toISOString(),
+                    messages
+                });
             }
-
-            window.addEventListener('message', handler);
-            window.postMessage({
-                source: 'xscraper-page',
-                action: 'exportIncrementalRequest',
-                requestId,
-                since
-            }, '*');
         });
     }
 
@@ -478,7 +579,7 @@
     /* ---------------- FLUSH ---------------- */
 
     function startFlush() {
-        setInterval(() => {
+        setInterval(async () => {
             if (!queue.length) return;
 
             // Refresh conversation context before flushing
@@ -501,10 +602,26 @@
             // PRIMARY: POST directly to the local SQLite server (durable queue).
             // This is the authoritative path — it lands in SQLite immediately
             // and the batch worker drains it into PostgreSQL.
+            // CRITICAL: only remove from the in-memory queue after the server
+            // confirms the save. If the server is unreachable, put the batch
+            // back at the front of the queue so it is retried on the next tick.
             const now = Date.now();
+            let serverSaved = false;
             if (now - serverLastAttempt >= SERVER_COOLDOWN_MS) {
                 serverLastAttempt = now;
-                saveToServer(enrichedBatch, currentConversationId, currentConversationTitle);
+                try {
+                    const result = await saveToServer(enrichedBatch, currentConversationId, currentConversationTitle);
+                    serverSaved = !result?.offline;
+                    if (!serverSaved) {
+                        console.warn(`[XSCRAPER_DAEMON] server save returned offline, requeueing ${batch.length} messages`);
+                        queue.unshift(...batch);
+                        return;
+                    }
+                } catch (err) {
+                    console.warn(`[XSCRAPER_DAEMON] server save exception, requeueing ${batch.length} messages:`, err?.message || err);
+                    queue.unshift(...batch);
+                    return;
+                }
             }
 
             // FALLBACK: also mirror into the extension IndexedDB for offline
@@ -517,8 +634,6 @@
                     conversationId: currentConversationId,
                     conversationTitle: currentConversationTitle
                 }).catch((err) => {
-                    // Do not fail silently — a broken save path is
-                    // indistinguishable from "not scraping" otherwise.
                     console.warn('[XSCRAPER_DAEMON] saveMessages failed:', err?.message || err);
                 });
                 return;

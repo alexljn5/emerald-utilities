@@ -101,6 +101,7 @@ let lastRunAt = null;
 let lastResult = null;
 let lastPgHealth = null;
 let dbPath = null;
+let totalCleaned = 0;        // total messages cleared from local queue after successful forward
 
 // ----------------------------------------------------------------------
 // Schema (local only, additive)
@@ -355,6 +356,7 @@ export async function getStatus() {
             backoffUntil,
             lastRunAt: lastRunAt ? new Date(lastRunAt).toISOString() : null,
             lastResult,
+            totalCleaned,
         },
     };
 }
@@ -456,7 +458,23 @@ export async function runBatch() {
             await markFailed(failedIds, 'postgresql reconcile failed');
         }
 
-        // 5. Remaining pending after this batch.
+        // 5. Cleanup: remove successfully-forwarded messages from the local queue.
+        // This keeps the local store clean so the next scrape starts from a
+        // clean state. PostgreSQL is authoritative; anything confirmed there
+        // is safe to remove locally.
+        if (confirmedIds.length > 0) {
+            try {
+                const cleared = await clearForwarded();
+                if (cleared.deleted > 0) {
+                    totalCleaned += cleared.deleted;
+                    ragLog.info('xscraper-forwarder', `cleaned ${cleared.deleted} forwarded messages from local queue (total=${totalCleaned})`);
+                }
+            } catch (err) {
+                ragLog.warn('xscraper-forwarder', `cleanup failed: ${err.message}`);
+            }
+        }
+
+        // 6. Remaining pending after this batch.
         const remaining = await getPending(1);
         const pendingAfter = remaining.length;
 

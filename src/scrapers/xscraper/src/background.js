@@ -237,6 +237,12 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                     break;
                 }
 
+                case 'scrapeAndForward': {
+                    console.log('[XSCRAPER_BACKGROUND] scrapeAndForward cycle completed in content script');
+                    sendResponse({ success: true, message: 'Cycle acknowledged' });
+                    break;
+                }
+
                 default:
                     sendResponse({ success: false, error: 'Unknown action' });
             }

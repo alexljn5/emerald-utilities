@@ -5,7 +5,7 @@ import {
     startRealtimeCrawler, stopRealtimeCrawler, startLocalServer,
     clearExports, clearLocalStore, forwardPending, saveToSqlite,
     startForwardWorker, getForwardStatus, clearSent,
-    verifyAutoForward, forwardLegacyToPostgres
+    verifyAutoForward, forwardLegacyToPostgres, scrapeAndForwardInWebview
 } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 
@@ -89,7 +89,9 @@ export default function Internet({ route, setRoute }) {
                     return { success: false, error: 'Scraper not injected yet' };
                 })()
             `);
-            const messages = res?.data?.messages || res?.messages || [];
+            // exportIncrementalJSON now returns { messages: [...] } directly
+            // or { success: true, data: { messages: [...] } } from background
+            const messages = res?.messages || res?.data?.messages || [];
             if (!Array.isArray(messages) || messages.length === 0) {
                 console.log('[XScraper][QUEUE] flushDeltaToSqlite: no delta to persist (0)');
                 return 0;
@@ -139,6 +141,10 @@ export default function Internet({ route, setRoute }) {
                 pending: status.queue?.size ?? status.sqlite?.pending ?? prev.pending,
                 forwarded: status.sqlite?.forwarded ?? prev.forwarded,
                 failed: status.sqlite?.failed ?? prev.failed,
+                // Inserted/skipped come from the worker's last batch result, not
+                // from manual button clicks. This is the authoritative count.
+                inserted: status.worker?.lastResult?.inserted ?? prev.inserted,
+                skipped: status.worker?.lastResult?.skipped ?? prev.skipped,
                 pgConnected: status.pg?.connected ?? null,
                 workerRunning: status.worker?.started ?? prev.workerRunning,
                 connection: !status.pg?.connected ? 'retrying'
@@ -506,17 +512,42 @@ export default function Internet({ route, setRoute }) {
      */
     async function handleScrapeAndForward() {
         if (isScraping) {
+            // STOP: finish pending forwarding, confirm, then clear local data
             setLoading(true);
-            setScraperStatus('Stopping...');
+            setScraperStatus('Stopping: flushing pending...');
+            setError('');
+            console.log('[XScraper][STOP] Stop requested');
             try {
+                // 1. Stop the crawler
                 await stopRealtimeCrawler(webviewRef.current);
+
+                // 2. Flush any remaining IndexedDB delta to SQLite
+                if (webviewRef.current && webviewReady) {
+                    const persisted = await flushDeltaToSqlite();
+                    console.log(`[XScraper][STOP] Flushed ${persisted} messages to SQLite`);
+                }
+
+                // 3. Force the worker to drain the queue now
+                const fwd = await forwardPending();
+                console.log(
+                    `[XScraper][STOP] PostgreSQL flush: inserted=${fwd?.inserted ?? 0} ` +
+                    `skipped=${fwd?.skipped ?? 0} failed=${fwd?.failed ?? 0}`
+                );
+
+                // 4. Clear successfully-forwarded messages from local queue
+                const cleared = await clearSent();
+                console.log(`[XScraper][STOP] Cleared ${cleared?.deleted ?? 0} forwarded messages from local queue`);
+
+                setScraperStatus(
+                    `Stopped: forwarded=${fwd?.inserted ?? 0}, cleared=${cleared?.deleted ?? 0}`
+                );
             } catch (err) {
-                console.warn('[XScraper] stopCrawler failed:', err?.message);
+                console.error('[XScraper][STOP] Error during stop:', err?.message || err);
+                setScraperStatus('Stop completed with errors — local data preserved for retry');
             } finally {
                 autoStartRef.current = false;
                 persistLiveSync(false);
                 setIsScraping(false);
-                setScraperStatus('Stopped');
                 setLoading(false);
             }
             return;
@@ -556,7 +587,17 @@ export default function Internet({ route, setRoute }) {
             // 1. Ensure the durable worker is running (singleton).
             await startForwardWorker();
 
-            // 2. Drop the scraper's in-memory dedupe cache so the current
+            // 2. Run the complete AUTO+SCRAPE cycle in the content script:
+            //    scrape current conversation -> persist to SQLite -> notify main process.
+            console.log('[XScraper][AUTO+SCRAPE] Starting initial cycle');
+            const cycleResult = await scrapeAndForwardInWebview(webviewRef.current, 8000);
+            if (cycleResult?.success) {
+                console.log(`[XScraper][AUTO+SCRAPE] Initial cycle complete:`, cycleResult);
+            } else {
+                console.warn('[XScraper][AUTO+SCRAPE] Initial cycle failed:', cycleResult?.error);
+            }
+
+            // 3. Drop the scraper's in-memory dedupe cache so the current
             //    view is captured again (re-emitting is identity-safe).
             try {
                 await webviewRef.current.executeJavaScript(`
@@ -571,7 +612,7 @@ export default function Internet({ route, setRoute }) {
                 console.warn('[XScraper] resetSeen before scrape failed:', err?.message);
             }
 
-            // 3. Start the real-time scraper. The poll loop pushes each delta
+            // 4. Start the real-time scraper. The poll loop pushes each delta
             //    into SQLite; the worker drains it to PostgreSQL automatically.
             const scrapeResult = await startRealtimeCrawler(webviewRef.current);
             if (scrapeResult?.success) {

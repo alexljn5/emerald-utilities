@@ -82,6 +82,30 @@ export async function startRealtimeCrawler(webview) {
     }
 }
 
+/**
+ * Run the complete AUTO+SCRAPE cycle in the content script:
+ * scrape current conversation -> persist to SQLite -> notify main process.
+ */
+export async function scrapeAndForwardInWebview(webview, timeout = 8000) {
+    try {
+        if (!webview) {
+            return { success: false, error: 'No webview' };
+        }
+        const result = await webview.executeJavaScript(`
+            (function() {
+                if (window.__grokScraper && typeof window.__grokScraper.scrapeAndForward === 'function') {
+                    return window.__grokScraper.scrapeAndForward(${timeout});
+                }
+                return { success: false, error: 'scrapeAndForward not available' };
+            })()
+        `);
+        return result;
+    } catch (err) {
+        console.error('[XScraper] scrapeAndForwardInWebview error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
 export async function stopRealtimeCrawler(webview) {
     try {
         if (!webview) {

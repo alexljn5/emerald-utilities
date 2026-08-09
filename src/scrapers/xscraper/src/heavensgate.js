@@ -235,6 +235,50 @@
         return { success: true, dropped: had, queued: queue.length };
     }
 
+    /**
+     * Best-effort DOM author detection for a scraped message node.
+     *
+     * Walks up from the message element looking for common author markers
+     * (data-author, data-username, .author, .username, role classes, name
+     * attributes). Falls back to 'Grok' when none are found — the local
+     * SQLite store requires a non-null author, and an empty author used to
+     * make the whole save batch fail with SQLITE_CONSTRAINT.
+     */
+    function detectAuthor(el) {
+        try {
+            // Walk up a bounded number of ancestors (the message container).
+            let node = el;
+            for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+                // data-author / data-username / data-name attributes
+                for (const attr of ['data-author', 'data-username', 'data-user', 'data-name', 'data-role-name']) {
+                    const v = node.getAttribute?.(attr);
+                    if (v && v.trim()) return v.trim();
+                }
+                // role classes: .assistant / .user / .human / .grok / .bot
+                if (node.classList && node.classList.length) {
+                    const cls = [...node.classList].join(' ');
+                    const lower = cls.toLowerCase();
+                    if (/assistant|grok|bot|ai\b/.test(lower)) return 'Grok';
+                    if (/user|human|you\b/.test(lower)) return 'You';
+                }
+                // aria labels / titles sometimes carry the speaker name
+                const aria = node.getAttribute?.('aria-label') || node.getAttribute?.('title');
+                if (aria && aria.trim()) {
+                    const clean = aria.replace(/^(message|from|by)\s*:?\s*/i, '').trim();
+                    if (clean && clean.length < 40) return clean;
+                }
+                // direct child author/username elements
+                const authorEl = node.querySelector?.('[data-author], [data-username], .author, .username, [class*="username"]');
+                if (authorEl) {
+                    const t = authorEl.textContent?.trim();
+                    if (t && t.length < 40) return t;
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        return 'Grok';
+    }
+
     function extract(el) {
         const text = el.textContent?.trim();
         if (!text || text.length < 3) return null;
@@ -242,6 +286,7 @@
         return {
             id: hash(text),
             content: text,
+            author: detectAuthor(el),
             ts: Date.now(),
             conversationId: currentConversationId,
             conversationTitle: currentConversationTitle

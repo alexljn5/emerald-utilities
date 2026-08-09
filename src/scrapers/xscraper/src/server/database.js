@@ -232,14 +232,14 @@ class XScraperDatabase {
             for (const message of messages) {
                 try {
                     await this.run(
-                        `INSERT INTO messages 
-                            (id, conversation_id, content, author, timestamp, scraped_at, forwarded) 
+                        `INSERT INTO messages
+                            (id, conversation_id, content, author, timestamp, scraped_at, forwarded)
                          VALUES (?, ?, ?, ?, ?, ?, 0)`,
                         [
                             message.id || uuidv4(),
                             conversationId,
                             message.content,
-                            message.author,
+                            message.author ? String(message.author).trim() : 'Grok',
                             message.timestamp || new Date().toISOString(),
                             new Date().toISOString()
                         ]

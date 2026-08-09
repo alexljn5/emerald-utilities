@@ -1,5 +1,50 @@
 /* Internet Access / XScraper Styles */
 
+/* The single action that runs the whole pipeline */
+.nav-btn.full.primary {
+    background: #002a00;
+    color: #7dff7d;
+    border: 1px solid #0a5a0a;
+    font-weight: bold;
+}
+
+.nav-btn.full.primary:hover:not(:disabled) {
+    background: #004000;
+    color: #b6ffb6;
+}
+
+.nav-btn.full.primary.live {
+    background: #003a1a;
+    color: #6cff9e;
+    border-color: #0aff6a;
+    animation: xscraper-live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes xscraper-live-pulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(10, 255, 106, 0.35);
+    }
+
+    50% {
+        box-shadow: 0 0 8px 2px rgba(10, 255, 106, 0.25);
+    }
+}
+
+/* Secondary disclosure toggle for the manual controls */
+.nav-btn.full.subtle {
+    background: transparent;
+    color: #6f8f6f;
+    border: 1px dashed #2a4a2a;
+    font-size: 0.85em;
+}
+
+.nav-btn.full.subtle:hover:not(:disabled) {
+    color: #9fdf9f;
+    border-color: #3f7a3f;
+}
+
 /* Destructive XScraper action (clears the LOCAL store only) */
 .nav-btn.full.danger {
     background: #220000;

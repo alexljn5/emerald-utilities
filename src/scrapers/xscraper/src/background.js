@@ -19,15 +19,16 @@ const USE_SERVER = true; // enabled for real-time PostgreSQL forwarding
  * Initialize IndexedDB
  */
 async function initializeLocalDatabase() {
-    return new Promise((resolve, reject) => {
+    if (localDb) return localDb;
+
+    localDb = await new Promise((resolve, reject) => {
         const request = indexedDB.open('XScraper', 1);
 
         request.onerror = () => reject(request.error);
 
         request.onsuccess = () => {
-            localDb = request.result;
             console.log('[XSCRAPER_BACKGROUND] Local database ready');
-            resolve(localDb);
+            resolve(request.result);
         };
 
         request.onupgradeneeded = (event) => {
@@ -48,6 +49,38 @@ async function initializeLocalDatabase() {
             }
         };
     });
+
+    // The host app can wipe this storage from the outside (Electron's
+    // session.clearStorageData). That force-closes the connection and every
+    // later transaction throws InvalidStateError forever, which looks exactly
+    // like "the scraper stopped working". Drop the handle so it reopens.
+    localDb.onclose = () => {
+        console.warn('[XSCRAPER_BACKGROUND] IndexedDB connection closed — will reopen on next use');
+        localDb = null;
+    };
+    localDb.onversionchange = () => {
+        console.warn('[XSCRAPER_BACKGROUND] IndexedDB version change / wipe — closing handle');
+        try { localDb.close(); } catch { /* already gone */ }
+        localDb = null;
+    };
+
+    return localDb;
+}
+
+/**
+ * Open a transaction, transparently reopening the database once if the
+ * previous connection was force-closed underneath us.
+ */
+async function dbTx(stores, mode) {
+    await initializeLocalDatabase();
+    try {
+        return localDb.transaction(stores, mode);
+    } catch (err) {
+        console.warn('[XSCRAPER_BACKGROUND] stale IndexedDB connection, reopening:', err?.name || err);
+        localDb = null;
+        await initializeLocalDatabase();
+        return localDb.transaction(stores, mode);
+    }
 }
 
 /**
@@ -173,9 +206,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
  * Save conversation metadata
  */
 async function handleSaveConversation(conversationId, conversationTitle) {
-    if (!localDb) await initializeLocalDatabase();
-
-    const tx = localDb.transaction(['conversations'], 'readwrite');
+    const tx = await dbTx(['conversations'], 'readwrite');
     const store = tx.objectStore('conversations');
 
     const conv = {
@@ -200,8 +231,6 @@ async function handleSaveConversation(conversationId, conversationTitle) {
  * Save messages (offline-first)
  */
 async function handleSaveMessages(messages, conversationId, conversationTitle) {
-    if (!localDb) await initializeLocalDatabase();
-
     // rate limit server attempts
     const now = Date.now();
     let serverResult = { skipped: true };
@@ -214,10 +243,11 @@ async function handleSaveMessages(messages, conversationId, conversationTitle) {
     // Also save conversation metadata
     await handleSaveConversation(conversationId, conversationTitle);
 
-    const tx = localDb.transaction(['messages'], 'readwrite');
+    const tx = await dbTx(['messages'], 'readwrite');
     const store = tx.objectStore('messages');
 
     let saved = 0;
+    let failed = 0;
 
     for (const m of messages) {
         const msg = {
@@ -227,20 +257,28 @@ async function handleSaveMessages(messages, conversationId, conversationTitle) {
             conversationId
         };
 
-        try {
-            store.add(msg);
-            saved++;
-        } catch {
-            // duplicate ignored
-        }
+        // `put`, not `add`. `add` rejects an existing key, and an unhandled
+        // failed request ABORTS THE WHOLE TRANSACTION — so one already-known
+        // message silently threw away every genuinely new message batched with
+        // it. The try/catch never helped: the failure is asynchronous.
+        const req = store.put(msg);
+        req.onsuccess = () => { saved++; };
+        req.onerror = (event) => {
+            failed++;
+            console.warn('[XSCRAPER_BACKGROUND] message save failed:', req.error?.name || req.error);
+            // Keep the rest of the batch alive.
+            event.preventDefault();
+            event.stopPropagation();
+        };
     }
 
     return new Promise((resolve, reject) => {
         tx.oncomplete = () => {
-            console.log(`[XSCRAPER_BACKGROUND] Saved ${saved} messages (local)`);
+            console.log(`[XSCRAPER_BACKGROUND] Saved ${saved} messages (local)${failed ? `, ${failed} failed` : ''}`);
 
             resolve({
                 saved,
+                failed,
                 localBackup: true,
                 serverUsed: USE_SERVER,
                 serverResult,
@@ -250,6 +288,7 @@ async function handleSaveMessages(messages, conversationId, conversationTitle) {
         };
 
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
     });
 }
 
@@ -257,10 +296,9 @@ async function handleSaveMessages(messages, conversationId, conversationTitle) {
  * Get messages
  */
 async function handleGetMessages() {
-    if (!localDb) await initializeLocalDatabase();
+    const tx = await dbTx(['messages'], 'readonly');
 
     return new Promise((resolve, reject) => {
-        const tx = localDb.transaction(['messages'], 'readonly');
         const store = tx.objectStore('messages');
         const req = store.getAll();
 
@@ -273,10 +311,10 @@ async function handleGetMessages() {
  * Stats
  */
 async function handleGetStats() {
-    if (!localDb) await initializeLocalDatabase();
+    const statsTx = await dbTx(['messages', 'conversations'], 'readonly');
 
     const localStats = await new Promise((resolve, reject) => {
-        const tx = localDb.transaction(['messages', 'conversations'], 'readonly');
+        const tx = statsTx;
 
         const msgReq = tx.objectStore('messages').count();
         const convReq = tx.objectStore('conversations').count();
@@ -313,11 +351,9 @@ async function handleGetStats() {
  * Clear all data
  */
 async function handleClearAll() {
-    if (!localDb) await initializeLocalDatabase();
+    const tx = await dbTx(['messages', 'conversations', 'metadata'], 'readwrite');
 
     return new Promise((resolve, reject) => {
-        const tx = localDb.transaction(['messages', 'conversations', 'metadata'], 'readwrite');
-
         tx.objectStore('messages').clear();
         tx.objectStore('conversations').clear();
         tx.objectStore('metadata').clear();
@@ -335,11 +371,9 @@ async function handleClearAll() {
  * Export data
  */
 async function handleExportData() {
-    if (!localDb) await initializeLocalDatabase();
+    const tx = await dbTx(['messages', 'conversations'], 'readonly');
 
     return new Promise((resolve, reject) => {
-        const tx = localDb.transaction(['messages', 'conversations'], 'readonly');
-
         const messagesReq = tx.objectStore('messages').getAll();
         const convReq = tx.objectStore('conversations').getAll();
 
@@ -362,10 +396,9 @@ async function handleExportData() {
  * Incremental export (only messages saved after `since` timestamp)
  */
 async function handleIncrementalExport(since = 0) {
-    if (!localDb) await initializeLocalDatabase();
+    const tx = await dbTx(['messages'], 'readonly');
 
     return new Promise((resolve, reject) => {
-        const tx = localDb.transaction(['messages'], 'readonly');
         const store = tx.objectStore('messages');
         const req = store.getAll();
 

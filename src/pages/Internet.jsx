@@ -24,12 +24,48 @@ export default function Internet({ route, setRoute }) {
     const [isScraping, setIsScraping] = useState(false);
     const [realtimeStats, setRealtimeStats] = useState({ seen: 0, queue: 0 });
     const [forwardStats, setForwardStats] = useState({ inserted: 0, skipped: 0, errors: 0 });
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const browserViewRef = useRef(null);
     const webviewRef = useRef(null);
     const scrapeIntervalRef = useRef(null);
     const lastAutoExportRef = useRef(0);
     const lastExportTimestampRef = useRef(0);
     const lastForwardTimestampRef = useRef(Date.now());
+    // Prevents overlapping poll ticks: a slow PostgreSQL round-trip must not
+    // cause the same delta to be read and forwarded twice concurrently.
+    const pollBusyRef = useRef(false);
+    // Set when Live Sync is requested before the webview exists, so the sync
+    // starts by itself as soon as the browser is ready (one button -> all).
+    const autoStartRef = useRef(false);
+
+    /**
+     * Read messages the extension has stored locally since `since`.
+     *
+     * The response travels page -> content script -> background -> back, and
+     * the background wraps its payload: { success, data: { messages: [...] } }.
+     * Reading `result.messages` (no `.data`) silently yields undefined, which
+     * is why the live loop reported "Forwarded: 0" while the scraper happily
+     * counted 134 seen messages.
+     */
+    async function readLocalDelta(webview, since) {
+        if (!webview) return [];
+        const res = await webview.executeJavaScript(`
+            (async () => {
+                if (window.__grokScraper && typeof window.__grokScraper.exportIncrementalJSON === 'function') {
+                    try {
+                        return await window.__grokScraper.exportIncrementalJSON(${Number(since) || 0});
+                    } catch (e) {
+                        return { success: false, error: String(e && e.message || e) };
+                    }
+                }
+                return { success: false, error: 'Scraper not injected yet' };
+            })()
+        `);
+        if (res && res.success === false && res.error) {
+            console.warn('[XScraper] local delta unavailable:', res.error);
+        }
+        return res?.data?.messages || res?.messages || [];
+    }
 
     useEffect(() => {
         let cancelled = false;
@@ -97,6 +133,15 @@ export default function Internet({ route, setRoute }) {
         };
     }, [partition]);
 
+    // One-button continuation: Live Sync was requested while the browser was
+    // still starting, so kick it off the moment the webview is usable.
+    useEffect(() => {
+        if (!autoStartRef.current) return;
+        if (!webviewReady || isScraping || loading) return;
+        autoStartRef.current = false;
+        startLiveSync();
+    }, [webviewReady, isScraping, loading]);
+
     // Scrape + Forward polling loop
     useEffect(() => {
         if (!isScraping || !webviewReady) {
@@ -108,6 +153,11 @@ export default function Internet({ route, setRoute }) {
         }
 
         const pollAndForward = async () => {
+            // A tick that is still waiting on PostgreSQL must not be joined by
+            // the next one: both would read the same delta from the same
+            // checkpoint and send it twice.
+            if (pollBusyRef.current) return;
+            pollBusyRef.current = true;
             try {
                 // 1. Get scraper stats
                 const result = await getRealtimeStats(webviewRef.current);
@@ -129,22 +179,13 @@ export default function Internet({ route, setRoute }) {
                 const since = lastForwardTimestampRef.current;
                 let newMessages = [];
                 try {
-                    const incResult = await webviewRef.current.executeJavaScript(`
-                        (async () => {
-                            if (window.__grokScraper && typeof window.__grokScraper.exportIncrementalJSON === 'function') {
-                                return await window.__grokScraper.exportIncrementalJSON(${since});
-                            }
-                            return { success: false, error: 'Incremental export not available', messages: [] };
-                        })()
-                    `);
-                    if (incResult?.messages && incResult.messages.length > 0) {
-                        newMessages = incResult.messages;
-                    }
+                    newMessages = await readLocalDelta(webviewRef.current, since);
                 } catch (err) {
                     console.warn('[XScraper] Incremental export failed, falling back to local server:', err.message);
-                    // Fallback: try local server
+                    // Fallback: try local server (SQLite mirror written by the
+                    // extension's HTTP flush).
                     const fallbackResult = await getNewMessages(since);
-                    if (fallbackResult?.success && fallbackResult.messages && fallbackResult.messages.length > 0) {
+                    if (fallbackResult?.success && fallbackResult.messages?.length > 0) {
                         newMessages = fallbackResult.messages;
                     }
                 }
@@ -203,9 +244,12 @@ export default function Internet({ route, setRoute }) {
                 }
             } catch (err) {
                 console.error('[XScraper] Poll error:', err);
+            } finally {
+                pollBusyRef.current = false;
             }
         };
 
+        pollBusyRef.current = false;
         pollAndForward();
         scrapeIntervalRef.current = setInterval(pollAndForward, 2000);
 
@@ -429,15 +473,7 @@ export default function Internet({ route, setRoute }) {
             //    step the button reports "sqlite=0 json=0" even though the
             //    extension is holding a freshly scraped conversation.
             if (webviewRef.current && webviewReady) {
-                const incResult = await webviewRef.current.executeJavaScript(`
-                    (async () => {
-                        if (window.__grokScraper && typeof window.__grokScraper.exportIncrementalJSON === 'function') {
-                            return await window.__grokScraper.exportIncrementalJSON(0);
-                        }
-                        return { success: false, messages: [] };
-                    })()
-                `);
-                const msgs = incResult?.messages || [];
+                const msgs = await readLocalDelta(webviewRef.current, 0);
                 if (msgs.length > 0) {
                     const byConv = {};
                     for (const msg of msgs) {
@@ -488,23 +524,61 @@ export default function Internet({ route, setRoute }) {
         }
     }
 
-    async function handleScrapeAndForward() {
-        if (!webviewRef.current || !webviewReady) {
-            setError('Browser is not ready');
+    /**
+     * THE button. Everything the pipeline needs, in one click:
+     * launch the browser if it isn't up, catch up on the local mirror, reset
+     * the scraper's dedupe cache, start the crawler and leave the poll loop
+     * streaming every new message straight into PostgreSQL. Clicking it again
+     * stops the live sync.
+     */
+    async function handleLiveSync() {
+        if (isScraping) {
+            setLoading(true);
+            setScraperStatus('Stopping live sync...');
+            try {
+                await stopRealtimeCrawler(webviewRef.current);
+            } catch (err) {
+                console.warn('[XScraper] stopCrawler failed:', err?.message);
+            } finally {
+                autoStartRef.current = false;
+                setIsScraping(false);
+                setScraperStatus('Live sync stopped');
+                setLoading(false);
+            }
             return;
         }
 
-        setLoading(true);
-        setScraperStatus('Starting scrape + forward...');
         setError('');
+
+        // No browser yet: launch it and pick up automatically as soon as the
+        // webview reports dom-ready, so the user still only pressed once.
+        if (!partition || !webviewReady || !webviewRef.current) {
+            autoStartRef.current = true;
+            setScraperStatus('Launching browser for live sync...');
+            if (!partition) await handleLaunchFirefox();
+            return;
+        }
+
+        await startLiveSync();
+    }
+
+    async function startLiveSync() {
+        if (!webviewRef.current) return;
+
+        setLoading(true);
+        setError('');
+        setScraperStatus('Starting live sync...');
         try {
-            // 1. Forward any existing exported data first
-            const forwardResult = await forwardExportedToPostgres();
-            if (forwardResult?.success) {
+            // 1. Catch up: reconcile whatever is already in the local SQLite
+            //    mirror and any legacy JSON snapshots. Identity-based
+            //    reconciliation makes this safe on every start — messages
+            //    PostgreSQL already holds come back as skipped, not inserted.
+            const sweep = await forwardExportedToPostgres();
+            if (sweep?.success) {
                 setForwardStats(prev => ({
-                    inserted: prev.inserted + (forwardResult.inserted || 0),
-                    skipped: prev.skipped + (forwardResult.skipped || 0),
-                    errors: prev.errors + (forwardResult.errors || 0),
+                    inserted: prev.inserted + (sweep.inserted || 0),
+                    skipped: prev.skipped + (sweep.skipped || 0),
+                    errors: prev.errors + (sweep.errors || 0),
                 }));
             }
 
@@ -526,21 +600,23 @@ export default function Internet({ route, setRoute }) {
                 console.warn('[XScraper] resetSeen before scrape failed:', err?.message);
             }
 
-            // 3. Start the real-time scraper
+            // 3. Start the real-time scraper. From here the poll loop above
+            //    forwards every delta to PostgreSQL by itself.
             const scrapeResult = await startRealtimeCrawler(webviewRef.current);
             if (scrapeResult?.success) {
                 setIsScraping(true);
-                // See above: reconcile the full local store on the first pass.
+                // Reconcile the full local store on the first pass.
                 lastForwardTimestampRef.current = 0;
-                setScraperStatus('Scraping + reconciling with PostgreSQL');
+                setScraperStatus('Live: scraping and streaming to PostgreSQL');
             } else {
                 setError(scrapeResult?.error || 'Failed to start scrape');
-                setScraperStatus('Scrape failed');
+                setScraperStatus('Live sync failed to start');
             }
         } catch (err) {
-            setError(err?.message || 'Scrape + forward failed');
-            setScraperStatus('Scrape + forward failed');
+            setError(err?.message || 'Live sync failed');
+            setScraperStatus('Live sync failed');
         } finally {
+            autoStartRef.current = false;
             setLoading(false);
         }
     }
@@ -636,85 +712,94 @@ export default function Internet({ route, setRoute }) {
                     <span>Messages: {scraperStats.messages}</span>
                     <span>Seen: {realtimeStats.seen}</span>
                     <span>Queue: {realtimeStats.queue}</span>
-                    {isScraping && (
-                        <>
-                            <span className="forwarding-stat">Forwarded: {forwardStats.inserted}</span>
-                            <span className="forwarding-stat">Skipped: {forwardStats.skipped}</span>
-                            {forwardStats.errors > 0 && (
-                                <span className="forwarding-stat error">Errors: {forwardStats.errors}</span>
-                            )}
-                        </>
+                    <span className="forwarding-stat">Inserted: {forwardStats.inserted}</span>
+                    <span className="forwarding-stat">Skipped: {forwardStats.skipped}</span>
+                    {forwardStats.errors > 0 && (
+                        <span className="forwarding-stat error">Errors: {forwardStats.errors}</span>
                     )}
                 </div>
                 <div className="navButtons">
+                    {/* One button, whole pipeline: launch -> catch up -> scrape
+                        -> stream to PostgreSQL. Everything else is optional. */}
                     <button
-                        className="nav-btn full"
+                        className={`nav-btn full primary${isScraping ? ' live' : ''}`}
                         type="button"
-                        onClick={handleLaunchFirefox}
+                        onClick={handleLiveSync}
                         disabled={loading || !firefoxReady}
+                        title="Launches the browser if needed, reconciles the local store, then streams every new message to PostgreSQL as it is scraped."
                     >
-                        {loading ? 'Launching...' : 'Launch Browser'}
+                        {loading ? 'Working...' : (isScraping ? 'Stop Live Sync' : 'Start Live Sync')}
                     </button>
+
                     <button
-                        className="nav-btn full"
+                        className="nav-btn full subtle"
                         type="button"
-                        onClick={handleCloseBrowser}
-                        disabled={loading || !partition}
+                        onClick={() => setShowAdvanced(v => !v)}
                     >
-                        Close Browser
+                        {showAdvanced ? 'Hide manual controls' : 'Manual controls'}
                     </button>
-                    {!isScraping ? (
-                        <button
-                            className="nav-btn full"
-                            type="button"
-                            onClick={handleScrapeAndForward}
-                            disabled={loading || !webviewReady}
-                        >
-                            Scrape & Forward
-                        </button>
-                    ) : (
-                        <button
-                            className="nav-btn full"
-                            type="button"
-                            onClick={handleScrape}
-                            disabled={loading || !webviewReady}
-                        >
-                            Stop Scrape
-                        </button>
+
+                    {showAdvanced && (
+                        <>
+                            <button
+                                className="nav-btn full"
+                                type="button"
+                                onClick={handleLaunchFirefox}
+                                disabled={loading || !firefoxReady}
+                            >
+                                {loading ? 'Launching...' : 'Launch Browser'}
+                            </button>
+                            <button
+                                className="nav-btn full"
+                                type="button"
+                                onClick={handleCloseBrowser}
+                                disabled={loading || !partition}
+                            >
+                                Close Browser
+                            </button>
+                            <button
+                                className="nav-btn full"
+                                type="button"
+                                onClick={handleScrape}
+                                disabled={loading || !webviewReady}
+                            >
+                                {isScraping ? 'Stop Scrape Only' : 'Start Scrape Only'}
+                            </button>
+                            <button
+                                className="nav-btn full"
+                                type="button"
+                                onClick={handleExport}
+                                disabled={loading || !webviewReady}
+                            >
+                                Export Data
+                            </button>
+                            <button
+                                className="nav-btn full"
+                                type="button"
+                                onClick={handleForwardToPostgres}
+                                disabled={loading}
+                            >
+                                Forward to PostgreSQL
+                            </button>
+                            <button
+                                className="nav-btn full"
+                                type="button"
+                                onClick={handleClearExports}
+                                disabled={loading}
+                            >
+                                Clear Exports
+                            </button>
+                            <button
+                                className="nav-btn full danger"
+                                type="button"
+                                onClick={handleClearLocalStore}
+                                disabled={loading}
+                                title="Wipes the local SQLite cache, the extension IndexedDB and JSON snapshots. PostgreSQL is not touched."
+                            >
+                                Clear Local Store
+                            </button>
+                        </>
                     )}
-                    <button
-                        className="nav-btn full"
-                        type="button"
-                        onClick={handleExport}
-                        disabled={loading || !webviewReady}
-                    >
-                        Export Data
-                    </button>
-                    <button
-                        className="nav-btn full"
-                        type="button"
-                        onClick={handleForwardToPostgres}
-                        disabled={loading}
-                    >
-                        Forward to PostgreSQL
-                    </button>
-                    <button
-                        className="nav-btn full"
-                        type="button"
-                        onClick={handleClearExports}
-                        disabled={loading}
-                    >
-                        Clear Exports
-                    </button>
-                    <button
-                        className="nav-btn full danger"
-                        type="button"
-                        onClick={handleClearLocalStore}
-                        disabled={loading}
-                        title="Wipes the local SQLite cache, the extension IndexedDB and JSON snapshots. PostgreSQL is not touched."
-                    >
-                        Clear Local Store
-                    </button>
                 </div>
                 <div className="page-selector">
                     <h3>Quick Pages</h3>

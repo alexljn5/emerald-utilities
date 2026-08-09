@@ -245,3 +245,99 @@ export async function diagnoseSync(conversationId = null) {
         return { success: false, error: err.message };
     }
 }
+
+// ============================================================
+// Durable forwarder service API (the ONE canonical pipeline)
+// ============================================================
+
+/**
+ * Duplicate-safe persist of scraped messages into the durable SQLite queue.
+ * Messages are marked unforwarded so the batch worker picks them up.
+ */
+export async function saveToSqlite(messages, conversationId, conversationTitle) {
+    try {
+        const result = await invoke('xscraper:save-to-sqlite', { messages, conversationId, conversationTitle });
+        return result;
+    } catch (err) {
+        console.error('[XScraper] saveToSqlite error:', err);
+        return { success: false, error: err.message, inserted: 0, duplicates: 0, total: 0 };
+    }
+}
+
+/**
+ * Force the batch worker to run now (manual "Send to PostgreSQL").
+ */
+export async function forwardPending() {
+    try {
+        const result = await invoke('xscraper:forward-pending');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] forwardPending error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Start the singleton batch worker.
+ */
+export async function startForwardWorker() {
+    try {
+        const result = await invoke('xscraper:worker-start');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] startForwardWorker error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Stop the singleton batch worker.
+ */
+export async function stopForwardWorker() {
+    try {
+        const result = await invoke('xscraper:worker-stop');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] stopForwardWorker error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Live forwarder status (SQLite local/pending/forwarded/failed, PG, worker).
+ */
+export async function getForwardStatus() {
+    try {
+        const result = await invoke('xscraper:get-forward-status');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] getForwardStatus error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Clear fully-forwarded messages from the local SQLite queue.
+ */
+export async function clearSent() {
+    try {
+        const result = await invoke('xscraper:clear-sent');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] clearSent error:', err);
+        return { success: false, error: err.message, deleted: 0 };
+    }
+}
+
+/**
+ * One-click SCRAPE + FORWARD workflow in the main process.
+ */
+export async function scrapeAndForward() {
+    try {
+        const result = await invoke('xscraper:scrape-and-forward');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] scrapeAndForward error:', err);
+        return { success: false, error: err.message };
+    }
+}

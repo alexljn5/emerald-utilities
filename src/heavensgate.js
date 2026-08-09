@@ -10,6 +10,7 @@ import { ArchiveScheduler } from './core/archiveScheduler.js';
 import { writePacket } from './core/networkFileWriter.js';
 import { registerIpcHandlers } from './utils/ipcHandlers.js';
 import { registerXScraperIpcHandlers } from './utils/xscraperIpcHandlers.js';
+import { startWorker as startXScraperForwardWorker, getStatus as getXScraperForwardStatus } from './database/xscraper-forwarder.js';
 import { registerCreatorHubIpc } from './creator-hub/ipc.js';
 import { registerEnvIpc } from './utils/envIpc.js';
 import { resolvePath, resolveInternalScriptsPath } from './utils/pathResolver.js';
@@ -1667,6 +1668,23 @@ app.whenReady().then(async () => {
         getDialogParentWindow: () => mainWindow,
         pushScriptLog
     });
+
+    // ==================== XSCRAPER FORWARD WORKER (AUTO-START) ====================
+    // The durable batch worker is a MAIN-PROCESS singleton. It is started here
+    // at app startup so newly scraped SQLite messages are forwarded to
+    // PostgreSQL automatically, regardless of whether the Internet page is
+    // mounted (the page is the UI; the worker is the pipeline). Starting it
+    // twice is a no-op — `startWorker` is guarded by an internal singleton flag.
+    try {
+        const workerStatus = startXScraperForwardWorker();
+        console.log(`[XScraper] Forward worker auto-started (success=${workerStatus.success}${workerStatus.alreadyRunning ? ', already running' : ''}, interval=${workerStatus.intervalMs}ms)`);
+        if (workerStatus.success) {
+            pushScriptLog(`[XScraper] Forward worker running (interval ${Math.round(workerStatus.intervalMs / 1000)}s)`);
+        }
+    } catch (err) {
+        console.error('[XScraper] Failed to auto-start forward worker:', err.message);
+        pushScriptLog(`[XScraper] Forward worker auto-start failed: ${err.message}`);
+    }
 
     // Register Creator Hub IPC handlers
     registerCreatorHubIpc(ipcMain);

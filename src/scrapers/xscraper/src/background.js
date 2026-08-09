@@ -9,11 +9,48 @@ const SERVER_URL = 'http://localhost:3000';
 let localDb = null;
 
 /**
- * Server sync control (prevents spam + CORS flooding)
+ * Server sync control.
+ *
+ * Previously a 10s cooldown silently DROPPED every batch that arrived before
+ * the cooldown elapsed, which is why the durable SQLite store stayed empty
+ * even though IndexedDB filled up. Even the later "in-flight skip" could drop
+ * a batch that arrived while a POST was still awaiting a response.
+ *
+ * Now we use a serialized outbound queue: every batch is enqueued and POSTed
+ * to the server SQLite one at a time. No batch is ever dropped — the server
+ * SQLite store is the durable queue that the batch worker drains to Postgres.
  */
-let lastServerAttempt = 0;
-const SERVER_COOLDOWN_MS = 10000;
+let serverSyncQueue = [];
+let serverSyncActive = false;
 const USE_SERVER = true; // enabled for real-time PostgreSQL forwarding
+
+/**
+ * Serialized drain of the server-sync queue. Guarantees every enqueued batch
+ * reaches the durable SQLite server, one at a time (no flooding, no drops).
+ */
+async function drainServerSyncQueue() {
+    if (serverSyncActive) return;
+    serverSyncActive = true;
+    try {
+        while (serverSyncQueue.length > 0) {
+            const { messages, conversationId, conversationTitle } = serverSyncQueue.shift();
+            try {
+                await saveToSQLiteServer(messages, conversationId, conversationTitle);
+            } catch (err) {
+                console.warn('[XSCRAPER_BACKGROUND] server POST failed:', err.message || err);
+            }
+        }
+    } finally {
+        serverSyncActive = false;
+    }
+}
+
+/** Enqueue a batch for durable server SQLite persistence (no drops). */
+function enqueueServerSync(messages, conversationId, conversationTitle) {
+    if (!USE_SERVER) return;
+    serverSyncQueue.push({ messages, conversationId, conversationTitle });
+    drainServerSyncQueue();
+}
 
 /**
  * Initialize IndexedDB
@@ -231,13 +268,14 @@ async function handleSaveConversation(conversationId, conversationTitle) {
  * Save messages (offline-first)
  */
 async function handleSaveMessages(messages, conversationId, conversationTitle) {
-    // rate limit server attempts
-    const now = Date.now();
+    // Serialized outbound queue: every batch is enqueued and POSTed to the
+    // durable SQLite server one at a time. No batch is ever dropped, even if
+    // many scrape-flushes arrive in quick succession.
     let serverResult = { skipped: true };
 
-    if (USE_SERVER && now - lastServerAttempt > SERVER_COOLDOWN_MS) {
-        lastServerAttempt = now;
-        serverResult = await saveToSQLiteServer(messages, conversationId, conversationTitle);
+    if (USE_SERVER) {
+        enqueueServerSync(messages, conversationId, conversationTitle);
+        serverResult = { queued: true };
     }
 
     // Also save conversation metadata

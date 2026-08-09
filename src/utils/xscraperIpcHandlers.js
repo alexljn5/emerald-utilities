@@ -5,6 +5,19 @@ import { BrowserWindow, session, ipcMain } from 'electron';
 import { forwardScrapedMessagesToPostgres } from '../database/ai-persistence.js';
 import { readLocalXScraperSource, clearSqliteStore, defaultSqlitePath } from '../database/xscraper-local-source.js';
 import { reconcileScrapedMessages } from '../database/xscraper-sync.js';
+import { saveMessages as saveMessagesToSqliteQueue } from '../database/xscraper-forwarder.js';
+import {
+    saveMessages as forwarderSave,
+    getPending as forwarderGetPending,
+    markForwarded as forwarderMarkForwarded,
+    markFailed as forwarderMarkFailed,
+    clearForwarded as forwarderClearForwarded,
+    getStatus as forwarderGetStatus,
+    runBatch as forwarderRunBatch,
+    forceRun as forwarderForceRun,
+    startWorker as forwarderStartWorker,
+    stopWorker as forwarderStopWorker,
+} from '../database/xscraper-forwarder.js';
 
 // Track local server process and restart state
 let localServerProcess = null;
@@ -440,7 +453,10 @@ export function registerXScraperIpcHandlers(context) {
         }
     });
 
-    // Forward scraped messages to PostgreSQL
+    // Forward scraped messages to PostgreSQL via the durable SQLite queue.
+    // A manual call here is the SAME pipeline the worker uses: persist to
+    // SQLite (durable), then force a batch run. Never marks forwarded before
+    // PostgreSQL confirms.
     ipcMain.handle('xscraper:forward-to-postgres', async (_event, { messages, conversationId, conversationTitle }) => {
         try {
             if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -451,11 +467,117 @@ export function registerXScraperIpcHandlers(context) {
                 return { success: false, error: 'conversationId is required' };
             }
 
-            const result = await forwardScrapedMessagesToPostgres(messages, conversationId, conversationTitle);
-            return result;
+            // 1. Durable persist to the SQLite queue (unforwarded).
+            const saved = await forwarderSave(messages, conversationId, conversationTitle);
+            if (!saved.success) {
+                return { success: false, error: saved.error || 'Failed to persist to SQLite queue', inserted: 0, skipped: 0 };
+            }
+
+            // 2. Force one batch run past the backoff.
+            const r = await forwarderForceRun();
+            return {
+                success: r.success,
+                inserted: r.inserted || 0,
+                skipped: r.skipped || 0,
+                failed: r.failed || 0,
+                pending: r.pending || 0,
+                error: r.error || null,
+                message: `Forwarded batch: ${r.inserted || 0} inserted, ${r.skipped || 0} already present`,
+            };
         } catch (err) {
             console.error('[XScraper] Forward to PostgreSQL error:', err);
             return { success: false, error: err.message, inserted: 0, skipped: 0 };
+        }
+    });
+
+    // ------------------------------------------------------------------
+    // Durable forwarder service IPC (the ONE canonical pipeline).
+    // Manual, automatic and SCRAPE+FORWARD all route through these.
+    // ------------------------------------------------------------------
+
+    // Save scraped messages into the durable SQLite queue.
+    ipcMain.handle('xscraper:save-to-sqlite', async (_event, { messages, conversationId, conversationTitle }) => {
+        try {
+            if (!messages || !Array.isArray(messages) || messages.length === 0) {
+                return { success: true, inserted: 0, duplicates: 0, total: 0 };
+            }
+            if (!conversationId) {
+                return { success: false, error: 'conversationId is required', inserted: 0, duplicates: 0, total: 0 };
+            }
+            const r = await forwarderSave(messages, conversationId, conversationTitle);
+            return r;
+        } catch (err) {
+            console.error('[XScraper] save-to-sqlite error:', err);
+            return { success: false, error: err.message, inserted: 0, duplicates: 0, total: 0 };
+        }
+    });
+
+    // Force the batch worker to run now (manual "Send to PostgreSQL").
+    ipcMain.handle('xscraper:forward-pending', async () => {
+        try {
+            const r = await forwarderForceRun();
+            const status = await forwarderGetStatus();
+            return { success: r.success, ...r, status };
+        } catch (err) {
+            console.error('[XScraper] forward-pending error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Start / stop / check the singleton batch worker.
+    ipcMain.handle('xscraper:worker-start', async () => {
+        try {
+            return forwarderStartWorker();
+        } catch (err) {
+            console.error('[XScraper] worker-start error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+    ipcMain.handle('xscraper:worker-stop', async () => {
+        try {
+            return forwarderStopWorker();
+        } catch (err) {
+            console.error('[XScraper] worker-stop error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Live forwarder status for the UI counters.
+    ipcMain.handle('xscraper:get-forward-status', async () => {
+        try {
+            return { success: true, ...(await forwarderGetStatus()) };
+        } catch (err) {
+            console.error('[XScraper] get-forward-status error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Clear fully-forwarded messages from the local SQLite queue.
+    ipcMain.handle('xscraper:clear-sent', async () => {
+        try {
+            const r = await forwarderClearForwarded();
+            return { success: true, ...r };
+        } catch (err) {
+            console.error('[XScraper] clear-sent error:', err);
+            return { success: false, error: err.message, deleted: 0 };
+        }
+    });
+
+    // One-click SCRAPE + FORWARD workflow in the main process.
+    // Ensures the server and worker are running, then kicks a batch.
+    ipcMain.handle('xscraper:scrape-and-forward', async () => {
+        try {
+            const serverOk = await ensureLocalServerRunning();
+            if (!serverOk) {
+                return { success: false, error: 'Local XScraper server unavailable' };
+            }
+            const worker = forwarderStartWorker();
+            const r = await forwarderRunBatch();
+            const status = await forwarderGetStatus();
+            return { success: true, serverOk, worker, batch: r, status };
+        } catch (err) {
+            console.error('[XScraper] scrape-and-forward error:', err);
+            return { success: false, error: err.message };
         }
     });
 

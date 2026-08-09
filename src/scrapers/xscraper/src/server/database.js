@@ -33,6 +33,7 @@ class XScraperDatabase {
                 } else {
                     console.log(`Connected to SQLite database at ${this.dbPath}`);
                     this.createTables()
+                        .then(() => this.ensureForwardingColumns())
                         .then(() => {
                             this.initialized = true;
                             resolve();
@@ -49,6 +50,13 @@ class XScraperDatabase {
     async createTables() {
         const queries = [
             // Messages table
+            // NOTE: `forwarded` / `forwarded_at` / `attempts` / `last_error`
+            // are the durable forwarding-queue columns the batch worker
+            // (xscraper-forwarder.js) reads and writes. They MUST exist here,
+            // otherwise the INSERT in saveMessages below throws
+            // "no such column: forwarded" and every extension POST is dropped
+            // before it ever reaches the worker — which is exactly the
+            // "scrapes but never inserts into PostgreSQL" bug.
             `CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
                 conversation_id TEXT NOT NULL,
@@ -57,6 +65,10 @@ class XScraperDatabase {
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 scraped_at DATETIME,
+                forwarded INTEGER DEFAULT 0,
+                forwarded_at DATETIME,
+                attempts INTEGER DEFAULT 0,
+                last_error TEXT,
                 UNIQUE(content, author, conversation_id)
             )`,
 
@@ -102,6 +114,57 @@ class XScraperDatabase {
         }
 
         console.log('Database tables initialized successfully');
+    }
+
+    /**
+     * Ensure the durable forwarding-queue columns exist on the `messages`
+     * table. `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so
+     * databases created before the forwarding worker must be migrated here.
+     *
+     * Idempotent: each column is only added if it is missing. Non-destructive:
+     * existing rows are untouched (they default to forwarded=0 / attempts=0,
+     * i.e. pending — which is exactly what we want for un-forwarded history).
+     */
+    async ensureForwardingColumns() {
+        const check = () => new Promise((resolve, reject) => {
+            this.db.all('PRAGMA table_info(messages)', (err, rows) => {
+                if (err) reject(err);
+                else resolve(new Set((rows || []).map(r => r.name)));
+            });
+        });
+
+        try {
+            const cols = await check();
+            const want = [
+                ['forwarded', 'INTEGER DEFAULT 0'],
+                ['forwarded_at', 'DATETIME'],
+                ['attempts', 'INTEGER DEFAULT 0'],
+                ['last_error', 'TEXT'],
+            ];
+
+            for (const [name, def] of want) {
+                // Re-check each iteration: ALTER TABLE changes the schema.
+                if (cols.has(name)) {
+                    console.log(`[XScraper DB] column messages.${name} already exists`);
+                    continue;
+                }
+                try {
+                    await this.run(`ALTER TABLE messages ADD COLUMN ${name} ${def}`);
+                    cols.add(name);
+                    console.log(`[XScraper DB] added messages.${name} ${def}`);
+                } catch (err) {
+                    // Race: another connection added it between check and alter.
+                    if (String(err.message).includes('duplicate column')) {
+                        cols.add(name);
+                    } else {
+                        throw err;
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('[XScraper DB] ensureForwardingColumns warning:', err.message);
+        }
+        console.log('[XScraper DB] forwarding columns ensured');
     }
 
     /**
@@ -153,8 +216,8 @@ class XScraperDatabase {
     }
 
     /**
-     * Save messages to database
-     */
+         * Save messages to database
+         */
     async saveMessages(messages, conversationId, conversationTitle) {
         const startTime = Date.now();
         let newCount = 0;
@@ -163,14 +226,15 @@ class XScraperDatabase {
         try {
             // Ensure conversation exists
             await this.upsertConversation(conversationId, conversationTitle);
+            console.log(`[XScraper DB] saveMessages: conversation=${conversationId} batch=${Array.isArray(messages) ? messages.length : 0}`);
 
             // Insert messages
             for (const message of messages) {
                 try {
                     await this.run(
                         `INSERT INTO messages 
-                            (id, conversation_id, content, author, timestamp, scraped_at) 
-                         VALUES (?, ?, ?, ?, ?, ?)`,
+                            (id, conversation_id, content, author, timestamp, scraped_at, forwarded) 
+                         VALUES (?, ?, ?, ?, ?, ?, 0)`,
                         [
                             message.id || uuidv4(),
                             conversationId,
@@ -185,6 +249,7 @@ class XScraperDatabase {
                     if (err.message.includes('UNIQUE constraint failed')) {
                         duplicateCount++;
                     } else {
+                        console.error(`[XScraper DB] INSERT failed for message ${message.id}: ${err.message}`);
                         throw err;
                     }
                 }
@@ -197,6 +262,7 @@ class XScraperDatabase {
             const scrapeTime = Date.now() - startTime;
             await this.logScrape(conversationId, messages.length, newCount, duplicateCount, scrapeTime, 'success');
 
+            console.log(`[XScraper DB] saveMessages: conversation=${conversationId} new=${newCount} dup=${duplicateCount} total=${messages.length}`);
             return {
                 success: true,
                 newMessages: newCount,
@@ -205,7 +271,7 @@ class XScraperDatabase {
                 scrapeTime
             };
         } catch (error) {
-            console.error('Error saving messages:', error);
+            console.error(`[XScraper DB] Error saving messages conversation=${conversationId}:`, error.message);
             await this.logScrape(conversationId, messages.length, newCount, duplicateCount, Date.now() - startTime, 'error', error.message);
             return {
                 success: false,

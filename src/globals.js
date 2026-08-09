@@ -6,7 +6,7 @@ export const versionNumber = '0.1.4';
 
 // ==================== FEATURE FLAGS ====================
 // Toggle features on/off. Used by both main and renderer processes.
-export const ENABLE_DEVTOOLS = false;
+export const ENABLE_DEVTOOLS = true;
 export const ENABLE_CREATOR_HUB = true;
 export const ENABLE_NETWORK_MONITOR = true;
 export const ENABLE_DATABASE = true;

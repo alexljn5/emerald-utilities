@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XScraper</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <img src="src/icons/icon-48.png" class="logo" />
+            <div>
+                <h1>XScraper</h1>
+                <p class="subtitle">Archive system running</p>
+            </div>
+        </header>
+
+        <div class="status-section">
+            <div id="status" class="status-indicator">Ready</div>
+        </div>
+
+        <div class="controls">
+            <button id="scrapeBtn" class="btn btn-primary">
+                Down Arrow - Scrape Current Chat
+            </button>
+            <button id="exportBtn" class="btn btn-secondary">
+                Up Arrow - Export All Messages
+            </button>
+            <button id="clearBtn" class="btn btn-danger">
+                X - Clear Database
+            </button>
+            <button id="scrapeAllBtn" class="btn btn-secondary">Force Scroll Recovery</button>
+            <button id="debugBtn" class="btn btn-secondary">Debug</button>
+
+            <button id="restartBtn" class="btn btn-secondary">
+                Restart
+            </button>
+
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <span class="stat-label">Messages Saved:</span>
+                <span id="messageCount" class="stat-value">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Conversations:</span>
+                <span id="conversationCount" class="stat-value">0</span>
+            </div>
+        </div>
+
+        <div class="messages-preview">
+            <h3>Recent Messages</h3>
+            <ul id="messagesList" class="messages-list">
+                <li class="empty-state">No messages saved yet</li>
+            </ul>
+        </div>
+
+        <footer>
+            <a href="#" id="settingsLink">Settings</a>
+            <span class="divider">•</span>
+            <a href="#" id="helpLink">Help</a>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,16 @@
+# Note: environment variables now live in the single src/.env (see repo root).
+# Database-specific .env (POSTGRES_* vars) is also git-ignored here.
+
+# Environment files
+.env
+
+# Volume backups
+volume-backups/*.tar.gz
+*.tar.gz
+
+# Tasks JSON data and backups (local recovery mirror)
+tasks-data/
+tasks-data-backups/
+
+# Temporary JSON write files
+*.json.tmp-*

@@ -1,0 +1,494 @@
+.databasePage {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1rem, 1.5vw, 1.5rem);
+    padding: clamp(1rem, 1.5vw, 1.5rem);
+    height: 100%;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.dbBox {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: clamp(1rem, 1.5vw, 1.5rem);
+    min-width: 0;
+}
+
+.dbBox h2 {
+    margin: 0 0 clamp(0.8rem, 1.2vw, 1.2rem) 0;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* Connection and Stats */
+.connectionBox,
+.dbStats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.connRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+    padding: clamp(0.4rem, 0.6vw, 0.6rem);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+}
+
+.connLabel {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.connValue {
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+/* Import controls */
+.importControls {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.importRow {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+    flex-wrap: wrap;
+}
+
+/* Database Browser */
+.dbBrowser {
+    display: grid;
+    grid-template-columns: minmax(clamp(10rem, 20vw, 14rem), 0.3fr) minmax(0, 1fr);
+    gap: clamp(0.5rem, 1vw, 1rem);
+    min-width: 0;
+}
+
+/* Query and Results */
+.queryBox {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.queryInput {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: var(--color-text);
+    padding: clamp(0.6rem, 1vw, 1rem);
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Import Log */
+.importLog {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: clamp(0.6rem, 1vw, 1rem);
+    max-height: clamp(150px, 20vw, 220px);
+    overflow-y: auto;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    line-height: 1.5;
+}
+
+/* Stat Cards */
+.statCard {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: clamp(0.6rem, 1vw, 1rem);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+}
+
+.statLabel {
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.statValue {
+    font-size: clamp(1rem, 1.5vw, 1.5rem);
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+/* Connection Status */
+.statusConnected {
+    color: #4f4;
+}
+
+.statusDisconnected {
+    color: var(--color-accent);
+}
+
+/* Table Browser */
+.tableList h4 {
+    margin: 0 0 clamp(0.5rem, 0.8vw, 0.8rem) 0;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.tableList ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tableBtn {
+    width: 100%;
+    text-align: left;
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tableBtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tableBtn.active {
+    background: rgba(255, 68, 68, 0.2);
+    border-color: rgba(255, 68, 68, 0.4);
+}
+
+.noTables {
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+}
+
+/* Table Viewer */
+.tableViewer {
+    min-height: 100px;
+}
+
+.queryError {
+    padding: clamp(0.6rem, 1vw, 1rem);
+    background: rgba(255, 68, 68, 0.15);
+    border: 1px solid rgba(255, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #f88;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+}
+
+.queryResult h4 {
+    margin: 0 0 clamp(0.5rem, 0.8vw, 0.8rem) 0;
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+    color: var(--color-text);
+}
+
+.placeholder {
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+}
+
+/* Clear Log Button */
+.clearLogBtn {
+    margin-top: clamp(0.5rem, 0.8vw, 0.8rem);
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    cursor: pointer;
+}
+
+.clearLogBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Log Entry */
+.logEntry {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.logEntry:last-child {
+    border-bottom: none;
+}
+
+/* Query Result Table */
+.queryResult table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+}
+
+.queryResult {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.queryResult th,
+.queryResult td {
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.queryResult th {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.queryResult tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.queryResult td {
+    color: var(--color-text);
+}
+
+/* Form Elements */
+.importControls label {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: rgba(255, 255, 255, 0.7);
+    min-width: 100px;
+}
+
+.importControls select {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: var(--color-text);
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    min-width: 180px;
+}
+
+.importControls button {
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.8rem, 1.2vw, 1.2rem);
+    background: rgba(255, 68, 68, 0.2);
+    border: 1px solid rgba(255, 68, 68, 0.4);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.importControls button:hover:not(:disabled) {
+    background: rgba(255, 68, 68, 0.3);
+}
+
+/* Buttons */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Backup Controls */
+.backupControls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.restoreRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.backupStatus {
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.6rem, 1vw, 0.9rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    overflow-wrap: anywhere;
+}
+
+.archiveToastRegion {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-sm);
+    pointer-events: none;
+    min-width: 0;
+}
+
+.archiveToast {
+    width: min(100%, clamp(16rem, 32vw, 28rem));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    background: var(--color-bg);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    box-shadow: 0 0 20px var(--color-shadow);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    animation: archiveToastIn 0.18s ease-out;
+    overflow-wrap: anywhere;
+}
+
+.archiveToast strong {
+    color: var(--color-accent);
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    text-transform: uppercase;
+}
+
+.archiveToast--success {
+    border-color: var(--color-text);
+}
+
+.archiveToast--error {
+    border-color: var(--color-accent);
+}
+
+.archiveScheduleForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.scheduleGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    gap: var(--space-md);
+}
+
+.scheduleGrid label,
+.scheduleOptions label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    min-width: 0;
+}
+
+.scheduleOptions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: var(--space-sm);
+}
+
+.scheduleOptions label {
+    flex-direction: row;
+    align-items: center;
+}
+
+.dbInput {
+    width: 100%;
+    padding: clamp(0.5rem, 0.8vw, 0.7rem) clamp(0.6rem, 1vw, 0.9rem);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    min-width: 0;
+}
+
+.scheduleActions,
+.scheduleItemActions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.scheduleList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.scheduleItem {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-md);
+    align-items: center;
+    padding: var(--space-md);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    min-width: 0;
+}
+
+.scheduleItem div:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.scheduleItem span {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+}
+
+@keyframes archiveToastIn {
+    from {
+        opacity: 0;
+        transform: translateY(calc(-1 * var(--space-md)));
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .dbBrowser {
+        grid-template-columns: 1fr;
+    }
+
+    .scheduleItem {
+        grid-template-columns: 1fr;
+    }
+
+    .importRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .restoreRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .importControls label {
+        min-width: auto;
+    }
+}

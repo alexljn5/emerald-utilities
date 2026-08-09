@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Database - Emerald Utilities</title>
+    <link rel="stylesheet" href="../css/globals.css">
+    <link rel="stylesheet" href="../css/database.css">
+</head>
+
+<body>
+    <div class="app">
+        <!-- LEFT PANEL -->
+        <div class="leftPanel">
+            <div id="friedEggs">
+                <h1>Database</h1>
+                <span id="versionDisplay"></span>
+                <div id="logo">
+                    <img src="../../img/favicons/favicon.png" alt="Logo" width="64" height="64">
+                </div>
+            </div>
+
+            <a href="../index.html">
+                <button>← Back</button>
+            </a>
+
+            <div class="navBox">
+                <h3>Connection</h3>
+                <div id="dbStatus">Checking...</div>
+                <button id="refreshStats" class="full" type="button">Refresh Stats</button>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="rightPanel">
+            <div class="databaseContent">
+                <section class="dbSection">
+                    <h2>Statistics</h2>
+                    <div id="statsContainer" class="statsGrid">
+                        <div class="statCard">
+                            <span class="statLabel">Total Packets</span>
+                            <span class="statValue" id="statTotalPackets">-</span>
+                        </div>
+                        <div class="statCard">
+                            <span class="statLabel">Grok Messages</span>
+                            <span class="statValue" id="statGrokMessages">-</span>
+                        </div>
+                        <div class="statCard">
+                            <span class="statLabel">Grok Conversations</span>
+                            <span class="statValue" id="statGrokConversations">-</span>
+                        </div>
+                        <div class="statCard">
+                            <span class="statLabel">Active Threats</span>
+                            <span class="statValue" id="statActiveThreats">-</span>
+                        </div>
+                        <div class="statCard">
+                            <span class="statLabel">Blacklisted Packets</span>
+                            <span class="statValue" id="statBlacklistedPackets">-</span>
+                        </div>
+                        <div class="statCard">
+                            <span class="statLabel">Connected</span>
+                            <span class="statValue" id="statConnected">-</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dbSection">
+                    <h2>Import Data</h2>
+                    <div class="importControls">
+                        <div class="importRow">
+                            <label for="networkFileSelect">Network JSONL:</label>
+                            <select id="networkFileSelect" class="fileSelect">
+                                <option value="">-- Select a file --</option>
+                            </select>
+                            <button id="importNetworkBtn" class="actionBtn" type="button">Import</button>
+                        </div>
+                        <div class="importRow">
+                            <button id="importGrokBtn" class="actionBtn" type="button">Import Grok Export
+                                (JSON)</button>
+                        </div>
+                        <div class="importRow">
+                            <button id="importBlacklistBtn" class="actionBtn" type="button">Import Blacklisted
+                                IPs</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dbSection">
+                    <h2>Import Log</h2>
+                    <div id="importLog" class="importLog"></div>
+                    <button id="clearLogBtn" class="secondaryBtn" type="button">Clear Log</button>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="../globals.js"></script>
+    <script type="module" src="js/database.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,38 @@
+# ============================================================
+# DISABLED — DO NOT USE
+# ============================================================
+# This file has been disabled to prevent a second PostgreSQL container.
+# Emerald Utilities uses a SINGLE PostgreSQL instance managed by:
+#   src/database/docker-compose.yml
+#   src/database/start_postgres.sh
+#   src/database/merge-sins.sh
+#
+# The tasks schema (pride.sql) is applied to the MAIN database.
+# Do NOT rename this file back to docker-compose.yml.
+# ============================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: emerald-tasks-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-alexljn5}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-[REDACTED]}
+      POSTGRES_DB: ${POSTGRES_DB:-emerald_utilities}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - tasks_postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alexljn5} -d ${POSTGRES_DB:-emerald_utilities}"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  tasks_postgres_data:
+    external: true
+    name: tasks_postgres_data

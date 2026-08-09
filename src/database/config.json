@@ -1,0 +1,38 @@
+{
+    "database": {
+        "host": "192.168.2.27",
+        "port": 5432,
+        "database": "emerald_utilities",
+        "user": "alexljn5"
+    },
+    "localAI": {
+        "enabled": false
+    },
+    "aiProvider": "ollama",
+    "providers": {
+        "grok": {
+            "apiKey": "encrypted:REPLACE_WITH_ENCRYPTED_VALUE",
+            "embeddingEndpoint": "https://api.x.ai/v1/embeddings",
+            "embeddingModel": "text-embedding-3",
+            "chatEndpoint": "https://api.x.ai/v1/chat/completions",
+            "chatModel": "grok-2-latest"
+        },
+        "openai": {
+            "apiKey": "encrypted:REPLACE_WITH_ENCRYPTED_VALUE",
+            "embeddingEndpoint": "https://api.openai.com/v1/embeddings",
+            "embeddingModel": "text-embedding-3-small",
+            "chatEndpoint": "https://api.openai.com/v1/chat/completions",
+            "chatModel": "gpt-4o-mini"
+        },
+        "ollama": {
+            "host": "http://192.168.2.27:11434",
+            "embeddingModel": "nomic-embed-text",
+            "chatModel": "llama3.2"
+        },
+        "lmstudio": {
+            "host": "http://localhost:1234",
+            "embeddingModel": "text-embedding-nomic",
+            "chatModel": "llama-3.2-3b-instruct"
+        }
+    }
+}

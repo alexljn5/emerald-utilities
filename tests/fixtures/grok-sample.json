@@ -1,0 +1,16 @@
+{
+    "messages": [
+        {
+            "id": "msg-0001",
+            "conversationId": "conv-aaa",
+            "content": "Hello, this is a sample message used only for tests.",
+            "ts": 1700000000000
+        },
+        {
+            "id": "msg-0002",
+            "conversation_id": "conv-aaa",
+            "content": "A second message with a snake_case conversation id.",
+            "timestamp": 1700000001000
+        }
+    ]
+}

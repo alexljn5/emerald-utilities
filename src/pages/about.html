@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>About Section of Emerald Utilities</title>
+    <link rel="stylesheet" href="../css/globals.css">
+    <link rel="stylesheet" href="../css/about.css">
+</head>
+
+<body>
+
+    <div class="app">
+
+        <!-- LEFT PANEL -->
+        <div class="leftPanel">
+
+            <div id="friedEggs">
+                <h1>About</h1>
+                <span id="versionDisplay"></span>
+
+                <div id="logo">
+                    <img src="../../img/favicons/favicon.png" alt="Logo" width="64" height="64">
+                </div>
+            </div>
+
+            <a href="../index.html">
+                <button>← Back</button>
+            </a>
+
+            <h3>Navigation</h3>
+
+            <a href="../index.html">
+                <button>Main App</button>
+            </a>
+
+            <div class="aboutCreepyImage">
+                <img src="../../img/creepy.png" alt="..." width="512" height="512">
+            </div>
+
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="rightPanel">
+            <div class="aboutContent">
+
+                <h2>About Emerald Utilities</h2>
+
+                <h3>How to run SH scripts</h3>
+                <p>
+                    This tool supports running <code>.sh</code> (bash) scripts inside <strong>WSL</strong>, but due to
+                    path differences
+                    between Windows and Linux, you need a <strong>.bat helper script</strong>.
+                </p>
+
+                <p>
+                    <strong>Why?</strong> Windows paths like <code>C:\Users\...</code> are not understood by bash inside
+                    WSL.
+                    The correct path is <code>/mnt/c/Users/...</code>.
+                </p>
+
+                <p>
+                    <strong>Solution:</strong> Create a <code>.bat</code> file that calls WSL with the proper path.
+                </p>
+
+                <pre><code>@echo off
+wsl bash /mnt/c/Users/YourName/scripts/myscript.sh</code></pre>
+
+                <p>
+                    Then run the <code>.bat</code> file from Emerald Utilities.
+                </p>
+
+                <hr>
+
+                <p>Made by alexljn5 for personal system utilities.</p>
+
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="../globals.js"></script>
+    <script type="module" src="./js/about.js"></script>
+</body>
+
+</html>
+
+</body>
+
+</html>

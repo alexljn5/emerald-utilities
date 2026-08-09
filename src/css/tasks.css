@@ -1,0 +1,908 @@
+/* src/css/tasks.css
+   Tasks page — sticky-note style, minimal.
+   Follows STANDARDISATION.md design tokens.
+*/
+
+/* Two-panel layout: Notes (left) + Tasks (right) */
+.tasksLayout {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+}
+
+.tasksTopBar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.tasksTopBar button.active {
+    background: var(--color-accent);
+    color: var(--color-bg);
+}
+
+/* Each panel is a vertical card with fixed header/form and scrollable list */
+.tasksPanel {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    overflow: visible;
+    min-height: 0;
+    min-width: 0;
+}
+
+.tasksPageBody {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    gap: clamp(0.6rem, 1vw, 1rem);
+}
+
+.tasksSinglePanel {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+}
+
+/* Split layout: left form + right list */
+.tasksSplitLayout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+}
+
+.tasksSplitForm,
+.tasksSplitList {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.tasksSplitForm>h2,
+.tasksSplitList>h2 {
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    margin: 0;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.95rem, 1.15vw, 1.15rem);
+    color: var(--color-accent);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.tasksSplitForm .tasksForm {
+    border-bottom: none;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.tasksSplitList .tasksScrollArea {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+@media (max-width: 700px) {
+    .tasksSplitLayout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+}
+
+/* Entire item box clickable */
+.noteItemClickable,
+.taskItemClickable {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.noteItemClickable:hover,
+.taskItemClickable:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 8px var(--color-shadow);
+}
+
+.tasksPanel>h2 {
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    margin: 0;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(1rem, 1.2vw, 1.2rem);
+    color: var(--color-accent);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.tasksForm {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.tasksFormRow {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+@media (max-width: 600px) {
+    .tasksLayout {
+        grid-template-columns: 1fr;
+    }
+
+    .tasksFormRow {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Scrollable list area */
+.tasksScrollArea {
+    flex: 1;
+    overflow-y: auto;
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    min-height: 0;
+}
+
+.notesList,
+.tasksList,
+.remindersList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.noteItem {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.noteHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.3rem;
+}
+
+.noteDate {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    opacity: 0.7;
+}
+
+.noteContent {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-text);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.taskItem {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.taskPriority-green {
+    border-left: clamp(0.2rem, 0.4vw, 0.4rem) solid var(--color-priority-green);
+    border-top-color: color-mix(in srgb, var(--color-priority-green) 45%, transparent);
+    border-right-color: color-mix(in srgb, var(--color-priority-green) 45%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--color-priority-green) 45%, transparent);
+    background: color-mix(in srgb, var(--color-priority-green) 10%, var(--color-bg));
+}
+
+.taskPriority-orange {
+    border-left: clamp(0.2rem, 0.4vw, 0.4rem) solid var(--color-priority-orange);
+    border-top-color: color-mix(in srgb, var(--color-priority-orange) 45%, transparent);
+    border-right-color: color-mix(in srgb, var(--color-priority-orange) 45%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--color-priority-orange) 45%, transparent);
+    background: color-mix(in srgb, var(--color-priority-orange) 10%, var(--color-bg));
+}
+
+.taskPriority-red {
+    border-left: clamp(0.2rem, 0.4vw, 0.4rem) solid var(--color-priority-red);
+    border-top-color: color-mix(in srgb, var(--color-priority-red) 45%, transparent);
+    border-right-color: color-mix(in srgb, var(--color-priority-red) 45%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--color-priority-red) 45%, transparent);
+    background: color-mix(in srgb, var(--color-priority-red) 10%, var(--color-bg));
+}
+
+.taskCompleted {
+    opacity: 0.6;
+}
+
+.taskCompleted .taskTitle {
+    text-decoration: line-through;
+}
+
+.taskCheckbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.taskCheckbox input[type="checkbox"] {
+    width: clamp(1rem, 1.2vw, 1.2rem);
+    height: clamp(1rem, 1.2vw, 1.2rem);
+    accent-color: var(--color-accent);
+    cursor: pointer;
+}
+
+.taskTitle {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-text);
+    font-weight: bold;
+    overflow-wrap: anywhere;
+}
+
+.taskDescription {
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: var(--color-text);
+    opacity: 0.8;
+    margin: 0;
+    padding-left: clamp(1.5rem, 2vw, 2rem);
+}
+
+.taskMeta {
+    display: flex;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    padding-left: clamp(1.5rem, 2vw, 2rem);
+    flex-wrap: wrap;
+}
+
+.taskDue,
+.taskReminder {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    opacity: 0.7;
+    text-transform: uppercase;
+}
+
+/* Colored priority badge */
+.taskPriorityLabel {
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 3px;
+    color: var(--color-bg);
+}
+
+.taskPriority-green .taskPriorityLabel {
+    background: var(--color-priority-green);
+    color: #04140a;
+}
+
+.taskPriority-orange .taskPriorityLabel {
+    background: var(--color-priority-orange);
+    color: #1a1005;
+}
+
+.taskPriority-red .taskPriorityLabel {
+    background: var(--color-priority-red);
+    color: #1a0505;
+}
+
+.reminderItem {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    min-width: 0;
+}
+
+.reminderTitle {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-text);
+    font-weight: bold;
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.reminderTime {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    opacity: 0.7;
+}
+
+.emptyState {
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: var(--color-text);
+    opacity: 0.5;
+    text-align: center;
+    padding: clamp(1rem, 2vw, 2rem);
+}
+
+.remindersPanel {
+    border-color: var(--color-accent);
+    margin-bottom: clamp(0.75rem, 1.2vw, 1.25rem);
+}
+
+.remindersPanel h2 {
+    color: var(--color-accent);
+}
+
+.remindersPanelInline {
+    margin-top: clamp(0.75rem, 1.2vw, 1.25rem);
+    padding-top: clamp(0.5rem, 0.8vw, 0.8rem);
+    border-top: 1px solid var(--color-border);
+}
+
+.remindersPanelInline h3 {
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-accent);
+    margin: 0 0 clamp(0.4rem, 0.6vw, 0.6rem) 0;
+}
+
+.taskToastOverlay {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm);
+    background: linear-gradient(180deg, var(--color-bg) 0%, transparent 100%);
+    border-radius: 8px;
+}
+
+.taskToast {
+    width: 100%;
+    max-width: clamp(16rem, 32vw, 28rem);
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 0 20px var(--color-shadow);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    animation: taskToastIn 0.18s ease-out;
+    overflow-wrap: anywhere;
+    position: relative;
+}
+
+.taskToastIcon {
+    width: clamp(1.5rem, 2vw, 2rem);
+    height: clamp(1.5rem, 2vw, 2rem);
+    flex-shrink: 0;
+    object-fit: contain;
+    opacity: 0.9;
+}
+
+.taskToastContent {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.taskToastContent strong {
+    color: var(--color-accent);
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    text-transform: uppercase;
+}
+
+.taskToast-critical {
+    border-color: var(--color-priority-red);
+}
+
+.taskToast-critical .taskToastContent strong {
+    color: var(--color-priority-red);
+}
+
+.taskToast-low {
+    border-color: var(--color-priority-green);
+}
+
+@keyframes taskToastIn {
+    from {
+        opacity: 0;
+        transform: translateY(calc(-1 * var(--space-md)));
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Custom DateTimePicker */
+.datetimePicker {
+    position: relative;
+    width: 100%;
+}
+
+.datetimePickerTrigger {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    width: 100%;
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.2s ease;
+}
+
+.datetimePickerTrigger:hover {
+    border-color: var(--color-accent);
+}
+
+.datetimePickerTrigger.hasValue {
+    border-color: var(--color-accent);
+}
+
+.datetimePickerIcon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.datetimePickerText {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.9;
+}
+
+.datetimePickerClear {
+    font-size: 1.2rem;
+    line-height: 1;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.datetimePickerClear:hover {
+    opacity: 1;
+}
+
+.datetimePickerModalOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(2px);
+    padding: clamp(1rem, 2vw, 2rem);
+}
+
+.datetimePickerModal {
+    background: var(--color-bg);
+    border: 2px solid var(--color-accent);
+    border-radius: 4px;
+    padding: clamp(0.75rem, 1.2vw, 1.25rem);
+    box-shadow: 0 0 24px var(--color-shadow);
+    width: min(90vw, 80vh);
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.datetimePickerModalClose {
+    align-self: flex-end;
+    margin-top: clamp(0.4rem, 0.6vw, 0.6rem);
+    padding: clamp(0.3rem, 0.5vw, 0.5rem) clamp(0.6rem, 1vw, 1rem);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'pixelSans', sans-serif;
+    transition: all 0.15s ease;
+}
+
+.datetimePickerModalClose:hover {
+    background: var(--color-accent);
+    color: #000;
+}
+
+.datetimePickerHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.datetimePickerNav {
+    background: transparent;
+    border: none;
+    color: var(--color-text);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'pixelSans', sans-serif;
+}
+
+.datetimePickerNav:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.datetimePickerMonth {
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-accent);
+    font-weight: bold;
+}
+
+.datetimePickerWeekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 4px;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+.datetimePickerWeekdays span {
+    text-align: center;
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: var(--color-text);
+    opacity: 0.6;
+    font-family: 'pixelSans', sans-serif;
+    padding: 4px 0;
+}
+
+.datetimePickerDays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+.datetimePickerDay {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--color-text);
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.datetimePickerDay:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.datetimePickerDay.otherMonth {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.datetimePickerDay.otherMonth:hover {
+    background: transparent;
+}
+
+.datetimePickerDay.today {
+    border: 1px solid var(--color-accent);
+}
+
+.datetimePickerDay.selected {
+    background: var(--color-accent);
+    color: var(--color-bg);
+    font-weight: bold;
+}
+
+.datetimePickerTime {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    margin-top: clamp(0.5rem, 0.8vw, 0.8rem);
+    padding-top: clamp(0.4rem, 0.6vw, 0.6rem);
+    border-top: 1px solid var(--color-border);
+}
+
+.datetimePickerTime label {
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: var(--color-text);
+    opacity: 0.7;
+}
+
+.datetimePickerTime input[type="time"] {
+    flex: 1;
+    padding: clamp(0.3rem, 0.5vw, 0.5rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    cursor: pointer;
+}
+
+.datetimePickerTime input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+}
+
+/* Long-term storage panel */
+.longTermPanel h2 {
+    color: var(--color-priority-orange);
+}
+
+.longTermItem {
+    border-left-color: var(--color-accent);
+}
+
+.taskLongTermBadge {
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid var(--color-accent);
+    border-radius: 3px;
+    padding: 1px 6px;
+}
+
+/* Task detail modal (enlarged view) */
+.taskDetailOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(2px);
+    padding: clamp(1rem, 2vw, 2rem);
+}
+
+.taskDetailModal {
+    position: relative;
+    width: min(90vw, 40rem);
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--color-bg);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    padding: clamp(1rem, 2vw, 1.75rem);
+    box-shadow: 0 0 24px var(--color-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.taskDetailClose {
+    position: absolute;
+    top: clamp(0.4rem, 0.7vw, 0.7rem);
+    right: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: transparent;
+    border: none;
+    color: var(--color-text);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 0 6px;
+}
+
+.taskDetailClose:hover {
+    opacity: 1;
+}
+
+.taskDetailTitle {
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(1.1rem, 1.4vw, 1.4rem);
+    color: var(--color-accent);
+    margin: 0;
+    padding-right: 1.5rem;
+    overflow-wrap: anywhere;
+}
+
+.taskDetailPriority {
+    text-transform: uppercase;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    opacity: 0.7;
+    margin: 0;
+}
+
+.taskDetailDescription {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-text);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.taskDetailMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: clamp(0.4rem, 0.6vw, 0.6rem);
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: var(--color-text);
+    opacity: 0.8;
+}
+
+.taskDetailMeta p {
+    margin: 0;
+}
+
+.taskDetailModal .chButton {
+    align-self: flex-start;
+}
+
+/* Developer-only notification test controls in task detail modal */
+.taskNotificationTests {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    margin-top: clamp(0.5rem, 0.8vw, 0.8rem);
+    padding-top: clamp(0.5rem, 0.8vw, 0.8rem);
+    border-top: 1px solid var(--color-border);
+}
+
+.taskNotificationTestsLabel {
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: var(--color-text);
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: clamp(0.2rem, 0.4vw, 0.4rem);
+}
+
+.chButtonTest {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    opacity: 0.85;
+}
+
+.chButtonTest:hover {
+    opacity: 1;
+    border-color: var(--color-accent);
+}
+
+.chButtonTestPriority {
+    border-color: var(--color-priority-red);
+    color: var(--color-priority-red);
+}
+
+.confirmActions {
+    display: flex;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    margin-top: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.taskItemActions {
+    display: flex;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    margin-top: clamp(0.4rem, 0.6vw, 0.6rem);
+    align-items: center;
+}
+
+.taskTitle[onClick] {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.3);
+    text-underline-offset: 3px;
+}
+
+.taskTitle[onClick]:hover {
+    text-decoration-color: var(--color-accent);
+}
+
+.noteContentClickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.3);
+    text-underline-offset: 3px;
+}
+
+.noteContentClickable:hover {
+    text-decoration-color: var(--color-accent);
+}
+
+.taskTitleClickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.3);
+    text-underline-offset: 3px;
+}
+
+.taskTitleClickable:hover {
+    text-decoration-color: var(--color-accent);
+}
+
+.chStatusWarning {
+    color: var(--color-priority-orange);
+    border-color: var(--color-priority-orange);
+}
+
+/* Long-term panel note */
+.longTermPanel h2 span {
+    font-family: 'pixelSans', sans-serif;
+}
+
+.connectionPanel h3 {
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 clamp(0.4rem, 0.6vw, 0.6rem) 0;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+}
+
+/* Sidebar cards */
+.sidebarCards {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    margin-top: clamp(0.6rem, 1vw, 1rem);
+}
+
+.sidebarCard {
+    text-align: center;
+}
+
+.sidebarCard h3 {
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 clamp(0.2rem, 0.4vw, 0.4rem) 0;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+}
+
+.sidebarCount {
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(1.25rem, 1.5vw, 1.5rem);
+    color: var(--color-accent);
+}

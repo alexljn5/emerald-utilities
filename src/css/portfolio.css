@@ -1,0 +1,332 @@
+/* ==================== PORTFOLIO MONITOR ==================== */
+.portfolioContent {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    padding: clamp(0.65rem, 1.4vw, 1.25rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.65rem, 1.2vw, 1rem);
+}
+
+/* ---- Summary box in left nav ---- */
+.portfolioSummary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+    padding: 0.5rem;
+    border: 1px solid rgba(255, 34, 34, 0.4);
+    border-radius: 6px;
+    background: rgba(255, 34, 34, 0.06);
+}
+
+.summaryRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: clamp(0.72rem, 0.9vw, 0.95rem);
+}
+
+.summaryRow span {
+    color: #bbb;
+}
+
+.summaryRow strong {
+    color: var(--color-text);
+}
+
+.summaryRow.pos strong {
+    color: #06d6a0;
+}
+
+.summaryRow.neg strong {
+    color: #ff8888;
+}
+
+.portfolioUpdated {
+    margin-top: 0.5rem;
+    font-size: clamp(0.62rem, 0.78vw, 0.8rem);
+    color: #888;
+    text-align: center;
+}
+
+/* ---- Panels ---- */
+.portfolioPanel {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.58);
+    box-shadow: 0 0 14px rgba(255, 34, 34, 0.12);
+}
+
+.portfolioPanelHeader {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: clamp(0.45rem, 0.8vw, 0.7rem);
+    border-bottom: 1px solid rgba(255, 34, 34, 0.55);
+    color: var(--color-accent);
+}
+
+.portfolioPanelHeader h3 {
+    margin: 0;
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+}
+
+.portfolioPanelHeader span {
+    color: #bbb;
+    font-size: clamp(0.68rem, 0.85vw, 0.9rem);
+}
+
+/* ---- Table ---- */
+.portfolioTableWrap {
+    overflow-x: auto;
+    padding: clamp(0.45rem, 0.8vw, 0.7rem);
+}
+
+.portfolioTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: clamp(0.7rem, 0.9vw, 0.95rem);
+    min-width: 920px;
+}
+
+.portfolioTable th,
+.portfolioTable td {
+    text-align: left;
+    padding: 0.55rem 0.6rem;
+    border-bottom: 1px solid rgba(255, 34, 34, 0.22);
+    vertical-align: top;
+}
+
+.portfolioTable th {
+    color: var(--color-accent);
+    font-weight: 700;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    background: #111;
+}
+
+.portfolioTable tbody tr:hover {
+    background: rgba(255, 34, 34, 0.06);
+}
+
+.holdingName {
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.holdingIsin {
+    color: #888;
+    font-size: clamp(0.6rem, 0.75vw, 0.78rem);
+    margin-top: 0.15rem;
+}
+
+.pos {
+    color: #06d6a0;
+}
+
+.neg {
+    color: #ff8888;
+}
+
+.diffPct {
+    font-size: clamp(0.6rem, 0.75vw, 0.78rem);
+    margin-top: 0.1rem;
+}
+
+/* ---- ESG breakdown ---- */
+.esgBreakdown {
+    min-width: 200px;
+}
+
+.esgBars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.esgRow {
+    display: grid;
+    grid-template-columns: minmax(70px, 1fr) 2fr auto;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: clamp(0.6rem, 0.75vw, 0.78rem);
+}
+
+.esgLabel {
+    color: #ccc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.esgTrack {
+    height: 8px;
+    background: #222;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 34, 34, 0.3);
+}
+
+.esgFill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, #ff2222, #ff7a45);
+    border-radius: 999px;
+}
+
+.esgValue {
+    color: var(--color-accent);
+    font-weight: 700;
+    text-align: right;
+}
+
+.esgNote {
+    margin-top: 0.4rem;
+    color: #999;
+    font-size: clamp(0.58rem, 0.72vw, 0.75rem);
+    line-height: 1.3;
+}
+
+/* ---- Charts ---- */
+.portfolioCharts {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: clamp(0.65rem, 1.2vw, 1rem);
+}
+
+.portfolioChartBody {
+    padding: clamp(0.5rem, 0.9vw, 0.8rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.portfolioChartSvg {
+    width: 100%;
+    height: auto;
+    max-height: 260px;
+}
+
+.chartGridLine {
+    stroke: rgba(255, 255, 255, 0.08);
+    stroke-width: 1;
+}
+
+.chartAxisLabel {
+    fill: #888;
+    font-family: 'pixelSans', monospace;
+    font-size: 10px;
+}
+
+.chartLine {
+    filter: drop-shadow(0 0 4px rgba(255, 34, 34, 0.4));
+}
+
+.chartArea {
+    opacity: 0.12;
+}
+
+.chartSlice {
+    transition: opacity 0.15s ease;
+}
+
+.chartSlice:hover {
+    opacity: 0.82;
+}
+
+.chartPieCenterLabel {
+    fill: var(--color-text);
+    font-family: 'pixelSans', monospace;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.chartPieCenterSub {
+    fill: #888;
+    font-family: 'pixelSans', monospace;
+    font-size: 9px;
+}
+
+.portfolioPieBody {
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.portfolioLegend {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.portfolioLegend li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: clamp(0.62rem, 0.78vw, 0.82rem);
+}
+
+.legendDot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.legendName {
+    color: #ccc;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legendValue {
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+/* ---- States ---- */
+.portfolioLoading,
+.portfolioError {
+    padding: clamp(0.8rem, 1.4vw, 1.2rem);
+    color: #bbb;
+    font-size: clamp(0.72rem, 0.9vw, 0.95rem);
+}
+
+.portfolioError {
+    border: 2px solid #ff8888;
+    border-radius: 8px;
+    background: rgba(255, 136, 136, 0.08);
+    color: #ff8888;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    align-items: flex-start;
+}
+
+.portfolioError button {
+    align-self: flex-start;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 900px) {
+    .portfolioCharts {
+        grid-template-columns: 1fr;
+    }
+}

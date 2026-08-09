@@ -3,7 +3,7 @@ import { existsSync, writeFileSync, mkdirSync, readdirSync, readFileSync, unlink
 import { execSync, spawn } from 'child_process';
 import { BrowserWindow, session, ipcMain } from 'electron';
 import { forwardScrapedMessagesToPostgres } from '../database/ai-persistence.js';
-import { readLocalXScraperSource } from '../database/xscraper-local-source.js';
+import { readLocalXScraperSource, clearSqliteStore, defaultSqlitePath } from '../database/xscraper-local-source.js';
 import { reconcileScrapedMessages } from '../database/xscraper-sync.js';
 
 // Track local server process and restart state
@@ -711,5 +711,94 @@ export function registerXScraperIpcHandlers(context) {
             console.error('[XScraper] Diagnose error:', err);
             return { success: false, error: err.message };
         }
+    });
+
+    // Wipe the LOCAL XScraper store only. PostgreSQL is never touched.
+    //
+    // Layers cleared (all opt-out-able):
+    //   sqlite    %APPDATA%/.xscraper/x_messages.db  (local server cache)
+    //   indexeddb extension IndexedDB in the persist:xscraper session
+    //   exports   legacy JSON snapshots under src/database/grok/
+    //
+    // Safe because reconciliation is identity based: anything already in
+    // grok_messages stays there, and re-scraped messages will be recognised as
+    // already present instead of being duplicated.
+    ipcMain.handle('xscraper:clear-local-store', async (_event, options = {}) => {
+        const {
+            sqlite = true,
+            indexeddb = true,
+            exports: clearJsonExports = true,
+        } = options || {};
+
+        const summary = {
+            success: true,
+            sqlite: { cleared: false, messagesDeleted: 0, conversationsDeleted: 0, path: defaultSqlitePath() },
+            indexeddb: { cleared: false },
+            exports: { cleared: false, deleted: 0 },
+            errors: [],
+        };
+
+        // 1. SQLite cache written by the local server
+        if (sqlite) {
+            try {
+                const r = await clearSqliteStore({});
+                summary.sqlite = { cleared: r.available, ...r };
+                pushScriptLog(
+                    r.available
+                        ? `[XScraper] Cleared local SQLite store: ${r.messagesDeleted} messages, ${r.conversationsDeleted} conversations`
+                        : `[XScraper] No local SQLite store at ${r.path}`
+                );
+            } catch (err) {
+                summary.success = false;
+                summary.errors.push(`sqlite: ${err.message}`);
+                pushScriptLog(`[XScraper] Failed to clear SQLite store: ${err.message}`);
+            }
+        }
+
+        // 2. Extension IndexedDB (the layer the scraper itself writes to)
+        if (indexeddb) {
+            try {
+                const browserSession = session.fromPartition('persist:xscraper');
+                await browserSession.clearStorageData({ storages: ['indexdb'] });
+                summary.indexeddb.cleared = true;
+                pushScriptLog('[XScraper] Cleared extension IndexedDB (persist:xscraper)');
+            } catch (err) {
+                summary.success = false;
+                summary.errors.push(`indexeddb: ${err.message}`);
+                pushScriptLog(`[XScraper] Failed to clear IndexedDB: ${err.message}`);
+            }
+        }
+
+        // 3. Legacy JSON snapshots
+        if (clearJsonExports) {
+            try {
+                const messagesDir = path.join(process.cwd(), 'src', 'database', 'grok', 'messages');
+                const exportDir = path.join(process.cwd(), 'src', 'database', 'grok');
+                let deleted = 0;
+                for (const dir of [messagesDir, exportDir]) {
+                    if (!existsSync(dir)) continue;
+                    for (const file of readdirSync(dir).filter(f => f.endsWith('.json'))) {
+                        try {
+                            unlinkSync(path.join(dir, file));
+                            deleted++;
+                        } catch (err) {
+                            console.error(`[XScraper] Failed to delete ${file}:`, err.message);
+                        }
+                    }
+                }
+                summary.exports = { cleared: true, deleted };
+                pushScriptLog(`[XScraper] Cleared ${deleted} JSON export files`);
+            } catch (err) {
+                summary.success = false;
+                summary.errors.push(`exports: ${err.message}`);
+            }
+        }
+
+        summary.message =
+            `Local store cleared — sqlite: ${summary.sqlite.messagesDeleted} messages, ` +
+            `indexeddb: ${summary.indexeddb.cleared ? 'wiped' : 'skipped'}, ` +
+            `json: ${summary.exports.deleted} files. PostgreSQL untouched.`;
+        pushScriptLog(`[XScraper] ${summary.message}`);
+        return summary;
     });
 }

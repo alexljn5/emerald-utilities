@@ -101,6 +101,40 @@ export async function readSqliteSource({ dbPath = defaultSqlitePath(), conversat
 }
 
 /**
+ * Wipe the local SQLite XScraper store.
+ *
+ * This ONLY touches the local scraper cache (%APPDATA%/.xscraper/x_messages.db).
+ * PostgreSQL is never touched — anything already reconciled stays in
+ * `grok_messages`, and because reconciliation is identity based, clearing the
+ * local cache can never cause duplicates later.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.dbPath]
+ * @returns {Promise<{available: boolean, path: string, messagesDeleted: number, conversationsDeleted: number}>}
+ */
+export async function clearSqliteStore({ dbPath = defaultSqlitePath() } = {}) {
+    const result = { available: false, path: dbPath, messagesDeleted: 0, conversationsDeleted: 0 };
+    if (!existsSync(dbPath)) return result;
+
+    const sqlite3 = require('sqlite3');
+    const db = new sqlite3.Database(dbPath);
+
+    const run = (sql) => new Promise((resolve, reject) => {
+        db.run(sql, function (err) { err ? reject(err) : resolve(this.changes || 0); });
+    });
+
+    try {
+        try { result.messagesDeleted = await run('DELETE FROM messages'); } catch { /* table may not exist */ }
+        try { result.conversationsDeleted = await run('DELETE FROM conversations'); } catch { /* optional */ }
+        try { await run('VACUUM'); } catch { /* non-fatal */ }
+        result.available = true;
+        return result;
+    } finally {
+        db.close();
+    }
+}
+
+/**
  * Conversation titles known to the local SQLite store.
  */
 export async function readSqliteConversations({ dbPath = defaultSqlitePath() } = {}) {

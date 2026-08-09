@@ -1,5 +1,17 @@
 /* Internet Access / XScraper Styles */
 
+/* Destructive XScraper action (clears the LOCAL store only) */
+.nav-btn.full.danger {
+    background: #220000;
+    color: #ff8080;
+    border: 1px solid #4a0000;
+}
+
+.nav-btn.full.danger:hover:not(:disabled) {
+    background: #3a0000;
+    color: #ff4d4d;
+}
+
 .xscraper-icon-container {
     display: flex;
     justify-content: center;

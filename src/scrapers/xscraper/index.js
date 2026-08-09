@@ -214,3 +214,34 @@ export async function clearExports() {
         return { success: false, error: err.message, deleted: 0 };
     }
 }
+
+/**
+ * Wipe the LOCAL XScraper store (SQLite cache + extension IndexedDB + JSON
+ * snapshots). PostgreSQL is never touched — messages already reconciled into
+ * grok_messages remain there, and re-scraping cannot create duplicates because
+ * reconciliation is identity based.
+ *
+ * @param {{sqlite?: boolean, indexeddb?: boolean, exports?: boolean}} [options]
+ */
+export async function clearLocalStore(options = {}) {
+    try {
+        const result = await invoke('xscraper:clear-local-store', options);
+        return result;
+    } catch (err) {
+        console.error('[XScraper] clearLocalStore error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Read-only XScraper sync diagnostic (local vs PostgreSQL). Never writes.
+ */
+export async function diagnoseSync(conversationId = null) {
+    try {
+        const result = await invoke('xscraper:diagnose', { conversationId });
+        return result;
+    } catch (err) {
+        console.error('[XScraper] diagnoseSync error:', err);
+        return { success: false, error: err.message };
+    }
+}

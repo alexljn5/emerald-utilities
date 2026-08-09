@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import PageShell from './PageShell.jsx';
-import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler, exportIncremental, getNewMessages, forwardToPostgres, startLocalServer, forwardExportedToPostgres, clearExports } from '../scrapers/xscraper/index.js';
+import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler, exportIncremental, getNewMessages, forwardToPostgres, startLocalServer, forwardExportedToPostgres, clearExports, clearLocalStore } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 import '../css/internet.css';
 
@@ -119,26 +119,11 @@ export default function Internet({ route, setRoute }) {
                     }));
                 }
 
-                // 2. Auto-export every 5 seconds
-                const now = Date.now();
-                if (now - lastAutoExportRef.current > 5000 && webviewRef.current) {
-                    lastAutoExportRef.current = now;
-                    const exportResult = await webviewRef.current.executeJavaScript(`
-                        (function() {
-                            if (window.__grokScraper && typeof window.__grokScraper.exportAsJSON === 'function') {
-                                return window.__grokScraper.exportAsJSON();
-                            }
-                            return { success: false, error: 'Export not available' };
-                        })()
-                    `);
-                    if (exportResult?.success && exportResult.data) {
-                        const fsResult = await exportData(exportResult.data, 'great_white_throne');
-                        if (fsResult?.success) {
-                            const count = fsResult.files ? fsResult.files.length : 1;
-                            setScraperStatus(`Live export (${count} files)`);
-                        }
-                    }
-                }
+                // 2. NO automatic JSON export.
+                //    PostgreSQL is the authoritative store; dumping the whole
+                //    IndexedDB to src/database/grok/*.json every 5 seconds only
+                //    recreated files that were deliberately deleted and spammed
+                //    the log. Use the "Export Data" button for a manual snapshot.
 
                 // 3. Forward new messages to PostgreSQL (direct from extension IndexedDB)
                 const since = lastForwardTimestampRef.current;
@@ -508,6 +493,32 @@ export default function Internet({ route, setRoute }) {
         }
     }
 
+    async function handleClearLocalStore() {
+        setLoading(true);
+        setScraperStatus('Clearing local XScraper store...');
+        setError('');
+        try {
+            const result = await clearLocalStore({ sqlite: true, indexeddb: true, exports: true });
+            if (result?.success) {
+                // The local checkpoint is meaningless once the local store is
+                // empty; reset it so the next pass reconciles from scratch.
+                lastForwardTimestampRef.current = 0;
+                setScraperStats(prev => ({ ...prev, messages: 0 }));
+                setRealtimeStats({ seen: 0, queue: 0, stuck: 0, idle: 0 });
+                setForwardStats({ inserted: 0, skipped: 0, errors: 0 });
+                setScraperStatus(result.message || 'Local store cleared (PostgreSQL untouched)');
+            } else {
+                setError(result?.error || (result?.errors || []).join('; ') || 'Failed to clear local store');
+                setScraperStatus('Clear failed');
+            }
+        } catch (err) {
+            setError(err?.message || 'Clear failed');
+            setScraperStatus('Clear failed');
+        } finally {
+            setLoading(false);
+        }
+    }
+
     return (
         <PageShell title="Internet Access" route={route} setRoute={setRoute} showBack={true} leftChildren={
             <div className="navBox">
@@ -593,6 +604,15 @@ export default function Internet({ route, setRoute }) {
                         disabled={loading}
                     >
                         Clear Exports
+                    </button>
+                    <button
+                        className="nav-btn full danger"
+                        type="button"
+                        onClick={handleClearLocalStore}
+                        disabled={loading}
+                        title="Wipes the local SQLite cache, the extension IndexedDB and JSON snapshots. PostgreSQL is not touched."
+                    >
+                        Clear Local Store
                     </button>
                 </div>
                 <div className="page-selector">

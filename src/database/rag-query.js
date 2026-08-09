@@ -290,26 +290,47 @@ function assembleContext(similarMessages) {
  * @param {string} userQuery
  * @param {number} topK number of embedding matches to seed context
  * @param {number} neighbors how many messages to include around each hit (default 2 each side)
+ * @param {string} [conversationId] - If provided, restrict seeds to this conversation
  * @returns {Promise<Array<{id, conversation_id, content, author, timestamp, similarity, role, window}>}
  */
-async function queryRAGWithContext(userQuery, topK = 8, neighbors = 2) {
+async function queryRAGWithContext(userQuery, topK = 8, neighbors = 2, conversationId = null) {
     const queryEmbedding = await generateEmbedding(userQuery);
     const embeddingString = `[${queryEmbedding.join(',')}]`;
 
     // 1) Find the most similar messages (seeds).
-    const seeds = await pool.query(`
-        SELECT
-            id,
-            conversation_id,
-            content,
-            author,
-            timestamp,
-            1 - (embedding <=> $1::vector) AS similarity
-        FROM grok_messages
-        WHERE embedding IS NOT NULL
-        ORDER BY embedding <=> $1::vector
-        LIMIT $2
-    `, [embeddingString, topK]);
+    //    If conversationId is provided, restrict to that conversation to prevent
+    //    cross-conversation contamination. Otherwise search all messages.
+    let seeds;
+    if (conversationId) {
+        seeds = await pool.query(`
+            SELECT
+                id,
+                conversation_id,
+                content,
+                author,
+                timestamp,
+                1 - (embedding <=> $1::vector) AS similarity
+            FROM grok_messages
+            WHERE embedding IS NOT NULL
+              AND conversation_id = $3
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+        `, [embeddingString, topK, conversationId]);
+    } else {
+        seeds = await pool.query(`
+            SELECT
+                id,
+                conversation_id,
+                content,
+                author,
+                timestamp,
+                1 - (embedding <=> $1::vector) AS similarity
+            FROM grok_messages
+            WHERE embedding IS NOT NULL
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+        `, [embeddingString, topK]);
+    }
 
     if (seeds.rows.length === 0) return [];
 
@@ -500,6 +521,23 @@ If Lune asks for a short factoid, give just one sentence.`;
 
         // Apply context window management
         apiMessages = truncateToContextWindow(fullMessages, 4000);
+
+        // Debug logging for context construction
+        const totalChars = apiMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+        const estimatedTokens = Math.ceil(totalChars / 4);
+        const roles = apiMessages.map(m => m.role);
+        const lastUserIdx = roles.lastIndexOf('user');
+        const lastAssistantIdx = roles.lastIndexOf('assistant');
+        ragLog.info('prompt-construction', {
+            conversationId: conversationIdOrContext,
+            messageCount: apiMessages.length,
+            roles,
+            estimatedTokens,
+            hasSystem: hasSystem,
+            lastUserIndex: lastUserIdx,
+            lastAssistantIndex: lastAssistantIdx,
+            previousTurnPresent: lastUserIdx >= 0 && lastAssistantIdx >= 0 && Math.abs(lastUserIdx - lastAssistantIdx) <= 2,
+        }, 'LLM prompt constructed');
     } else {
         // OLD: Build from RAG context string (CLI mode)
         let userPrompt;

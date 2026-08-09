@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import scaryBunny from '../../img/the-ai/scary_bunny.png';
 
 const STORAGE_KEY = 'ai-chat-messages';
+const ACTIVE_CONVERSATION_KEY = 'ai-active-conversation-id';
 
 // Role mapping for display
 const ROLE_LABELS = {
@@ -49,13 +50,46 @@ export default function TheAI({ route, setRoute }) {
 
     async function loadChatHistory() {
         try {
-            // Get recent conversations
+            // Try to restore the active conversation ID from localStorage
+            let activeConvId = null;
+            try {
+                const saved = localStorage.getItem(ACTIVE_CONVERSATION_KEY);
+                if (saved) activeConvId = JSON.parse(saved);
+            } catch (e) {
+                console.warn('[AI] Failed to load active conversation ID:', e);
+            }
+
+            // If we have an active conversation ID, try to load it
+            if (activeConvId) {
+                const convResult = await window.electronAPI.invoke('grok-conversations', { limit: 50 });
+                if (convResult?.ok && convResult.conversations?.length > 0) {
+                    const activeConv = convResult.conversations.find(c => c.id === activeConvId);
+                    if (activeConv) {
+                        setConversationId(activeConv.id);
+                        const msgResult = await window.electronAPI.invoke('grok-messages', {
+                            conversationId: activeConv.id,
+                            limit: 100
+                        });
+                        if (msgResult?.ok && Array.isArray(msgResult.messages)) {
+                            const formatted = msgResult.messages.map(msg => ({
+                                role: msg.author === 'alexljn5' ? 'user' : msg.author === 'Cream' ? 'assistant' : msg.author,
+                                content: msg.content,
+                                timestamp: msg.timestamp,
+                            }));
+                            setMessages(formatted);
+                            setDbAvailable(true);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Fall back to the most recent conversation
             const convResult = await window.electronAPI.invoke('grok-conversations', { limit: 1 });
             if (convResult?.ok && convResult.conversations?.length > 0) {
                 const latestConv = convResult.conversations[0];
                 setConversationId(latestConv.id);
 
-                // Load messages for the latest conversation
                 const msgResult = await window.electronAPI.invoke('grok-messages', {
                     conversationId: latestConv.id,
                     limit: 100
@@ -157,6 +191,12 @@ export default function TheAI({ route, setRoute }) {
             if (result.ok) {
                 setMessages(prev => [...prev, { role: 'assistant', content: result.response, timestamp: new Date().toISOString() }]);
                 setConversationId(result.conversationId);
+                // Persist active conversation ID for next app restart
+                try {
+                    localStorage.setItem(ACTIVE_CONVERSATION_KEY, JSON.stringify(result.conversationId));
+                } catch (e) {
+                    console.warn('[AI] Failed to persist active conversation ID:', e);
+                }
                 setDbAvailable(true);
             } else {
                 setMessages(prev => [...prev, { role: 'error', content: result.error, timestamp: new Date().toISOString() }]);
@@ -202,6 +242,7 @@ export default function TheAI({ route, setRoute }) {
         setMessages([]);
         try {
             localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
         } catch (e) {
             console.warn('[AI] Failed to clear persisted messages:', e);
         }

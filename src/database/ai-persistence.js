@@ -226,50 +226,23 @@ export function buildContext(messages, systemPrompt = null) {
 }
 
 /**
- * Build a simple context string from messages (for legacy RAG-style prompts).
- */
-export function buildContextString(messages) {
-    return messages
-        .map(msg => `[${msg.author} @ ${msg.timestamp}] ${msg.content}`)
-        .join('\n\n');
-}
-
-// ============================================================
-// Context Assembly Pipeline
-// ============================================================
-
-/**
- * Resolve an author label into a stable role.
- * Author names may be 'alexljn5' (user) / 'Cream' (assistant) or DB roles.
- */
-export function roleOf(author) {
-    const a = String(author || '').toLowerCase();
-    if (a === 'user' || a === 'alexljn5' || a === 'lune') return 'user';
-    if (a === 'assistant' || a === 'cream') return 'assistant';
-    return a || 'user';
-}
-
-/**
  * Build a structured, de-duplicated context bundle for an AI request.
  *
- * This is the core context-assembly pipeline. It separates the distinct
- * parts of what the model sees so the pipeline is transparent and correct:
+ * PRIORITY ORDER (for truncation):
+ *   1. System prompt (always kept)
+ *   2. Current user message (highest priority)
+ *   3. Recent conversation history (high priority)
+ *   4. Retrieved RAG context (lower priority, for semantic recall)
  *
- *   - system          : fixed system instructions
- *   - current         : the user's current message
- *   - recent          : the immediately preceding conversational turns
- *                       (highest priority, chronological order)
- *   - retrieved       : older semantically-relevant context from RAG
- *                       (each hit includes its surrounding window + metadata)
- *
- * Ordering is preserved within each segment. Retrieved messages retain their
- * surrounding turns so they are never ambiguous in isolation.
+ * The messages array is ordered so that truncation (which works backwards
+ * from the end) preserves the most important context first.
  *
  * @param {Object} opts
  * @param {string} [opts.systemPrompt]
  * @param {string} opts.userMessage  the current user message
  * @param {Array}  [opts.recent]     recent history messages (chronological)
- * @param {Array}  [opts.retrieved]  RAG hits with `.window` (see queryRAGWithContext)
+ * @param {Array}  [opts.retrieved]  RAG hits with `.window`
+ * @param {string} [opts.conversationId] for debug logging
  * @returns {{
  *   system: Array<{role, content}>,
  *   current: {role, content} | null,
@@ -283,6 +256,7 @@ export function buildConversationContext({
     userMessage = null,
     recent = [],
     retrieved = [],
+    conversationId = null,
 }) {
     const system = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
 
@@ -299,6 +273,7 @@ export function buildConversationContext({
         source,
     });
 
+    // Deduplicate recent messages
     const recentList = [];
     for (const msg of recent || []) {
         const key = `${msg.id || ''}|${msg.content || ''}|${msg.timestamp || ''}`;
@@ -327,12 +302,28 @@ export function buildConversationContext({
         }
     }
 
+    // CRITICAL: Order messages so truncation (backwards from end) preserves
+    // priority: current > recent > retrieved > system.
+    // System is always kept by truncateToContextWindow.
     const messages = [
         ...system,
-        ...recentList.map(({ role, content }) => ({ role, content })),
         ...retrievedList.map(({ role, content }) => ({ role, content })),
+        ...recentList.map(({ role, content }) => ({ role, content })),
     ];
     if (current) messages.push({ role: current.role, content: current.content });
+
+    // Debug logging
+    ragLog.info('context-assembly', {
+        conversationId,
+        systemCount: system.length,
+        recentCount: recentList.length,
+        retrievedCount: retrievedList.length,
+        currentCount: current ? 1 : 0,
+        totalMessages: messages.length,
+        recentAuthors: recentList.map(m => m.author),
+        retrievedConversations: [...new Set(retrievedList.map(m => m.sourceConversation))],
+        hasDuplicateCurrent: recent.some(m => m.content === current?.content),
+    }, 'Context bundle assembled');
 
     return {
         system,
@@ -343,6 +334,30 @@ export function buildConversationContext({
     };
 }
 
+/**
+ * Build a simple context string from messages (for legacy RAG-style prompts).
+ */
+export function buildContextString(messages) {
+    return messages
+        .map(msg => `[${msg.author} @ ${msg.timestamp}] ${msg.content}`)
+        .join('\n\n');
+}
+
+// ============================================================
+// Context Assembly Pipeline
+// ============================================================
+
+/**
+ * Resolve an author label into a stable role.
+ * Author names may be 'alexljn5' (user) / 'Cream' (assistant) or DB roles.
+ */
+export function roleOf(author) {
+    const a = String(author || '').toLowerCase();
+    if (a === 'user' || a === 'alexljn5' || a === 'lune') return 'user';
+    if (a === 'assistant' || a === 'cream') return 'assistant';
+    return a || 'user';
+}
+
 // ============================================================
 // Full Chat Persistence Loop
 // ============================================================
@@ -350,8 +365,8 @@ export function buildConversationContext({
 /**
  * Complete chat persistence loop:
  * 1. Get or create conversation
- * 2. Save user message
- * 3. Retrieve history
+ * 2. Retrieve history (BEFORE saving current message to avoid duplicate)
+ * 3. Save user message
  * 4. Build context
  * 5. Return context + conversation info for caller to send to AI
  *
@@ -368,17 +383,18 @@ export async function prepareChatRequest({
     // 1. Get or create conversation
     const conversation = await getOrCreateConversation(conversationId);
 
-    // 2. Save user message
+    // 2. Retrieve history BEFORE saving the current message.
+    //    This ensures the current message is not duplicated in the context.
+    const history = await getRecentMessages(conversation.id, contextLimit);
+
+    // 3. Save user message
     const userMsgId = await saveMessage({
         conversationId: conversation.id,
         role: 'user',
         content: userMessage,
     });
 
-    // 3. Retrieve history
-    const history = await getRecentMessages(conversation.id, contextLimit);
-
-    // 4. Build context
+    // 4. Build context (deprecated - use buildConversationContext instead)
     const context = buildContext(history, systemPrompt);
 
     return {

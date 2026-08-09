@@ -24,6 +24,7 @@ src/database/.env
 dist-electron/
 src/oauth/certs/*.pem
 src/oauth/certs/*.key
+logs/*
 
 #Unpushed Scripts
 start_build_emerald_utilities_windows.sh

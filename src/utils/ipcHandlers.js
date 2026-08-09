@@ -932,6 +932,8 @@ export function registerIpcHandlers(context) {
                 return { ok: false, error: 'Invalid message' };
             }
 
+            ragLog.info('grok-chat', `Processing message for conversation ${conversationId || '(new)'}: "${userMessage.substring(0, 50)}..."`);
+
             // 1. Prepare request (get/create conversation, save user message, get history)
             const prepared = await prepareChatRequest({
                 conversationId,
@@ -939,14 +941,18 @@ export function registerIpcHandlers(context) {
                 systemPrompt,
             });
 
+            ragLog.info('grok-chat', `Conversation: ${prepared.conversationId}, history messages: ${prepared.history.length}`);
+
             // 2. Retrieve semantically-relevant OLDER context via RAG. Each hit
             //    carries its surrounding window + metadata, so it is never an
             //    isolated fragment. This is what lets the model infer ongoing
             //    interactions (e.g. "hug" -> "what are we doing?") without
             //    resorting to a hard-coded rule or dumping the whole database.
+            //    IMPORTANT: Pass conversationId to prevent cross-conversation contamination.
             let retrieved = [];
             try {
-                retrieved = await queryRAGWithContext(userMessage, 8, 2);
+                retrieved = await queryRAGWithContext(userMessage, 8, 2, prepared.conversationId);
+                ragLog.info('grok-chat', `RAG retrieved ${retrieved.length} hits for conversation ${prepared.conversationId}`);
             } catch (ragErr) {
                 // RAG failure should not block a normal chat reply from recent
                 // history. Log it and continue with recent context only.
@@ -959,10 +965,13 @@ export function registerIpcHandlers(context) {
                 userMessage,
                 recent: prepared.history,
                 retrieved,
+                conversationId: prepared.conversationId,
             });
 
+            ragLog.info('grok-chat', `Context bundle: system=${bundle.system.length}, recent=${bundle.recent.length}, retrieved=${bundle.retrieved.length}, current=${bundle.current ? 1 : 0}, total=${bundle.messages.length}`);
+
             // 4. Query LLM with the full ordered message array (system +
-            //    recent history + retrieved older context + current message).
+            //    retrieved older context + recent history + current message).
             const response = await queryWithLLM(bundle.messages, prepared.conversationId);
 
             // 5. Save assistant response
@@ -970,6 +979,8 @@ export function registerIpcHandlers(context) {
                 conversationId: prepared.conversationId,
                 responseContent: response,
             });
+
+            ragLog.info('grok-chat', `Response saved: ${saved.messageId}`);
 
             return {
                 ok: true,

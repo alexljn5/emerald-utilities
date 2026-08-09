@@ -622,7 +622,7 @@ export default function Tasks({ route, setRoute }) {
                                     {activeNotes.map((note) => (
                                         <li key={note.id} className="noteItem noteItemClickable" onClick={() => openNoteModal(note)}>
                                             <div className="noteHeader">
-                                                <span className="noteDate">{note.date}</span>
+                                                <span className="noteDate">{String(note.date)}</span>
                                             </div>
                                             <p className="noteContent">{note.content}</p>
                                         </li>
@@ -748,7 +748,7 @@ export default function Tasks({ route, setRoute }) {
                                 {archivedNotes.map((note) => (
                                     <li key={note.id} className="noteItem noteItemClickable" onClick={() => openNoteModal(note)}>
                                         <div className="noteHeader">
-                                            <span className="noteDate">{note.date}</span>
+                                            <span className="noteDate">{String(note.date)}</span>
                                         </div>
                                         <p className="noteContent">{note.content}</p>
                                         <div className="taskItemActions">

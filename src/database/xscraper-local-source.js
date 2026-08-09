@@ -46,7 +46,15 @@ export function defaultJsonDir() {
 
 function openSqlite(dbPath) {
     const sqlite3 = require('sqlite3');
-    return new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
+    // busyTimeout prevents an immediate SQLITE_BUSY failure when the local
+    // XScraper server is mid-write on the same store (scrape flush + this read
+    // can overlap). The server's writer also uses a busy timeout, so reads
+    // will wait briefly instead of throwing.
+    return new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
+        if (err) {
+            console.error('[xscraper-local-source] SQLite open failed:', err.message);
+        }
+    }).configure('busyTimeout', 5000);
 }
 
 function allAsync(db, sql, params = []) {
@@ -96,7 +104,7 @@ export async function readSqliteSource({ dbPath = defaultSqlitePath(), conversat
         result.available = true;
         return result;
     } finally {
-        db.close();
+        if (db) db.close();
     }
 }
 
@@ -130,7 +138,7 @@ export async function clearSqliteStore({ dbPath = defaultSqlitePath() } = {}) {
         result.available = true;
         return result;
     } finally {
-        db.close();
+        if (db) db.close();
     }
 }
 
@@ -146,7 +154,7 @@ export async function readSqliteConversations({ dbPath = defaultSqlitePath() } =
         for (const r of rows) map.set(r.id, r);
         return map;
     } finally {
-        db.close();
+        if (db) db.close();
     }
 }
 

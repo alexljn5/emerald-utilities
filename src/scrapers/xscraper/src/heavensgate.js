@@ -401,6 +401,35 @@
         c.dispatchEvent(new Event('scroll', { bubbles: true }));
     }
 
+    /* ---------------- SERVER SAVE (PRIMARY, DURABLE) ---------------- */
+
+    const SERVER_URL = 'http://localhost:3000';
+    // The durable queue is SQLite on the local server. The extension
+    // IndexedDB bridge is unreliable (rate-limited, context-messaging
+    // fragility), so the page scraper POSTs DIRECTLY to the server. This is
+    // what actually lands in SQLite and feeds the batch worker.
+    let serverLastAttempt = 0;
+    const SERVER_COOLDOWN_MS = 2000; // small cooldown, NOT 10s — we must not drop messages
+
+    async function saveToServer(messages, conversationId, conversationTitle) {
+        try {
+            const res = await fetch(`${SERVER_URL}/api/messages/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages,
+                    conversationId,
+                    conversationTitle
+                })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.json();
+        } catch (err) {
+            console.warn('[XSCRAPER_DAEMON] server save failed:', err?.message || err);
+            return { offline: true, error: String(err?.message || err) };
+        }
+    }
+
     /* ---------------- FLUSH ---------------- */
 
     function startFlush() {
@@ -424,6 +453,18 @@
                 conversationTitle: currentConversationTitle
             }));
 
+            // PRIMARY: POST directly to the local SQLite server (durable queue).
+            // This is the authoritative path — it lands in SQLite immediately
+            // and the batch worker drains it into PostgreSQL.
+            const now = Date.now();
+            if (now - serverLastAttempt >= SERVER_COOLDOWN_MS) {
+                serverLastAttempt = now;
+                saveToServer(enrichedBatch, currentConversationId, currentConversationTitle);
+            }
+
+            // FALLBACK: also mirror into the extension IndexedDB for offline
+            // resilience. Non-blocking; if the server is unreachable the data
+            // is still preserved locally and can be reconciled later.
             if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
                 chrome.runtime.sendMessage({
                     action: 'saveMessages',

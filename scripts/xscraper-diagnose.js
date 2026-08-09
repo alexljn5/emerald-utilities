@@ -17,6 +17,7 @@ import {
     findExistingIdentities,
     getXScraperCheckpoint,
 } from '../src/database/xscraper-sync.js';
+import { getStatus as forwarderGetStatus } from '../src/database/xscraper-forwarder.js';
 
 const pad = (label) => String(label).padEnd(22);
 const iso = (v) => (v ? (v.toISOString ? v.toISOString() : String(v)) : '(none)');
@@ -119,6 +120,42 @@ async function main() {
     const local = await readLocalXScraperSource({ conversationId: target });
     console.log(`Local SQLite: ${local.sources.sqlite.path} (available=${local.sources.sqlite.available}, messages=${local.sources.sqlite.total})`);
     console.log(`Local JSON:   ${local.sources.json.path} (available=${local.sources.json.available}, messages=${local.sources.json.total})`);
+
+    // --- worker / queue / SQLite / PostgreSQL / port-3000 status ---
+    try {
+        const st = await forwarderGetStatus();
+        console.log('');
+        console.log('--- Forwarder worker status ---');
+        console.log(pad('Worker running:') + (st.worker?.running ? 'YES' : 'NO'));
+        console.log(pad('Worker started:') + (st.worker?.started ? 'YES' : 'NO'));
+        console.log(pad('Queue size:') + st.queue?.size);
+        console.log(pad('Batch size:') + st.queue?.batchSize);
+        console.log(pad('Concurrency:') + st.queue?.concurrency);
+        console.log(pad('Active batch:') + (st.worker?.activeBatchId || '(none)'));
+        console.log(pad('Retry count:') + (st.worker?.retryCount ?? 0));
+        console.log(pad('Backoff:') + (st.worker?.backoffMs ? `${st.worker.backoffMs}ms` : '(none)'));
+        console.log(pad('Last run:') + (st.worker?.lastRunAt || '(never)'));
+        console.log(pad('Last result:') + (st.worker?.lastResult ? JSON.stringify(st.worker.lastResult) : '(none)'));
+        console.log(pad('SQLite path:') + (st.sqlite?.path || '(unknown)'));
+        console.log(pad('SQLite local:') + (st.sqlite?.local ?? 0));
+        console.log(pad('SQLite pending:') + (st.sqlite?.pending ?? 0));
+        console.log(pad('SQLite forwarded:') + (st.sqlite?.forwarded ?? 0));
+        console.log(pad('SQLite failed:') + (st.sqlite?.failed ?? 0));
+        console.log(pad('JSON local:') + (st.local?.json ?? 0));
+        console.log(pad('PostgreSQL reachable:') + (st.pg?.connected ? 'YES' : 'NO'));
+        if (st.pg && !st.pg.connected) {
+            console.log(pad('PG reason:') + (st.pg?.reason || '(unknown)'));
+        }
+        try {
+            const health = await fetch('http://localhost:3000/health', { signal: AbortSignal.timeout(2000) });
+            console.log(pad('Port-3000 server:') + (health.ok ? 'UP' : `UP (HTTP ${health.status})`));
+        } catch {
+            console.log(pad('Port-3000 server:') + 'DOWN');
+        }
+        console.log('');
+    } catch (err) {
+        console.warn('[xscraper-diagnose] forwarder status unavailable:', err?.message || err);
+    }
 
     const conversationIds = new Set(local.byConversation.keys());
 

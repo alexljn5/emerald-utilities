@@ -4,7 +4,8 @@ import {
     checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats,
     startRealtimeCrawler, stopRealtimeCrawler, startLocalServer,
     clearExports, clearLocalStore, forwardPending, saveToSqlite,
-    startForwardWorker, getForwardStatus, clearSent
+    startForwardWorker, getForwardStatus, clearSent,
+    verifyAutoForward, forwardLegacyToPostgres
 } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 
@@ -671,6 +672,59 @@ export default function Internet({ route, setRoute }) {
         }
     }
 
+    /**
+     * Verify the automatic SQLite → PostgreSQL pipeline end to end: push a
+     * test message into the durable queue and confirm it reaches PostgreSQL.
+     */
+    async function handleVerifyForward() {
+        setLoading(true);
+        setScraperStatus('Verifying auto-forward pipeline...');
+        setError('');
+        try {
+            const r = await verifyAutoForward();
+            if (r?.success) {
+                setScraperStatus(
+                    `Auto-forward verified: test message inserted=${r.inserted} confirmed in PostgreSQL`
+                    + (r.verified ? ' (confirmed present)' : '')
+                );
+            } else {
+                setError(r?.error || 'Verification failed');
+                setScraperStatus('Auto-forward verification failed');
+            }
+        } catch (err) {
+            setError(err?.message || 'Verification failed');
+            setScraperStatus('Auto-forward verification failed');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    /**
+     * One-time import of legacy JSON exports into the durable pipeline.
+     * Idempotent: already-present messages are skipped, never duplicated.
+     */
+    async function handleForwardLegacy() {
+        setLoading(true);
+        setScraperStatus('Reconciling legacy JSON exports with PostgreSQL...');
+        setError('');
+        try {
+            const r = await forwardLegacyToPostgres();
+            if (r?.success) {
+                setScraperStatus(
+                    `Legacy reconcile done: ${r.inserted ?? 0} inserted, ${r.skipped ?? 0} already present`
+                );
+            } else {
+                setError(r?.error || 'Legacy reconcile failed');
+                setScraperStatus('Legacy reconcile failed');
+            }
+        } catch (err) {
+            setError(err?.message || 'Legacy reconcile failed');
+            setScraperStatus('Legacy reconcile failed');
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const connectionLabel =
         forwardStats.connection === 'connected' ? 'PostgreSQL: connected'
             : forwardStats.connection === 'syncing' ? 'PostgreSQL: syncing...'
@@ -778,6 +832,12 @@ export default function Internet({ route, setRoute }) {
                         </button>
                         <button className="nav-btn full" type="button" onClick={handleForwardToPostgres} disabled={loading}>
                             Send to PostgreSQL
+                        </button>
+                        <button className="nav-btn full" type="button" onClick={handleVerifyForward} disabled={loading}>
+                            Verify Auto-Forward
+                        </button>
+                        <button className="nav-btn full" type="button" onClick={handleForwardLegacy} disabled={loading}>
+                            Reconcile Legacy JSON
                         </button>
                         <button className="nav-btn full" type="button" onClick={() => setShowClearSentModal(true)} disabled={loading || forwardStats.forwarded === 0}>
                             Clear Sent Messages

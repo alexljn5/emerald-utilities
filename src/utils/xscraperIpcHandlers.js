@@ -17,6 +17,8 @@ import {
     forceRun as forwarderForceRun,
     startWorker as forwarderStartWorker,
     stopWorker as forwarderStopWorker,
+    forwardLegacy as forwarderForwardLegacy,
+    sendTestMessage as forwarderSendTestMessage,
 } from '../database/xscraper-forwarder.js';
 
 // Track local server process and restart state
@@ -524,6 +526,30 @@ export function registerXScraperIpcHandlers(context) {
         }
     });
 
+    // One-time reconciliation of legacy JSON exports into PostgreSQL.
+    ipcMain.handle('xscraper:forward-legacy', async () => {
+        try {
+            const r = await forwarderForwardLegacy();
+            return { success: r.success, ...r };
+        } catch (err) {
+            console.error('[XScraper] forward-legacy error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Auto-forward verification: insert a test message into the durable SQLite
+    // queue, drain it, and confirm it reached PostgreSQL. Gives 100% proof the
+    // automatic SQLite → PostgreSQL path works.
+    ipcMain.handle('xscraper:verify-forward', async () => {
+        try {
+            const r = await forwarderSendTestMessage();
+            return { success: r.success, ...r };
+        } catch (err) {
+            console.error('[XScraper] verify-forward error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
     // Start / stop / check the singleton batch worker.
     ipcMain.handle('xscraper:worker-start', async () => {
         try {
@@ -1008,4 +1034,25 @@ export function registerXScraperIpcHandlers(context) {
         pushScriptLog(`[XScraper] ${summary.message}`);
         return summary;
     });
+
+    // ---------------------------------------------------------------------
+    // Start the singleton batch worker on app startup.
+    //
+    // This is the ONE durable forwarding worker. It drains the SQLite queue
+    // into PostgreSQL every 2s regardless of whether the Internet page is
+    // open, so messages scraped by the extension are forwarded even if the
+    // user never navigates to the XScraper UI. `startWorker` is idempotent —
+    // calling it here and again from the UI/SCRAPE+FORWARD never creates a
+    // second worker or a second interval.
+    // ---------------------------------------------------------------------
+    try {
+        const started = forwarderStartWorker();
+        pushScriptLog(
+            started?.alreadyRunning
+                ? '[XScraper] forwarding worker already running'
+                : '[XScraper] forwarding worker started (drains SQLite → PostgreSQL)'
+        );
+    } catch (err) {
+        console.warn('[XScraper] failed to start forwarding worker on startup:', err?.message || err);
+    }
 }

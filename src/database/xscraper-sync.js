@@ -351,7 +351,21 @@ export async function reconcileScrapedMessages(messages, conversationId, convers
         return stats;
     }
 
-    const client = await pool.connect();
+    // Acquire a dedicated client. pool.connect() can throw (e.g. pool exhausted
+    // or the server is unreachable) — that must NOT crash the forwarder. We
+    // return a clean failure so the durable queue keeps the messages pending.
+    let client;
+    try {
+        client = await pool.connect();
+    } catch (err) {
+        stats.success = false;
+        stats.error = `Database connection failed: ${err.message}`;
+        stats.pendingToInsert = candidates.length;
+        stats.errors.push({ reason: 'connect-failed', error: err.message });
+        ragLog.warn('xscraper-sync', `Failed to acquire DB connection for ${conversationId}: ${err.message}`);
+        return stats;
+    }
+
     try {
         await ensureConversation(client, conversationId, conversationTitle);
 
@@ -465,7 +479,9 @@ export async function reconcileScrapedMessages(messages, conversationId, convers
 
         return stats;
     } catch (err) {
-        try { await client.query('ROLLBACK'); } catch { /* connection already broken */ }
+        if (client) {
+            try { await client.query('ROLLBACK'); } catch { /* connection already broken */ }
+        }
         stats.success = false;
         stats.error = err.message;
         stats.inserted = 0; // nothing was durably persisted
@@ -473,7 +489,7 @@ export async function reconcileScrapedMessages(messages, conversationId, convers
         ragLog.warn('xscraper-sync', `Reconciliation failed for ${conversationId}: ${err.message}`);
         return stats;
     } finally {
-        client.release();
+        if (client) client.release();
     }
 }
 

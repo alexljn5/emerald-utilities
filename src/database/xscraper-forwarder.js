@@ -364,8 +364,12 @@ export async function getStatus() {
 // ----------------------------------------------------------------------
 
 /**
- * Run one forward pass over the queue. Safe to call directly (returns the
- * result) and from the worker tick (which guards concurrency).
+ * Run one forward pass over the live SQLite queue (unforwarded messages).
+ * Safe to call directly (returns the result) and from the worker tick (which
+ * guards concurrency).
+ *
+ * The live durable queue is SQLite. Legacy JSON exports are NOT part of the
+ * live queue — they are reconciled once via `forwardLegacy()`.
  */
 export async function runBatch() {
     if (workerRunning) {
@@ -380,60 +384,42 @@ export async function runBatch() {
             return { success: true, skipped: true, reason: 'backoff', backoffMs };
         }
 
-        ragLog.info('xscraper-batch', `batch_id=${batchId} start`);
-
-        // 1. Drain the ENTIRE local XScraper source (SQLite + legacy JSON
-        //    exports) in one pass. Scraped messages are written by the
-        //    extension to IndexedDB, mirrored to the local server's SQLite,
-        //    and/or exported to src/database/grok/messages/*.json. The worker
-        //    must read ALL Node-reachable local messages and reconcile them
-        //    against PostgreSQL. Otherwise it reports pending_total=0 while
-        //    the scraper has hundreds of messages sitting in JSON/IndexedDB.
-        const local = await readLocalXScraperSource({});
-        ragLog.info('xscraper-batch',
-            `batch_id=${batchId} sources sqlite=${local.sources.sqlite.total} json=${local.sources.json.total} ` +
-            `conversations=${local.byConversation.size}`);
-
-        const pending = new Map();
-        for (const [cid, msgs] of local.byConversation) {
-            pending.set(cid, msgs);
-        }
-        const queueSize = Array.from(pending.values()).reduce((n, m) => n + m.length, 0);
-        ragLog.info('xscraper-batch', `batch_id=${batchId} pending_total=${queueSize}`);
-
-        // Fast no-op exit: nothing local to forward. Skip the PG round-trip
-        // entirely so an idle queue does not hammer PostgreSQL every tick.
-        if (queueSize === 0) {
-            activeBatchId = null;
-            lastRunAt = Date.now();
-            lastResult = { inserted: 0, skipped: 0, failed: 0, pending: 0, idle: true };
-            // Reset backoff on an idle pass so a previously-unreachable PG that
-            // has since recovered is tried immediately on the next new batch.
+        // 1. Read ONLY unforwarded SQLite messages (the durable live queue).
+        const pendingMessages = await getPending(BATCH_SIZE * MAX_CONCURRENT_BATCHES);
+        if (pendingMessages.length === 0) {
+            // Idle — reset backoff so a recovering PG is tried as soon as a new
+            // batch lands. Silent: nothing changed, nothing to log.
             backoffMs = 0;
             backoffUntil = 0;
             retryCount = 0;
-            ragLog.info('xscraper-batch', `batch_id=${batchId} idle (0 local messages) — skipping PG round-trip`);
+            activeBatchId = null;
+            lastRunAt = Date.now();
+            lastResult = { inserted: 0, skipped: 0, failed: 0, pending: 0, idle: true };
             return { success: true, inserted: 0, skipped: 0, failed: 0, pending: 0, batchId, idle: true };
         }
 
         // 2. Quick PG reachability check so we don't hammer a dead host.
-        ragLog.info('xscraper-pg', `checking reachability before sending batch_id=${batchId}`);
         const health = await checkDbHealth();
         if (!health.ok) {
             // Do not mark anything forwarded. Keep pending, schedule retry.
-            const failIds = Array.from(pending.values()).flat().map(m => m.id);
+            const failIds = pendingMessages.map(m => m.id);
             await markFailed(failIds, health.reason || 'postgresql unreachable');
             scheduleRetry();
             activeBatchId = null;
             lastRunAt = Date.now();
-            lastResult = { inserted: 0, skipped: 0, failed: failIds.length, pending: queueSize, error: health.reason };
-            ragLog.warn('xscraper-pg', `batch_id=${batchId} unreachable: ${health.reason} — ${failIds.length} kept local`);
-            return { success: false, error: health.reason, failed: failIds.length, pending: queueSize, batchId, retryable: true };
+            lastResult = { inserted: 0, skipped: 0, failed: failIds.length, pending: pendingMessages.length, error: health.reason };
+            ragLog.warn('xscraper-pg', `batch_id=${batchId} unreachable: ${health.reason} — ${failIds.length} kept local for retry`);
+            return { success: false, error: health.reason, failed: failIds.length, pending: pendingMessages.length, batchId, retryable: true };
         }
 
-        // 3. Reconcile each conversation (idempotent). Bounded concurrency.
-        const convs = [...pending.entries()];
-        const results = [];
+        // 3. Group by conversation and reconcile (idempotent). Bounded concurrency.
+        const byConv = new Map();
+        for (const m of pendingMessages) {
+            const cid = m.conversationId || 'default';
+            if (!byConv.has(cid)) byConv.set(cid, []);
+            byConv.get(cid).push(m);
+        }
+        const convs = [...byConv.entries()];
         let inserted = 0;
         let acked = 0;      // already present in PG
         let failed = 0;
@@ -441,30 +427,19 @@ export async function runBatch() {
         let failedIds = [];
 
         const runOne = async ([cid, msgs]) => {
-            ragLog.info('xscraper-batch', `batch_id=${batchId} conv=${cid} size=${msgs.length}`);
             try {
-                const title = local.titles.get(cid) || 'Scraped Conversation';
-                const r = await reconcileScrapedMessages(msgs, cid, title);
+                const r = await reconcileScrapedMessages(msgs, cid, 'Scraped Conversation');
                 if (r.success) {
                     inserted += r.inserted || 0;
                     acked += r.alreadyInPostgres || 0;
-                    // PostgreSQL confirmed these rows exist. Mark forwarded.
-                    const okIds = msgs.map(m => m.id);
-                    confirmedIds.push(...okIds);
-                    results.push({ conversationId: cid, ...r });
-                    ragLog.info('xscraper-pg',
-                        `batch_id=${batchId} conv=${cid} inserted=${r.inserted} existing=${r.alreadyInPostgres} failed=${r.errors?.length || 0}`);
+                    confirmedIds.push(...msgs.map(m => m.id));
                 } else {
                     failed += msgs.length;
                     failedIds.push(...msgs.map(m => m.id));
-                    results.push({ conversationId: cid, error: r.error });
-                    ragLog.warn('xscraper-pg', `batch_id=${batchId} conv=${cid} FAILED: ${r.error}`);
                 }
             } catch (err) {
                 failed += msgs.length;
                 failedIds.push(...msgs.map(m => m.id));
-                results.push({ conversationId: cid, error: err.message });
-                ragLog.warn('xscraper-pg', `batch_id=${batchId} conv=${cid} exception: ${err.message}`);
             }
         };
 
@@ -497,13 +472,14 @@ export async function runBatch() {
         activeBatchId = null;
         lastRunAt = Date.now();
         lastResult = { inserted, skipped: acked, failed, pending: pendingAfter };
-        ragLog.info('xscraper-checkpoint',
-            `batch_id=${batchId} forwarded=${confirmedIds.length} inserted=${inserted} existing=${acked} failed=${failed} pending=${pendingAfter}`);
+        // Concise, meaningful log — only when something was actually forwarded.
+        ragLog.info('xscraper-batch',
+            `batch_id=${batchId} attempted=${pendingMessages.length} inserted=${inserted} already=${acked} failed=${failed} pending=${pendingAfter}`);
 
         return {
             success: failed === 0,
             batchId,
-            queueSize,
+            queueSize: pendingMessages.length,
             inserted,
             skipped: acked,
             failed,
@@ -517,6 +493,81 @@ export async function runBatch() {
     } finally {
         workerRunning = false;
     }
+}
+
+/**
+ * One-time reconciliation of the legacy JSON exports (the historical 5,788)
+ * into PostgreSQL. NOT part of the live queue — call explicitly (e.g. a
+ * "Reconcile Legacy" recovery button). Idempotent.
+ */
+export async function forwardLegacy() {
+    const local = await readLocalXScraperSource({});
+    const byConv = local.byConversation;
+    if (byConv.size === 0) {
+        return { success: true, length: 0, inserted: 0, already: 0, failed: 0 };
+    }
+    let inserted = 0;
+    let already = 0;
+    let failed = 0;
+    let length = 0;
+    for (const [cid, msgs] of byConv) {
+        // Only reconcile messages that are JSON-sourced (not already in the
+        // SQLite live queue), so we don't double-send live messages.
+        const jsonMsgs = msgs.filter(m => m.__source === 'json');
+        if (jsonMsgs.length === 0) continue;
+        length += jsonMsgs.length;
+        try {
+            const title = local.titles.get(cid) || 'Scraped Conversation';
+            const r = await reconcileScrapedMessages(jsonMsgs, cid, title);
+            if (r.success) {
+                inserted += r.inserted || 0;
+                already += r.alreadyInPostgres || 0;
+            } else {
+                failed += 1;
+            }
+        } catch {
+            failed += 1;
+        }
+    }
+    ragLog.info('xscraper-batch', `forwardLegacy: length=${length} inserted=${inserted} already=${already} failed=${failed}`);
+    return { success: failed === 0, length, inserted, already, failed };
+}
+
+/**
+ * Insert a test message into the durable SQLite queue and force a drain,
+ * proving the auto-forward path works end-to-end (SQLite → PostgreSQL).
+ */
+export async function sendTestMessage(conversationId = 'xscraper-verify') {
+    const content = `XSCRAPER AUTO-FORWARD VERIFY ${new Date().toISOString()} ${Math.random().toString(36).slice(2, 8)}`;
+    const id = `verify_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const saved = await saveMessages([{ id, content, author: 'You', timestamp: new Date().toISOString() }], conversationId, 'XScraper Verify');
+    if (!saved.success) {
+        return { success: false, error: saved.error };
+    }
+    const r = await forceRun();
+    const found = await (async () => {
+        try {
+            const { pool } = await import('./db-pool.js');
+            const res = await pool.query(
+                'SELECT 1 FROM grok_messages WHERE conversation_id = $1 AND source_message_id = $2',
+                [conversationId, id]);
+            return res.rowCount > 0;
+        } catch {
+            return false;
+        }
+    })();
+    return {
+        success: r.success && found,
+        testId: id,
+        content,
+        inserted: r.inserted || 0,
+        skipped: r.skipped || 0,
+        pending: r.pending || 0,
+        confirmedInPostgres: found,
+        message: found
+            ? 'VERIFIED: test message reached PostgreSQL via auto-forward'
+            : 'Test message queued but not yet confirmed in PostgreSQL',
+    };
 }
 
 function scheduleRetry() {

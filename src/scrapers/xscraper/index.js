@@ -341,3 +341,30 @@ export async function scrapeAndForward() {
         return { success: false, error: err.message };
     }
 }
+
+/**
+ * One-time reconciliation of legacy JSON exports into PostgreSQL.
+ */
+export async function forwardLegacyToPostgres() {
+    try {
+        const result = await invoke('xscraper:forward-legacy');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] forwardLegacyToPostgres error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Auto-forward verification: insert a test message into the durable SQLite
+ * queue, drain it, and confirm it reached PostgreSQL.
+ */
+export async function verifyAutoForward() {
+    try {
+        const result = await invoke('xscraper:verify-forward');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] verifyAutoForward error:', err);
+        return { success: false, error: err.message };
+    }
+}

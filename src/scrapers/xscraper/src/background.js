@@ -23,6 +23,8 @@ let localDb = null;
 let serverSyncQueue = [];
 let serverSyncActive = false;
 const USE_SERVER = true; // enabled for real-time PostgreSQL forwarding
+const SERVER_MAX_RETRIES = 3;
+const SERVER_RETRY_DELAY_MS = 1000;
 
 /**
  * Serialized drain of the server-sync queue. Guarantees every enqueued batch
@@ -142,29 +144,36 @@ async function checkServerConnection() {
 }
 
 /**
- * Server save (optional, non-blocking)
+ * Server save (optional, non-blocking, with retry)
  */
 async function saveToSQLiteServer(messages, conversationId, conversationTitle) {
     if (!USE_SERVER) return { skipped: true };
 
-    try {
-        const res = await fetch(`${SERVER_URL}/api/messages/save`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                messages,
-                conversationId,
-                conversationTitle
-            })
-        });
+    let lastErr = null;
+    for (let attempt = 0; attempt < SERVER_MAX_RETRIES; attempt++) {
+        try {
+            const res = await fetch(`${SERVER_URL}/api/messages/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages,
+                    conversationId,
+                    conversationTitle
+                })
+            });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        return await res.json();
-    } catch (err) {
-        console.warn('[XSCRAPER_BACKGROUND] Server unavailable:', err.message || err);
-        return { offline: true, error: String(err?.message || err) };
+            return await res.json();
+        } catch (err) {
+            lastErr = err;
+            if (attempt < SERVER_MAX_RETRIES - 1) {
+                await new Promise(r => setTimeout(r, SERVER_RETRY_DELAY_MS));
+            }
+        }
     }
+    console.warn('[XSCRAPER_BACKGROUND] Server unavailable after retries:', lastErr?.message || lastErr);
+    return { offline: true, error: String(lastErr?.message || lastErr) };
 }
 
 /**

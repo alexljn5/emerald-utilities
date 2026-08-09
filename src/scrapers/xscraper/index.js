@@ -125,3 +125,92 @@ export async function exportIncremental(webview, since) {
         return { success: false, error: err.message };
     }
 }
+
+/**
+ * Get new messages from the local server since a given timestamp.
+ * Used for real-time forwarding to PostgreSQL.
+ */
+export async function getNewMessages(since, conversationId = null) {
+    try {
+        const result = await invoke('xscraper:get-new-messages', { since, conversationId });
+        return result;
+    } catch (err) {
+        console.error('[XScraper] getNewMessages error:', err);
+        return { success: false, error: err.message, messages: [] };
+    }
+}
+
+/**
+ * Forward scraped messages to PostgreSQL.
+ * Used for real-time database persistence.
+ */
+export async function forwardToPostgres(messages, conversationId, conversationTitle = 'Scraped Conversation') {
+    try {
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            return { success: true, inserted: 0, skipped: 0 };
+        }
+        const result = await invoke('xscraper:forward-to-postgres', {
+            messages,
+            conversationId,
+            conversationTitle
+        });
+        return result;
+    } catch (err) {
+        console.error('[XScraper] forwardToPostgres error:', err);
+        return { success: false, error: err.message, inserted: 0, skipped: 0 };
+    }
+}
+
+/**
+ * Start the local XScraper server (bridge between extension and Electron)
+ */
+export async function startLocalServer() {
+    try {
+        const result = await invoke('xscraper:start-local-server');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] startLocalServer error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Stop the local XScraper server
+ */
+export async function stopLocalServer() {
+    try {
+        const result = await invoke('xscraper:stop-local-server');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] stopLocalServer error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Forward all exported XScraper JSON data to PostgreSQL.
+ * Reads from src/database/grok/messages/ and inserts into grok_messages.
+ */
+export async function forwardExportedToPostgres() {
+    try {
+        const result = await invoke('xscraper:forward-exported-to-postgres');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] forwardExportedToPostgres error:', err);
+        return { success: false, error: err.message, inserted: 0, skipped: 0, errors: 0 };
+    }
+}
+
+/**
+ * Clear all exported XScraper JSON files.
+ * Deletes files from src/database/grok/messages/ and src/database/grok/*.json
+ */
+export async function clearExports() {
+    try {
+        const result = await invoke('xscraper:clear-exports');
+        return result;
+    } catch (err) {
+        console.error('[XScraper] clearExports error:', err);
+        return { success: false, error: err.message, deleted: 0 };
+    }
+}

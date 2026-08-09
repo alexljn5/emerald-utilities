@@ -1534,7 +1534,11 @@ app.whenReady().then(async () => {
     // On Windows, ensure a Start Menu shortcut with the AUMID exists so
     // Windows allows toast banners even in dev (no installer).
     if (process.platform === 'win32') {
-        await registerAumidShortcut();
+        try {
+            await registerAumidShortcut();
+        } catch (err) {
+            console.error('[Emerald] AUMID shortcut registration failed:', err);
+        }
     }
 
     // ==================== DEPLOYMENT MODE DIAGNOSTICS ====================

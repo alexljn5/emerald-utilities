@@ -302,13 +302,33 @@ class XScraperDatabase {
     async getRecentMessages(hours = 24, limit = 100) {
         const timeAgo = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
         return this.all(
-            `SELECT id, content, author, timestamp, conversation_id 
-             FROM messages 
-             WHERE scraped_at > ? 
-             ORDER BY timestamp DESC 
+            `SELECT id, content, author, timestamp, conversation_id
+             FROM messages
+             WHERE scraped_at > ?
+             ORDER BY timestamp DESC
              LIMIT ?`,
             [timeAgo, limit]
         );
+    }
+
+    /**
+     * Get messages since a given timestamp (for real-time forwarding)
+     */
+    async getMessagesSince(sinceTimestamp, conversationId = null) {
+        const sinceDate = new Date(sinceTimestamp).toISOString();
+        let query = `SELECT id, content, author, timestamp, conversation_id, scraped_at
+                     FROM messages
+                     WHERE scraped_at > ?`;
+        const params = [sinceDate];
+
+        if (conversationId) {
+            query += ` AND conversation_id = ?`;
+            params.push(conversationId);
+        }
+
+        query += ` ORDER BY timestamp ASC`;
+
+        return this.all(query, params);
     }
 
     /**

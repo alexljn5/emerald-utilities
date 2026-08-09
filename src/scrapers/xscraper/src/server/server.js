@@ -251,6 +251,26 @@ app.get('/api/messages/recent', async (req, res) => {
 });
 
 /**
+ * Get new messages since a given timestamp (for real-time forwarding)
+ */
+app.get('/api/messages/new', async (req, res) => {
+    try {
+        const { since, conversationId } = req.query;
+        const sinceTimestamp = since ? parseInt(since) : Date.now() - 60000; // default: last minute
+
+        const messages = await db.getMessagesSince(sinceTimestamp, conversationId);
+        res.json({
+            messages,
+            count: messages.length,
+            since: sinceTimestamp,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * Check for duplicates (used by auto-sync)
  */
 app.post('/api/messages/check-duplicates', async (req, res) => {

@@ -15,6 +15,7 @@
 
 import { pool, checkDbHealth } from './db-pool.js';
 import { ragLog } from '../utils/logger.js';
+import { reconcileScrapedMessages, contentHashOf } from './xscraper-sync.js';
 
 // ============================================================
 // Configuration
@@ -139,17 +140,30 @@ export async function saveMessage({
     // Determine author from role if not provided
     const resolvedAuthor = author || (role === 'user' ? 'alexljn5' : role === 'assistant' ? 'Cream' : role);
 
+    // source_message_id / content_hash keep every row participating in the
+    // canonical (conversation_id, source_message_id) identity introduced by
+    // migration 005, so XScraper reconciliation can recognise these rows too.
     const result = await p.query(
         `INSERT INTO grok_messages
-            (id, conversation_id, content, author, timestamp, scraped_at, payload)
-         VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+            (id, conversation_id, content, author, timestamp, scraped_at, payload,
+             source_message_id, content_hash, source)
+         VALUES ($1, $2, $3, $4, $5, NOW(), $6, $1, $7, $8)
          ON CONFLICT (id) DO UPDATE SET
             content = EXCLUDED.content,
             author = EXCLUDED.author,
             timestamp = EXCLUDED.timestamp,
             payload = EXCLUDED.payload
          RETURNING id`,
-        [id, conversationId, content, resolvedAuthor, ts, { role, ...metadata }]
+        [
+            id,
+            conversationId,
+            content,
+            resolvedAuthor,
+            ts,
+            { role, ...metadata },
+            contentHashOf(resolvedAuthor, content),
+            metadata?.source || 'ai-chat',
+        ]
     );
 
     // Update conversation stats
@@ -197,6 +211,66 @@ export async function getRecentMessages(conversationId, limit = DEFAULT_CONTEXT_
     );
     // Reverse to get chronological order
     return result.rows.reverse();
+}
+
+// ============================================================
+// XScraper Real-time Forwarding
+// ============================================================
+
+/**
+ * Forward scraped messages from XScraper to PostgreSQL.
+ *
+ * This is a thin wrapper around the reconciler in xscraper-sync.js. The old
+ * implementation upserted every message and counted every upsert as an
+ * "insert", which is why the same ~4500 messages were reported as forwarded on
+ * every run. Now:
+ *
+ *   - each local message gets a canonical identity
+ *     (conversation_id + source_message_id)
+ *   - PostgreSQL is asked which identities it already has
+ *   - only the genuinely missing ones are inserted (ON CONFLICT DO NOTHING)
+ *   - `inserted` counts rows PostgreSQL actually persisted
+ *   - the durable checkpoint only advances after a successful COMMIT
+ *
+ * @param {Array} messages - Array of message objects from the local XScraper store
+ * @param {string} conversationId - The conversation ID from the scraper
+ * @param {string} [conversationTitle] - Optional conversation title
+ * @returns {Promise<object>} reconciliation counters
+ */
+export async function forwardScrapedMessagesToPostgres(messages, conversationId, conversationTitle = 'Scraped Conversation') {
+    const list = Array.isArray(messages) ? messages : [];
+
+    ragLog.info(
+        'xscraper-forward',
+        `Reconciling ${list.length} local messages against PostgreSQL for conversation ${conversationId}`
+    );
+
+    const stats = await reconcileScrapedMessages(list, conversationId, conversationTitle);
+
+    ragLog.info(
+        'xscraper-forward',
+        `conv=${conversationId} local_total=${stats.localTotal} already_in_postgres=${stats.alreadyInPostgres} ` +
+        `pending_to_insert=${stats.pendingToInsert} inserted=${stats.inserted} skipped=${stats.skipped} ` +
+        `invalid=${stats.invalid} duplicates_local=${stats.duplicatesInLocalSource}`
+    );
+
+    return {
+        // Legacy fields kept so existing IPC/UI callers keep working.
+        success: stats.success,
+        inserted: stats.inserted,
+        skipped: stats.skipped,
+        errors: stats.errors,
+        conversationId: stats.conversationId,
+        error: stats.error,
+        // Honest, unambiguous counters.
+        localTotal: stats.localTotal,
+        alreadyInPostgres: stats.alreadyInPostgres,
+        pendingToInsert: stats.pendingToInsert,
+        invalid: stats.invalid,
+        duplicatesInLocalSource: stats.duplicatesInLocalSource,
+        postgresTotalAfter: stats.postgresTotalAfter,
+        checkpoint: stats.checkpoint,
+    };
 }
 
 // ============================================================

@@ -13,7 +13,7 @@ let localDb = null;
  */
 let lastServerAttempt = 0;
 const SERVER_COOLDOWN_MS = 10000;
-const USE_SERVER = false; // <- IMPORTANT: disable unless backend is ready
+const USE_SERVER = true; // enabled for real-time PostgreSQL forwarding
 
 /**
  * Initialize IndexedDB

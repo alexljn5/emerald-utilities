@@ -1,11 +1,22 @@
 import path from 'path';
-import { existsSync, writeFileSync, mkdirSync } from 'fs';
-import { execSync } from 'child_process';
-import { BrowserWindow, session } from 'electron';
+import { existsSync, writeFileSync, mkdirSync, readdirSync, readFileSync, unlinkSync, rmSync } from 'fs';
+import { execSync, spawn } from 'child_process';
+import { BrowserWindow, session, ipcMain } from 'electron';
+import { forwardScrapedMessagesToPostgres } from '../database/ai-persistence.js';
+import { readLocalXScraperSource } from '../database/xscraper-local-source.js';
+import { reconcileScrapedMessages } from '../database/xscraper-sync.js';
+
+// Track local server process and restart state
+let localServerProcess = null;
+const LOCAL_SERVER_PORT = 3000;
+let serverRestartAttempts = 0;
+const MAX_SERVER_RESTARTS = 5;
+let serverRestartTimer = null;
 
 // Firefox browser windows tracking
 const firefoxWindows = new Map();
 const loadedExtensionPartitions = new Set();
+
 
 export function registerXScraperIpcHandlers(context) {
     const { ipcMain, app, getDialogParentWindow, pushScriptLog } = context;
@@ -373,6 +384,331 @@ export function registerXScraperIpcHandlers(context) {
             return { success: true };
         } catch (err) {
             console.error('[XScraper] Stop real-time error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Ensure local server is running, start it if needed
+    async function ensureLocalServerRunning() {
+        if (localServerProcess && !localServerProcess.killed) {
+            // Quick health check to verify it's actually responding
+            try {
+                const healthCheck = await fetch(`http://localhost:${LOCAL_SERVER_PORT}/health`, {
+                    signal: AbortSignal.timeout(2000)
+                });
+                if (healthCheck.ok) {
+                    return true;
+                }
+            } catch {
+                // Server not responding — fall through to restart
+            }
+        }
+
+        // Server is not running or not responding — start it
+        console.log('[XScraper] Local server not running, starting...');
+        const result = await ipcMain.invoke('xscraper:start-local-server');
+        if (!result.success) {
+            console.error('[XScraper] Failed to start local server:', result.error);
+            return false;
+        }
+        return true;
+    }
+
+    // Get new messages from local server since last check (for real-time forwarding)
+    ipcMain.handle('xscraper:get-new-messages', async (_event, { since, conversationId }) => {
+        try {
+            const serverReady = await ensureLocalServerRunning();
+            if (!serverReady) {
+                return { success: false, error: 'Local server unavailable', messages: [] };
+            }
+
+            const serverUrl = 'http://localhost:3000';
+            const params = new URLSearchParams();
+            if (since) params.set('since', since);
+            if (conversationId) params.set('conversationId', conversationId);
+
+            const response = await fetch(`${serverUrl}/api/messages/new?${params.toString()}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return { success: true, ...data };
+        } catch (err) {
+            console.error('[XScraper] Get new messages error:', err);
+            return { success: false, error: err.message, messages: [] };
+        }
+    });
+
+    // Forward scraped messages to PostgreSQL
+    ipcMain.handle('xscraper:forward-to-postgres', async (_event, { messages, conversationId, conversationTitle }) => {
+        try {
+            if (!messages || !Array.isArray(messages) || messages.length === 0) {
+                return { success: true, inserted: 0, skipped: 0, message: 'No messages to forward' };
+            }
+
+            if (!conversationId) {
+                return { success: false, error: 'conversationId is required' };
+            }
+
+            const result = await forwardScrapedMessagesToPostgres(messages, conversationId, conversationTitle);
+            return result;
+        } catch (err) {
+            console.error('[XScraper] Forward to PostgreSQL error:', err);
+            return { success: false, error: err.message, inserted: 0, skipped: 0 };
+        }
+    });
+
+    // Shared server start logic (used by IPC handler and auto-restart)
+    async function startLocalServer() {
+        if (localServerProcess) {
+            return { success: true, message: 'Local server already running', port: LOCAL_SERVER_PORT };
+        }
+
+        const serverPath = path.join(process.cwd(), 'src', 'scrapers', 'xscraper', 'src', 'server', 'server.js');
+
+        if (!existsSync(serverPath)) {
+            return { success: false, error: `Server script not found at ${serverPath}` };
+        }
+
+        localServerProcess = spawn('node', [serverPath], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            detached: false,
+        });
+
+        localServerProcess.stdout.on('data', (data) => {
+            console.log(`[XScraper Server] ${data.toString().trim()}`);
+        });
+
+        localServerProcess.stderr.on('data', (data) => {
+            console.error(`[XScraper Server] ${data.toString().trim()}`);
+        });
+
+        localServerProcess.on('exit', (code) => {
+            console.log(`[XScraper Server] exited with code ${code}`);
+            localServerProcess = null;
+            // Auto-restart if not a clean shutdown
+            if (code !== 0 && serverRestartAttempts < MAX_SERVER_RESTARTS) {
+                scheduleServerRestart();
+            }
+        });
+
+        localServerProcess.on('error', (err) => {
+            console.error('[XScraper Server] failed to start:', err);
+            localServerProcess = null;
+            if (serverRestartAttempts < MAX_SERVER_RESTARTS) {
+                scheduleServerRestart();
+            }
+        });
+
+        // Wait for server to be ready with retry logic
+        const maxRetries = 10;
+        const retryDelay = 500;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const healthCheck = await fetch(`http://localhost:${LOCAL_SERVER_PORT}/health`, {
+                    signal: AbortSignal.timeout(2000)
+                });
+                if (healthCheck.ok) {
+                    serverRestartAttempts = 0;
+                    return { success: true, message: 'Local server started', port: LOCAL_SERVER_PORT };
+                }
+            } catch {
+                // Server not ready yet
+            }
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+
+        // Server didn't respond in time — clean up and report failure
+        if (localServerProcess && !localServerProcess.killed) {
+            localServerProcess.kill('SIGTERM');
+        }
+        localServerProcess = null;
+        return { success: false, error: 'Local server failed to respond within timeout' };
+    }
+
+    // Start local XScraper server (bridge between extension and Electron)
+    ipcMain.handle('xscraper:start-local-server', async () => {
+        try {
+            return await startLocalServer();
+        } catch (err) {
+            console.error('[XScraper] Start local server error:', err);
+            localServerProcess = null;
+            return { success: false, error: err.message };
+        }
+    });
+
+    function scheduleServerRestart() {
+        if (serverRestartTimer) {
+            clearTimeout(serverRestartTimer);
+        }
+        serverRestartAttempts++;
+        console.log(`[XScraper] Scheduling server restart (attempt ${serverRestartAttempts}/${MAX_SERVER_RESTARTS})`);
+        serverRestartTimer = setTimeout(async () => {
+            serverRestartTimer = null;
+            console.log('[XScraper] Attempting server restart...');
+            const result = await startLocalServer();
+            console.log('[XScraper] Restart result:', result);
+        }, 3000);
+    }
+
+    // Stop local XScraper server
+    ipcMain.handle('xscraper:stop-local-server', async () => {
+        try {
+            if (serverRestartTimer) {
+                clearTimeout(serverRestartTimer);
+                serverRestartTimer = null;
+            }
+            if (localServerProcess) {
+                localServerProcess.kill('SIGTERM');
+                localServerProcess = null;
+                serverRestartAttempts = 0;
+                return { success: true, message: 'Local server stopped' };
+            }
+            return { success: true, message: 'Local server was not running' };
+        } catch (err) {
+            console.error('[XScraper] Stop local server error:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
+    // Clear exported XScraper JSON files
+    ipcMain.handle('xscraper:clear-exports', async () => {
+        try {
+            const messagesDir = path.join(process.cwd(), 'src', 'database', 'grok', 'messages');
+            const exportDir = path.join(process.cwd(), 'src', 'database', 'grok');
+
+            let deleted = 0;
+
+            // Delete files in messages/ subdirectory
+            if (existsSync(messagesDir)) {
+                const files = readdirSync(messagesDir).filter(f => f.endsWith('.json'));
+                for (const file of files) {
+                    try {
+                        unlinkSync(path.join(messagesDir, file));
+                        deleted++;
+                    } catch (err) {
+                        console.error(`[XScraper] Failed to delete ${file}:`, err.message);
+                    }
+                }
+            }
+
+            // Delete compilation exports in root grok/ directory
+            if (existsSync(exportDir)) {
+                const files = readdirSync(exportDir).filter(f => f.endsWith('.json'));
+                for (const file of files) {
+                    try {
+                        unlinkSync(path.join(exportDir, file));
+                        deleted++;
+                    } catch (err) {
+                        console.error(`[XScraper] Failed to delete ${file}:`, err.message);
+                    }
+                }
+            }
+
+            pushScriptLog(`[XScraper] Cleared ${deleted} export files`);
+            return { success: true, deleted };
+        } catch (err) {
+            console.error('[XScraper] Clear exports error:', err);
+            return { success: false, error: err.message, deleted: 0 };
+        }
+    });
+
+    // Reconcile the local XScraper store (SQLite + any legacy JSON exports)
+    // against PostgreSQL. Idempotent: repeated runs converge to pending = 0.
+    ipcMain.handle('xscraper:forward-exported-to-postgres', async () => {
+        try {
+            const local = await readLocalXScraperSource({});
+
+            pushScriptLog(
+                `[XScraper→Postgres] Local sources: sqlite=${local.sources.sqlite.total} json=${local.sources.json.total}`
+            );
+
+            if (local.byConversation.size === 0) {
+                return {
+                    success: true,
+                    inserted: 0, skipped: 0, errors: 0,
+                    localTotal: 0, alreadyInPostgres: 0, pendingToInsert: 0,
+                    results: [],
+                    message: 'No locally stored XScraper messages found — nothing to reconcile'
+                };
+            }
+
+            const totals = {
+                localTotal: 0, alreadyInPostgres: 0, pendingToInsert: 0,
+                inserted: 0, skipped: 0, invalid: 0, duplicatesInLocalSource: 0, errors: 0
+            };
+            const results = [];
+
+            for (const [conversationId, messages] of local.byConversation) {
+                const title = local.titles.get(conversationId) || 'Scraped Conversation';
+                try {
+                    const r = await forwardScrapedMessagesToPostgres(messages, conversationId, title);
+                    if (r.success) {
+                        totals.localTotal += r.localTotal || 0;
+                        totals.alreadyInPostgres += r.alreadyInPostgres || 0;
+                        totals.pendingToInsert += r.pendingToInsert || 0;
+                        totals.inserted += r.inserted || 0;
+                        totals.skipped += r.skipped || 0;
+                        totals.invalid += r.invalid || 0;
+                        totals.duplicatesInLocalSource += r.duplicatesInLocalSource || 0;
+                        pushScriptLog(
+                            `[XScraper→Postgres] ${conversationId}: local=${r.localTotal} already=${r.alreadyInPostgres} ` +
+                            `pending=${r.pendingToInsert} inserted=${r.inserted} skipped=${r.skipped}`
+                        );
+                        results.push({ conversationId, ...r });
+                    } else {
+                        totals.errors++;
+                        pushScriptLog(`[XScraper→Postgres] ${conversationId}: FAILED - ${r.error}`);
+                        results.push({ conversationId, error: r.error });
+                    }
+                } catch (err) {
+                    totals.errors++;
+                    pushScriptLog(`[XScraper→Postgres] ${conversationId}: Exception - ${err.message}`);
+                    results.push({ conversationId, error: err.message });
+                }
+            }
+
+            pushScriptLog(
+                `[XScraper→Postgres] Complete: local_total=${totals.localTotal} already_in_postgres=${totals.alreadyInPostgres} ` +
+                `pending_to_insert=${totals.pendingToInsert} inserted=${totals.inserted} skipped=${totals.skipped} errors=${totals.errors}`
+            );
+
+            return {
+                success: totals.errors === 0,
+                ...totals,
+                results,
+                message: `Reconciled ${totals.localTotal} local messages: inserted ${totals.inserted}, already present ${totals.alreadyInPostgres}`
+            };
+        } catch (err) {
+            console.error('[XScraper] Reconcile local store to PostgreSQL error:', err);
+            return { success: false, error: err.message, inserted: 0, skipped: 0, errors: 1 };
+        }
+    });
+
+    // Read-only XScraper sync diagnostic (never writes)
+    ipcMain.handle('xscraper:diagnose', async (_event, { conversationId } = {}) => {
+        try {
+            const local = await readLocalXScraperSource({ conversationId: conversationId || null });
+            const report = [];
+
+            for (const [cid, messages] of local.byConversation) {
+                const stats = await reconcileScrapedMessages(messages, cid, undefined, { dryRun: true });
+                report.push({
+                    conversationId: cid,
+                    localMessages: stats.localTotal,
+                    postgresMessages: stats.postgresTotalAfter,
+                    alreadyPersisted: stats.alreadyInPostgres,
+                    pendingInsertion: stats.pendingToInsert,
+                    duplicatesLocal: stats.duplicatesInLocalSource,
+                    invalid: stats.invalid,
+                    checkpoint: stats.checkpoint,
+                });
+            }
+
+            return { success: true, sources: local.sources, report };
+        } catch (err) {
+            console.error('[XScraper] Diagnose error:', err);
             return { success: false, error: err.message };
         }
     });

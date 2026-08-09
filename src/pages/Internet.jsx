@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import PageShell from './PageShell.jsx';
-import { invoke } from '../utils/electronApi.js';
-import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler, exportIncremental } from '../scrapers/xscraper/index.js';
+import { checkFirefoxInstalled, launchFirefox, getDefaultPages, exportData, getRealtimeStats, startRealtimeCrawler, stopRealtimeCrawler, exportIncremental, getNewMessages, forwardToPostgres, startLocalServer, forwardExportedToPostgres, clearExports } from '../scrapers/xscraper/index.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 import '../css/internet.css';
 
@@ -22,13 +21,15 @@ export default function Internet({ route, setRoute }) {
     const [partition, setPartition] = useState(null);
     const [webviewUrl, setWebviewUrl] = useState('');
     const [webviewReady, setWebviewReady] = useState(false);
-    const [isRealtime, setIsRealtime] = useState(false);
+    const [isScraping, setIsScraping] = useState(false);
     const [realtimeStats, setRealtimeStats] = useState({ seen: 0, queue: 0 });
+    const [forwardStats, setForwardStats] = useState({ inserted: 0, skipped: 0, errors: 0 });
     const browserViewRef = useRef(null);
     const webviewRef = useRef(null);
-    const realtimeIntervalRef = useRef(null);
+    const scrapeIntervalRef = useRef(null);
     const lastAutoExportRef = useRef(0);
     const lastExportTimestampRef = useRef(0);
+    const lastForwardTimestampRef = useRef(Date.now());
 
     useEffect(() => {
         let cancelled = false;
@@ -46,7 +47,21 @@ export default function Internet({ route, setRoute }) {
             }
         }
 
+        async function startServer() {
+            try {
+                const result = await startLocalServer();
+                if (result?.success) {
+                    console.log('[XScraper] Local server started:', result.message);
+                } else {
+                    console.warn('[XScraper] Local server failed to start:', result?.error);
+                }
+            } catch (err) {
+                console.warn('[XScraper] Local server error:', err);
+            }
+        }
+
         checkFirefox();
+        startServer();
 
         return () => {
             cancelled = true;
@@ -82,18 +97,19 @@ export default function Internet({ route, setRoute }) {
         };
     }, [partition]);
 
-    // Real-time stats polling + auto-export
+    // Scrape + Forward polling loop
     useEffect(() => {
-        if (!isRealtime || !webviewReady) {
-            if (realtimeIntervalRef.current) {
-                clearInterval(realtimeIntervalRef.current);
-                realtimeIntervalRef.current = null;
+        if (!isScraping || !webviewReady) {
+            if (scrapeIntervalRef.current) {
+                clearInterval(scrapeIntervalRef.current);
+                scrapeIntervalRef.current = null;
             }
             return;
         }
 
-        const pollStats = async () => {
+        const pollAndForward = async () => {
             try {
+                // 1. Get scraper stats
                 const result = await getRealtimeStats(webviewRef.current);
                 if (result?.success && result.stats) {
                     setRealtimeStats(result.stats);
@@ -101,45 +117,120 @@ export default function Internet({ route, setRoute }) {
                         ...prev,
                         messages: result.stats.seen || prev.messages
                     }));
+                }
 
-                    // Auto-export all messages every 5 seconds to live files (one per conversation)
-                    const now = Date.now();
-                    if (now - lastAutoExportRef.current > 5000 && webviewRef.current) {
-                        lastAutoExportRef.current = now;
-                        const exportResult = await webviewRef.current.executeJavaScript(`
-                            (function() {
-                                if (window.__grokScraper && typeof window.__grokScraper.exportAsJSON === 'function') {
-                                    return window.__grokScraper.exportAsJSON();
-                                }
-                                return { success: false, error: 'Export not available' };
-                            })()
-                        `);
-                        if (exportResult?.success && exportResult.data) {
-                            const fsResult = await exportData(exportResult.data, 'great_white_throne');
-                            if (fsResult?.success) {
-                                const count = fsResult.files ? fsResult.files.length : 1;
-                                setScraperStatus(`Live export updated (${count} conversation files)`);
-                            } else {
-                                console.error('Auto-export failed:', fsResult?.error);
+                // 2. Auto-export every 5 seconds
+                const now = Date.now();
+                if (now - lastAutoExportRef.current > 5000 && webviewRef.current) {
+                    lastAutoExportRef.current = now;
+                    const exportResult = await webviewRef.current.executeJavaScript(`
+                        (function() {
+                            if (window.__grokScraper && typeof window.__grokScraper.exportAsJSON === 'function') {
+                                return window.__grokScraper.exportAsJSON();
                             }
+                            return { success: false, error: 'Export not available' };
+                        })()
+                    `);
+                    if (exportResult?.success && exportResult.data) {
+                        const fsResult = await exportData(exportResult.data, 'great_white_throne');
+                        if (fsResult?.success) {
+                            const count = fsResult.files ? fsResult.files.length : 1;
+                            setScraperStatus(`Live export (${count} files)`);
                         }
                     }
                 }
+
+                // 3. Forward new messages to PostgreSQL (direct from extension IndexedDB)
+                const since = lastForwardTimestampRef.current;
+                let newMessages = [];
+                try {
+                    const incResult = await webviewRef.current.executeJavaScript(`
+                        (async () => {
+                            if (window.__grokScraper && typeof window.__grokScraper.exportIncrementalJSON === 'function') {
+                                return await window.__grokScraper.exportIncrementalJSON(${since});
+                            }
+                            return { success: false, error: 'Incremental export not available', messages: [] };
+                        })()
+                    `);
+                    if (incResult?.messages && incResult.messages.length > 0) {
+                        newMessages = incResult.messages;
+                    }
+                } catch (err) {
+                    console.warn('[XScraper] Incremental export failed, falling back to local server:', err.message);
+                    // Fallback: try local server
+                    const fallbackResult = await getNewMessages(since);
+                    if (fallbackResult?.success && fallbackResult.messages && fallbackResult.messages.length > 0) {
+                        newMessages = fallbackResult.messages;
+                    }
+                }
+
+                if (newMessages.length > 0) {
+                    console.log(`[XScraper] ${newMessages.length} local messages to reconcile`);
+
+                    const messagesByConv = {};
+                    for (const msg of newMessages) {
+                        const cid = msg.conversationId || 'default';
+                        if (!messagesByConv[cid]) messagesByConv[cid] = [];
+                        messagesByConv[cid].push(msg);
+                    }
+
+                    let totalInserted = 0;
+                    let totalSkipped = 0;
+                    let totalErrors = 0;
+                    let allConfirmed = true;
+
+                    for (const [convId, msgs] of Object.entries(messagesByConv)) {
+                        const fwdResult = await forwardToPostgres(msgs, convId);
+                        if (fwdResult?.success) {
+                            totalInserted += fwdResult.inserted || 0;
+                            totalSkipped += fwdResult.skipped || 0;
+                            totalErrors += fwdResult.errors?.length || 0;
+                        } else {
+                            // PostgreSQL did not confirm persistence for this batch.
+                            allConfirmed = false;
+                            totalErrors += 1;
+                            console.warn('[XScraper] Forward failed, keeping messages local for retry:', fwdResult?.error);
+                        }
+                    }
+
+                    setForwardStats(prev => ({
+                        inserted: prev.inserted + totalInserted,
+                        skipped: prev.skipped + totalSkipped,
+                        errors: prev.errors + totalErrors,
+                    }));
+
+                    // DURABLE CHECKPOINT: only advance once PostgreSQL confirmed
+                    // persistence, and only up to the newest message we actually
+                    // handled — never to "now", which would silently drop any
+                    // message saved locally while the request was in flight.
+                    if (allConfirmed) {
+                        const maxSavedAt = newMessages.reduce(
+                            (acc, m) => Math.max(acc, Number(m.savedAt) || 0),
+                            0
+                        );
+                        if (maxSavedAt > lastForwardTimestampRef.current) {
+                            lastForwardTimestampRef.current = maxSavedAt;
+                        }
+                        setScraperStatus(`PostgreSQL: inserted ${totalInserted}, already present ${totalSkipped}`);
+                    } else {
+                        setScraperStatus('PostgreSQL unavailable — retrying, nothing lost');
+                    }
+                }
             } catch (err) {
-                console.error('Real-time stats poll error:', err);
+                console.error('[XScraper] Poll error:', err);
             }
         };
 
-        pollStats();
-        realtimeIntervalRef.current = setInterval(pollStats, 1000);
+        pollAndForward();
+        scrapeIntervalRef.current = setInterval(pollAndForward, 2000);
 
         return () => {
-            if (realtimeIntervalRef.current) {
-                clearInterval(realtimeIntervalRef.current);
-                realtimeIntervalRef.current = null;
+            if (scrapeIntervalRef.current) {
+                clearInterval(scrapeIntervalRef.current);
+                scrapeIntervalRef.current = null;
             }
         };
-    }, [isRealtime, webviewReady]);
+    }, [isScraping, webviewReady]);
 
     useEffect(() => {
         const browserView = browserViewRef.current;
@@ -196,7 +287,6 @@ export default function Internet({ route, setRoute }) {
 
         try {
             if (partition) {
-                // Session already exists, just navigate the webview
                 setWebviewUrl(browserUrl);
                 setScraperStatus('Navigating...');
             } else {
@@ -225,6 +315,7 @@ export default function Internet({ route, setRoute }) {
             setPartition(null);
             setWebviewUrl('');
             setWebviewReady(false);
+            setIsScraping(false);
             setScraperStatus('Browser closed');
         } catch (err) {
             setError(err?.message || 'Failed to close browser');
@@ -251,89 +342,44 @@ export default function Internet({ route, setRoute }) {
             return;
         }
 
-        if (isRealtime) {
-            // Stop real-time crawler
+        if (isScraping) {
+            // Stop scraping
             setLoading(true);
-            setScraperStatus('Stopping real-time scrape...');
+            setScraperStatus('Stopping scrape...');
             try {
                 const result = await stopRealtimeCrawler(webviewRef.current);
                 if (result?.success) {
-                    setIsRealtime(false);
-                    setScraperStatus('Real-time scrape stopped');
+                    setIsScraping(false);
+                    setScraperStatus('Scrape stopped');
                 } else {
-                    setError(result?.error || 'Failed to stop real-time scrape');
+                    setError(result?.error || 'Failed to stop scrape');
                 }
             } catch (err) {
-                setError(err?.message || 'Failed to stop real-time scrape');
+                setError(err?.message || 'Failed to stop scrape');
             } finally {
                 setLoading(false);
             }
             return;
         }
 
+        // Start scraping
         setLoading(true);
-        setScraperStatus('Scraping messages...');
-        try {
-            const result = await webviewRef.current.executeJavaScript(`
-                (async function() {
-                    const waitForScraper = async () => {
-                        for (let attempt = 0; attempt < 50; attempt += 1) {
-                            if (window.__grokScraper) return window.__grokScraper;
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                        }
-                        return null;
-                    };
-
-                    const scraper = await waitForScraper();
-                    if (!scraper) {
-                        return { success: false, error: 'Scraper not available' };
-                    }
-
-                    if (typeof scraper.scrapeAll === 'function') {
-                        return scraper.scrapeAll();
-                    }
-
-                    if (typeof scraper.scrape === 'function') {
-                        return scraper.scrape();
-                    }
-
-                    return { success: false, error: 'Scraper not available' };
-                })()
-            `);
-            if (result?.success) {
-                setScraperStats(prev => ({
-                    ...prev,
-                    messages: prev.messages + (result.saved || 0)
-                }));
-                setScraperStatus('Scraping complete');
-            } else {
-                setError(result?.error || 'Scraping failed');
-            }
-        } catch (err) {
-            setError(err?.message || 'Scraping failed');
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    async function handleStartRealtime() {
-        if (!webviewRef.current || !webviewReady) {
-            setError('Browser is not ready');
-            return;
-        }
-
-        setLoading(true);
-        setScraperStatus('Starting real-time scrape...');
+        setScraperStatus('Starting scrape...');
         try {
             const result = await startRealtimeCrawler(webviewRef.current);
             if (result?.success) {
-                setIsRealtime(true);
-                setScraperStatus('Real-time scraping active');
+                setIsScraping(true);
+                setForwardStats({ inserted: 0, skipped: 0, errors: 0 });
+                // Start from 0: the first pass reconciles the WHOLE local store
+                // against PostgreSQL. Already-persisted messages are detected by
+                // canonical identity and skipped, so this is cheap and converges.
+                lastForwardTimestampRef.current = 0;
+                setScraperStatus('Scraping + reconciling with PostgreSQL');
             } else {
-                setError(result?.error || 'Failed to start real-time scrape');
+                setError(result?.error || 'Failed to start scrape');
             }
         } catch (err) {
-            setError(err?.message || 'Failed to start real-time scrape');
+            setError(err?.message || 'Failed to start scrape');
         } finally {
             setLoading(false);
         }
@@ -358,7 +404,6 @@ export default function Internet({ route, setRoute }) {
             `);
 
             if (exportResult?.success && exportResult.data) {
-                // Write to filesystem via main process
                 const fsResult = await exportData(exportResult.data);
                 if (fsResult?.success) {
                     if (fsResult.files && fsResult.files.length > 1) {
@@ -379,6 +424,90 @@ export default function Internet({ route, setRoute }) {
         }
     }
 
+    async function handleForwardToPostgres() {
+        setLoading(true);
+        setScraperStatus('Forwarding to PostgreSQL...');
+        setError('');
+        try {
+            const result = await forwardExportedToPostgres();
+            if (result?.success) {
+                setForwardStats(prev => ({
+                    inserted: prev.inserted + (result.inserted || 0),
+                    skipped: prev.skipped + (result.skipped || 0),
+                    errors: prev.errors + (result.errors || 0),
+                }));
+                setScraperStatus(result.message || `Forwarded ${result.inserted} messages to PostgreSQL`);
+            } else {
+                setError(result?.error || 'Failed to forward to PostgreSQL');
+                setScraperStatus('Forward failed');
+            }
+        } catch (err) {
+            setError(err?.message || 'Forward failed');
+            setScraperStatus('Forward failed');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleScrapeAndForward() {
+        if (!webviewRef.current || !webviewReady) {
+            setError('Browser is not ready');
+            return;
+        }
+
+        setLoading(true);
+        setScraperStatus('Starting scrape + forward...');
+        setError('');
+        try {
+            // 1. Forward any existing exported data first
+            const forwardResult = await forwardExportedToPostgres();
+            if (forwardResult?.success) {
+                setForwardStats(prev => ({
+                    inserted: prev.inserted + (forwardResult.inserted || 0),
+                    skipped: prev.skipped + (forwardResult.skipped || 0),
+                    errors: prev.errors + (forwardResult.errors || 0),
+                }));
+            }
+
+            // 2. Start the real-time scraper
+            const scrapeResult = await startRealtimeCrawler(webviewRef.current);
+            if (scrapeResult?.success) {
+                setIsScraping(true);
+                // See above: reconcile the full local store on the first pass.
+                lastForwardTimestampRef.current = 0;
+                setScraperStatus('Scraping + reconciling with PostgreSQL');
+            } else {
+                setError(scrapeResult?.error || 'Failed to start scrape');
+                setScraperStatus('Scrape failed');
+            }
+        } catch (err) {
+            setError(err?.message || 'Scrape + forward failed');
+            setScraperStatus('Scrape + forward failed');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleClearExports() {
+        setLoading(true);
+        setScraperStatus('Clearing exports...');
+        setError('');
+        try {
+            const result = await clearExports();
+            if (result?.success) {
+                setScraperStatus(`Cleared ${result.deleted} export files`);
+            } else {
+                setError(result?.error || 'Failed to clear exports');
+                setScraperStatus('Clear failed');
+            }
+        } catch (err) {
+            setError(err?.message || 'Clear failed');
+            setScraperStatus('Clear failed');
+        } finally {
+            setLoading(false);
+        }
+    }
+
     return (
         <PageShell title="Internet Access" route={route} setRoute={setRoute} showBack={true} leftChildren={
             <div className="navBox">
@@ -387,14 +516,23 @@ export default function Internet({ route, setRoute }) {
                     <img src={xscraperLogo} alt="XScraper" className="xscraper-icon" width="64" height="64" />
                 </div>
                 <div className="xscraper-status">
-                    <span className={`status-indicator ${isRealtime ? 'realtime' : (firefoxReady ? 'ready' : 'error')}`}>
-                        {isRealtime ? 'Real-Time Scraping Active' : (firefoxReady ? 'Firefox Ready' : 'Firefox Not Found')}
+                    <span className={`status-indicator ${isScraping ? 'scraping' : (firefoxReady ? 'ready' : 'error')}`}>
+                        {isScraping ? 'Scraping + PostgreSQL' : (firefoxReady ? 'Firefox Ready' : 'Firefox Not Found')}
                     </span>
                 </div>
                 <div className="xscraper-stats">
                     <span>Messages: {scraperStats.messages}</span>
                     <span>Seen: {realtimeStats.seen}</span>
                     <span>Queue: {realtimeStats.queue}</span>
+                    {isScraping && (
+                        <>
+                            <span className="forwarding-stat">Forwarded: {forwardStats.inserted}</span>
+                            <span className="forwarding-stat">Skipped: {forwardStats.skipped}</span>
+                            {forwardStats.errors > 0 && (
+                                <span className="forwarding-stat error">Errors: {forwardStats.errors}</span>
+                            )}
+                        </>
+                    )}
                 </div>
                 <div className="navButtons">
                     <button
@@ -413,14 +551,14 @@ export default function Internet({ route, setRoute }) {
                     >
                         Close Browser
                     </button>
-                    {!isRealtime ? (
+                    {!isScraping ? (
                         <button
                             className="nav-btn full"
                             type="button"
-                            onClick={handleStartRealtime}
+                            onClick={handleScrapeAndForward}
                             disabled={loading || !webviewReady}
                         >
-                            Start Real-Time Scrape
+                            Scrape & Forward
                         </button>
                     ) : (
                         <button
@@ -429,7 +567,7 @@ export default function Internet({ route, setRoute }) {
                             onClick={handleScrape}
                             disabled={loading || !webviewReady}
                         >
-                            Stop Real-Time Scrape
+                            Stop Scrape
                         </button>
                     )}
                     <button
@@ -439,6 +577,22 @@ export default function Internet({ route, setRoute }) {
                         disabled={loading || !webviewReady}
                     >
                         Export Data
+                    </button>
+                    <button
+                        className="nav-btn full"
+                        type="button"
+                        onClick={handleForwardToPostgres}
+                        disabled={loading}
+                    >
+                        Forward to PostgreSQL
+                    </button>
+                    <button
+                        className="nav-btn full"
+                        type="button"
+                        onClick={handleClearExports}
+                        disabled={loading}
+                    >
+                        Clear Exports
                     </button>
                 </div>
                 <div className="page-selector">
@@ -458,68 +612,21 @@ export default function Internet({ route, setRoute }) {
                 </div>
             </div>
         }>
-            <div className="internet-content">
-                {error && (
-                    <div className="internet-error">
-                        {error}
+            <div className="browser-view">
+                {webviewUrl ? (
+                    <webview
+                        ref={webviewRef}
+                        src={webviewUrl}
+                        className="browser-webview"
+                        partition={partition || undefined}
+                        allowpopups="true"
+                    />
+                ) : (
+                    <div className="browser-placeholder">
+                        <p>Launch Firefox to start scraping</p>
+                        <p className="browser-hint">XScraper will extract conversations and forward to PostgreSQL</p>
                     </div>
                 )}
-
-                <div className="browser-container">
-                    <div className="browser-header">
-                        <div className="browser-tabs">
-                            {DEFAULT_PAGES.map(page => (
-                                <button
-                                    key={page.id}
-                                    className={`browser-tab ${activePage === page.id ? 'active' : ''}`}
-                                    onClick={() => handleNavigate(page.id)}
-                                    type="button"
-                                >
-                                    {page.name}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="browser-address-bar">
-                            <input
-                                type="text"
-                                value={browserUrl}
-                                onChange={(e) => setBrowserUrl(e.target.value)}
-                                placeholder="Enter URL"
-                                className="address-input"
-                            />
-                            <button
-                                className="go-btn"
-                                onClick={handleLaunchFirefox}
-                                disabled={loading || !firefoxReady}
-                                type="button"
-                            >
-                                Go
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="browser-view" ref={browserViewRef}>
-                        {partition && webviewUrl ? (
-                            <webview
-                                ref={webviewRef}
-                                src={webviewUrl}
-                                partition={partition}
-                                className="browser-webview"
-                                autosize="on"
-                                minwidth="320"
-                                minheight="240"
-                                maxwidth="4096"
-                                maxheight="4096"
-                                style={{ width: '100%', height: '100%' }}
-                            />
-                        ) : (
-                            <div className="browser-placeholder">
-                                <p>Firefox browser will appear here</p>
-                                <p className="browser-hint">Click "Launch Browser" to start browsing</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
             </div>
         </PageShell>
     );

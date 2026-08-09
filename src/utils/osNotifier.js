@@ -132,12 +132,29 @@ function normalizeOptions({
 // SnoreToast needs the AppUserModelID to route the toast to this app, and it
 // must match the AUMID registered on a Start Menu shortcut (see
 // registerAumidShortcut in heavensgate.js). We pass the AUMID explicitly.
+async function verifyAumidShortcut() {
+    const shortcutPath = path.join(
+        process.env.APPDATA || '',
+        'Microsoft', 'Windows', 'Start Menu', 'Programs',
+        'Emerald Utilities.lnk'
+    );
+    if (!existsSync(shortcutPath)) {
+        console.warn('[OSNotifier] AUMID shortcut missing at:', shortcutPath);
+        console.warn('[OSNotifier] This will cause SnoreToast to fail. Ensure registerAumidShortcut() runs at app startup.');
+        return false;
+    }
+    return true;
+}
+
 async function notifyWindows(opts) {
     const snoreToastPath = resolveSnoreToast();
     if (!existsSync(snoreToastPath)) {
         console.error('[OSNotifier] SnoreToast.exe not found at:', snoreToastPath);
         return { ok: false, provider: 'snoretoast', state: 'failed', error: `SnoreToast.exe not found at ${snoreToastPath}` };
     }
+
+    // Pre-flight: verify AUMID shortcut exists
+    await verifyAumidShortcut();
 
     return new Promise((resolve) => {
         console.log('[OSNotifier] Windows (SnoreToast) notification attempt started');
@@ -159,6 +176,9 @@ async function notifyWindows(opts) {
         if (opts.icon) {
             args.push('-p', opts.icon);
         }
+
+        // Log the full command for debugging exit code 3
+        console.log(`[OSNotifier] SnoreToast command: ${snoreToastPath} ${args.map(a => `"${a}"`).join(' ')}`);
 
         let proc;
         try {
@@ -183,7 +203,7 @@ async function notifyWindows(opts) {
         proc.on('close', (code) => {
             const out = stdout.trim();
             const errOut = stderr.trim();
-            console.log(`[OSNotifier] SnoreToast exit code=${code} stdout=${out} stderr=${errOut}`);
+            console.log(`[OSNotifier] SnoreToast exit code=${code} stdout="${out}" stderr="${errOut}"`);
 
             // SnoreToast can exit 0 even when Windows suppresses the toast.
             // Detect known suppression markers in its output so we report a
@@ -207,6 +227,19 @@ async function notifyWindows(opts) {
                     provider: 'snoretoast',
                     state: 'blocked',
                     error: 'Windows notifications are disabled for this app by policy (DisabledByPolicy).',
+                    code,
+                    response: out,
+                });
+            }
+
+            // Exit code 3 with empty output typically means AUMID/shortcut mismatch
+            // or the toast was suppressed before SnoreToast could produce output.
+            if (code === 3) {
+                return resolve({
+                    ok: false,
+                    provider: 'snoretoast',
+                    state: 'failed',
+                    error: 'SnoreToast failed (exit code 3). This usually means the AUMID does not match a registered Start Menu shortcut, or Windows has suppressed notifications. Try: (1) restart the app as administrator, (2) ensure notifications are enabled for Emerald Utilities in Windows Settings → System → Notifications.',
                     code,
                     response: out,
                 });

@@ -1023,24 +1023,15 @@ export function registerIpcHandlers(context) {
             //    models from copying it verbatim.
             const character = getCharacterSheet(agentId);
 
-            // Include the last 6 messages (up to 3 user + 3 assistant turns)
-            // so the model remembers the immediate conversation flow without
-            // being overwhelmed. This is the sweet spot for llama2-uncensored:
-            // enough context to maintain consistency across a few turns, but
-            // not so much that it returns empty responses or repeats history.
-            const recentHistory = prepared.history.slice(-6);
-            const recentContext = recentHistory.length > 0
-                ? `Recent messages:\n${recentHistory.map(m => `${m.author === 'alexljn5' ? 'Lune' : m.author}: "${m.content}"`).join('\n')}\n\n`
-                : '';
+            ragLog.info('grok-chat', `LLM context: ${prepared.context.length} messages (RAG: ${retrieved.length} hits not sent to LLM), system prompt from character sheet`);
 
-            const contextString = recentContext;
-
-            ragLog.info('grok-chat', `LLM context: ${recentHistory.length} recent messages (RAG: ${retrieved.length} hits not sent to LLM), system prompt from character sheet`);
-
-            // 4. Query LLM with the simple 2-message format (system + user).
+            // 4. Query LLM with the full conversation context.
+            //    prepareChatRequest already assembled and truncated the context
+            //    to fit within the token budget. Pass the messages array directly
+            //    so the model receives the full conversation flow like a normal AI.
             //    Pass timeout from caller for overall request timeout.
             //    Pass character sheet so identity/personality is preserved.
-            const response = await queryWithLLM(userMessage, contextString, [], {
+            const response = await queryWithLLM(prepared.context, prepared.conversationId, [], {
                 timeoutMs,
                 useCharacterSheet: true,
                 characterSheet: character,
@@ -1061,10 +1052,11 @@ export function registerIpcHandlers(context) {
                 conversationId: prepared.conversationId,
                 messageId: saved.messageId,
                 contextDebug: {
-                    mode: 'legacy-simple',
+                    mode: 'full-context',
                     systemPrompt: !!character.systemPrompt,
                     ragMessages: retrieved.length,
-                    note: 'Using simple 2-message context (system + user) for compatibility with smaller models',
+                    contextMessages: prepared.context.length,
+                    note: 'Using full conversation context with automatic truncation',
                 },
             };
         } catch (err) {

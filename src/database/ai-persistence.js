@@ -240,6 +240,17 @@ export async function getMessages(conversationId, limit = DEFAULT_CONTEXT_MESSAG
  */
 export async function getRecentMessages(conversationId, limit = DEFAULT_CONTEXT_MESSAGES) {
     const p = await ensureDb();
+    if (limit == null) {
+        // No limit — return all messages for this conversation
+        const result = await p.query(
+            `SELECT id, conversation_id, content, author, timestamp, scraped_at, payload
+             FROM grok_messages
+             WHERE conversation_id = $1
+             ORDER BY timestamp DESC`,
+            [conversationId]
+        );
+        return result.rows.reverse();
+    }
     const result = await p.query(
         `SELECT id, conversation_id, content, author, timestamp, scraped_at, payload
          FROM grok_messages

@@ -17,6 +17,7 @@ import {
     clearConversation,
     deleteConversation,
     getMessages,
+    getRecentMessages,
     buildConversationContext,
     buildConversationDebugView,
 } from '../database/ai-persistence.js';
@@ -1151,13 +1152,18 @@ export function registerIpcHandlers(context) {
         }
     });
 
-    // Get messages for a conversation
-    ipcMain.handle('grok-messages', async (_event, { conversationId, limit = 100 }) => {
+    // Get messages for a conversation (most recent first, then reversed to chronological)
+    ipcMain.handle('grok-messages', async (_event, { conversationId, limit }) => {
         try {
             if (!conversationId) {
                 return { ok: false, error: 'conversationId required' };
             }
-            const messages = await getMessages(conversationId, limit);
+            // Use getRecentMessages to get the most recent messages,
+            // not the oldest ones. This ensures the chat loads at the
+            // latest state when reentering a conversation.
+            // No limit by default — load all messages so the user never
+            // sees a truncated conversation on reentry.
+            const messages = await getRecentMessages(conversationId, limit || null);
             return { ok: true, messages };
         } catch (err) {
             ragLog.error('grok-messages', err);

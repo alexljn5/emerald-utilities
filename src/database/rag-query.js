@@ -522,10 +522,14 @@ async function queryWithLLM(messagesOrQuery, conversationIdOrContext, similarMes
             truncated: false,
         };
     } else {
-        // OLD: Build from RAG context string (CLI mode)
+        // OLD: Build from context string (CLI mode)
+        // Always include context (recent history) if provided, not just when
+        // there's RAG context. This ensures the model remembers recent messages.
         let userPrompt;
-        if (hasRelevantContext) {
+        if (hasRelevantContext && context) {
             userPrompt = `Relevant conversation history (for reference only, DO NOT COPY IT):\n${context}\n\nNow ${userName} says: "${userQuery}"\n\nRespond as ${aiName} directly to ${userName}. Use the context to inform your answer but do not repeat any part of it. If the context is not about the same topic, ignore it completely. ${wantsShort ? 'Keep it very short.' : ''}`;
+        } else if (context) {
+            userPrompt = `Recent conversation:\n${context}\n\nNow ${userName} says: "${userQuery}"\n\nRespond as ${aiName} directly to ${userName}. Use the recent conversation to understand what was just discussed. Do not repeat the recent conversation verbatim - respond naturally as ${aiName} would. ${wantsShort ? 'Keep it very short.' : ''}`;
         } else {
             userPrompt = `${userName} says: "${userQuery}"\n\nRespond as ${aiName} with a warm, natural answer. Do not invent anything about ${userName}'s day. ${wantsShort ? 'Keep it very short.' : ''}`;
         }

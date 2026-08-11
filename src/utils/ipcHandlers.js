@@ -1016,17 +1016,29 @@ export function registerIpcHandlers(context) {
             // 3. Build context for the LLM using the OLD simple signature.
             //    The new multi-message context assembly overwhelms smaller models
             //    like llama2-uncensored. Revert to the original approach:
-            //    system prompt + user prompt with embedded RAG context.
+            //    system prompt + user prompt with embedded recent history.
             //    Database persistence is preserved separately above.
+            //    RAG is retrieved but NOT sent to the LLM to prevent smaller
+            //    models from copying it verbatim.
             const character = getCharacterSheet(agentId);
-            const contextString = assembleContext(retrieved);
 
-            ragLog.info('grok-chat', `LLM context: ${retrieved.length} RAG messages, system prompt from character sheet`);
+            // Include recent conversation history so the model remembers
+            // what was just discussed (e.g. "what did I just ask?").
+            // Format as a conversation the model can understand.
+            // Limit to last 10 messages to keep the prompt manageable.
+            const recentHistory = prepared.history.slice(-10);
+            const recentContext = recentHistory.length > 0
+                ? `Recent messages in this conversation:\n${recentHistory.map(m => `${m.author === 'alexljn5' ? 'Lune' : m.author}: "${m.content}"`).join('\n')}\n\n`
+                : '';
+
+            const contextString = recentContext;
+
+            ragLog.info('grok-chat', `LLM context: ${recentHistory.length} recent messages (RAG: ${retrieved.length} hits not sent to LLM), system prompt from character sheet`);
 
             // 4. Query LLM with the simple 2-message format (system + user).
             //    Pass timeout from caller for overall request timeout.
             //    Pass character sheet so identity/personality is preserved.
-            const response = await queryWithLLM(userMessage, contextString, retrieved, {
+            const response = await queryWithLLM(userMessage, contextString, [], {
                 timeoutMs,
                 useCharacterSheet: true,
                 characterSheet: character,

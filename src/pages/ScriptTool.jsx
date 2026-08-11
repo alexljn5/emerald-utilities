@@ -35,7 +35,6 @@ export default function ScriptTool({ route, setRoute }) {
     const [cronInterval, setCronInterval] = useState('');
     const [argsInput, setArgsInput] = useState('');
     const [ahkPath, setAhkPath] = useState('');
-    const [scriptFilter, setScriptFilter] = useState('');
 
     const selectedConfig = useMemo(() => {
         return configScripts.find((script) => script.file === selectedFile) || {
@@ -147,16 +146,6 @@ export default function ScriptTool({ route, setRoute }) {
         scriptManager._log(`[AHK] Path set to: ${nextAhkPath || 'auto-detect'}`);
     }
 
-    const filteredFiles = useMemo(() => {
-        if (!scriptFilter.trim()) return files;
-        const lower = scriptFilter.toLowerCase();
-        return files.filter((file) => {
-            const cfg = configScripts.find((s) => s.file === file);
-            const name = (cfg?.displayName || file).toLowerCase();
-            return name.includes(lower) || file.toLowerCase().includes(lower);
-        });
-    }, [files, configScripts, scriptFilter]);
-
     return (
         <PageShell title="Script Tool" route={route} setRoute={setRoute} leftChildren={
             <>
@@ -164,15 +153,8 @@ export default function ScriptTool({ route, setRoute }) {
                 <button type="button" onClick={() => scriptManager.loadScripts()}>Load Scripts</button>
 
                 <h3>Scripts:</h3>
-                <input
-                    id="scriptFilter"
-                    type="text"
-                    placeholder="Filter scripts..."
-                    value={scriptFilter}
-                    onChange={(e) => setScriptFilter(e.target.value)}
-                />
                 <div id="scriptList">
-                    {filteredFiles.map((file) => {
+                    {files.map((file) => {
                         const cfg = configScripts.find((script) => script.file === file) || {
                             file,
                             displayName: `Run ${file}`,

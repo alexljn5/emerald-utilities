@@ -168,30 +168,6 @@
     min-height: 120px;
 }
 
-/* SCRIPT FILTER */
-#scriptFilter {
-    width: 100%;
-    padding: 0.4rem 0.5rem;
-    background: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    font-family: inherit;
-    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
-    margin-bottom: 0.5rem;
-    box-sizing: border-box;
-}
-
-#scriptFilter:focus {
-    outline: none;
-    border-color: var(--color-accent);
-    box-shadow: 0 0 6px var(--color-shadow);
-}
-
-#scriptFilter::placeholder {
-    color: var(--color-text-muted);
-}
-
 /* SCRIPT LIST */
 #scriptList {
     flex: 1;

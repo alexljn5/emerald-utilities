@@ -234,15 +234,17 @@ export default function TheAI({ route, setRoute }) {
         shouldAutoScroll.current = scrollHeight - scrollTop - clientHeight < 150;
     };
 
-    // Always scroll to bottom when messages change, unless the user
-    // has explicitly scrolled up to read history.
+    // Always scroll to bottom when messages change or on initial load.
+    // Uses a small timeout to ensure the DOM has rendered the new messages
+    // before measuring scrollHeight.
     useEffect(() => {
         if (outputRef.current) {
-            requestAnimationFrame(() => {
+            const timer = setTimeout(() => {
                 if (outputRef.current) {
                     outputRef.current.scrollTop = outputRef.current.scrollHeight;
                 }
-            });
+            }, 50);
+            return () => clearTimeout(timer);
         }
     }, [messages]);
 

@@ -1023,20 +1023,55 @@ export function registerIpcHandlers(context) {
             //    models from copying it verbatim.
             const character = getCharacterSheet(agentId);
 
-            ragLog.info('grok-chat', `LLM context: ${prepared.context.length} messages (RAG: ${retrieved.length} hits not sent to LLM), system prompt from character sheet`);
+            // Build context strings at different sizes for smart fallback.
+            // llama2-uncensored struggles with very long multi-turn context,
+            // so we try a moderate amount first, then reduce if we get empty responses.
+            const buildContextString = (historySlice) => {
+                const recent = historySlice.length > 0
+                    ? `Recent messages:\n${historySlice.map(m => `${m.author === 'alexljn5' ? 'Lune' : m.author}: "${m.content}"`).join('\n')}\n\n`
+                    : '';
+                return recent;
+            };
 
-            // 4. Query LLM with the full conversation context.
-            //    prepareChatRequest already assembled and truncated the context
-            //    to fit within the token budget. Pass the messages array directly
-            //    so the model receives the full conversation flow like a normal AI.
+            const context20 = buildContextString(prepared.history.slice(-20));
+            const context6 = buildContextString(prepared.history.slice(-6));
+            const context2 = buildContextString(prepared.history.slice(-2));
+
+            ragLog.info('grok-chat', `LLM context: trying 20 messages first (RAG: ${retrieved.length} hits not sent to LLM), system prompt from character sheet`);
+
+            // 4. Query LLM with smart context fallback.
+            //    Try 20 messages first for conversation flow, then reduce
+            //    if the model returns empty responses. This avoids the
+            //    "entire chat is buggy" problem while still giving the
+            //    model enough context to maintain consistency.
             //    Pass timeout from caller for overall request timeout.
             //    Pass character sheet so identity/personality is preserved.
-            const response = await queryWithLLM(prepared.context, prepared.conversationId, [], {
+            let response = await queryWithLLM(userMessage, context20, [], {
                 timeoutMs,
                 useCharacterSheet: true,
                 characterSheet: character,
                 fallbackResponse: "I'm having trouble connecting right now. Could you try again in a moment? ♡",
             });
+
+            if (!response || response.trim().length === 0) {
+                ragLog.warn('grok-chat', 'Empty response with 20 messages, retrying with 6 messages');
+                response = await queryWithLLM(userMessage, context6, [], {
+                    timeoutMs,
+                    useCharacterSheet: true,
+                    characterSheet: character,
+                    fallbackResponse: "I'm having trouble connecting right now. Could you try again in a moment? ♡",
+                });
+            }
+
+            if (!response || response.trim().length === 0) {
+                ragLog.warn('grok-chat', 'Empty response with 6 messages, retrying with 2 messages');
+                response = await queryWithLLM(userMessage, context2, [], {
+                    timeoutMs,
+                    useCharacterSheet: true,
+                    characterSheet: character,
+                    fallbackResponse: "I'm having trouble connecting right now. Could you try again in a moment? ♡",
+                });
+            }
 
             // 5. Save assistant response
             const saved = await saveAssistantResponse({

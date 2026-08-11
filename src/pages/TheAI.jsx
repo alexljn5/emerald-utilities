@@ -103,7 +103,6 @@ export default function TheAI({ route, setRoute }) {
                 console.log('[AI] Attempting direct load of active conversation:', activeConvId);
                 const msgResult = await window.electronAPI.invoke('grok-messages', {
                     conversationId: activeConvId,
-                    limit: 100
                 });
                 console.log('[AI] Direct grok-messages result:', msgResult?.ok ? `${msgResult.messages?.length} messages` : msgResult?.error);
                 if (msgResult?.ok && Array.isArray(msgResult.messages) && msgResult.messages.length > 0) {
@@ -137,7 +136,6 @@ export default function TheAI({ route, setRoute }) {
 
                 const msgResult = await window.electronAPI.invoke('grok-messages', {
                     conversationId: latestConv.id,
-                    limit: 100
                 });
                 console.log('[AI] Fallback grok-messages result:', msgResult?.ok ? `${msgResult.messages?.length} messages` : msgResult?.error);
 
@@ -305,6 +303,7 @@ export default function TheAI({ route, setRoute }) {
                 const result = await window.electronAPI.invoke('grok-debug-context', {
                     conversationId,
                     limit: 20,
+                    agentId: selectedAgent,
                 });
                 if (result.ok) {
                     setLastContextDebug(result.debugView);

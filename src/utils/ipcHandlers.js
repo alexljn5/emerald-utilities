@@ -1086,14 +1086,16 @@ export function registerIpcHandlers(context) {
     // ============================================================
 
     // Get debug context view for a conversation
-    ipcMain.handle('grok-debug-context', async (_event, { conversationId, limit = 20 }) => {
+    ipcMain.handle('grok-debug-context', async (_event, { conversationId, limit = 20, agentId = 'cream' }) => {
         try {
             if (!conversationId) {
                 return { ok: false, error: 'conversationId required' };
             }
 
             const history = await getRecentMessages(conversationId, limit);
+            const systemPrompt = getCharacterSystemPrompt(agentId);
             const bundle = buildConversationContext({
+                systemPrompt,
                 userMessage: '(debug view)',
                 recent: history,
                 conversationId,

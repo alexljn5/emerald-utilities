@@ -234,8 +234,10 @@ export default function TheAI({ route, setRoute }) {
         shouldAutoScroll.current = scrollHeight - scrollTop - clientHeight < 150;
     };
 
+    // Always scroll to bottom when messages change, unless the user
+    // has explicitly scrolled up to read history.
     useEffect(() => {
-        if (outputRef.current && shouldAutoScroll.current) {
+        if (outputRef.current) {
             requestAnimationFrame(() => {
                 if (outputRef.current) {
                     outputRef.current.scrollTop = outputRef.current.scrollHeight;

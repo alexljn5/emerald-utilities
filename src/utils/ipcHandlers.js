@@ -1023,12 +1023,12 @@ export function registerIpcHandlers(context) {
             //    models from copying it verbatim.
             const character = getCharacterSheet(agentId);
 
-            // Include only the last 2 messages (user + assistant) so the model
-            // remembers what was just discussed without being overwhelmed.
-            // This is the sweet spot for llama2-uncensored: enough context to
-            // understand the conversation flow, but not so much that it
-            // returns empty responses or repeats history verbatim.
-            const recentHistory = prepared.history.slice(-2);
+            // Include the last 6 messages (up to 3 user + 3 assistant turns)
+            // so the model remembers the immediate conversation flow without
+            // being overwhelmed. This is the sweet spot for llama2-uncensored:
+            // enough context to maintain consistency across a few turns, but
+            // not so much that it returns empty responses or repeats history.
+            const recentHistory = prepared.history.slice(-6);
             const recentContext = recentHistory.length > 0
                 ? `Recent messages:\n${recentHistory.map(m => `${m.author === 'alexljn5' ? 'Lune' : m.author}: "${m.content}"`).join('\n')}\n\n`
                 : '';

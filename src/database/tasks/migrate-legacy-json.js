@@ -206,8 +206,8 @@ export async function migrateLegacyJson(options = {}) {
 
                 // Insert task
                 const taskResult = await client.query(
-                    `INSERT INTO tasks (json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, created_at, updated_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    `INSERT INTO tasks (json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, notification_policy, custom_interval_minutes, created_at, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                      RETURNING id`,
                     [
                         jsonTask.id,
@@ -219,6 +219,8 @@ export async function migrateLegacyJson(options = {}) {
                         jsonTask.due_time || null,
                         jsonTask.reminder_time || null,
                         Boolean(jsonTask.long_term),
+                        'daily',
+                        60,
                         jsonTask.created_at || new Date().toISOString(),
                         jsonTask.updated_at || new Date().toISOString(),
                     ]

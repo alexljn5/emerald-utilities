@@ -9,10 +9,11 @@
  * The task scheduler (main process) and the renderer both call this service.
  *
  * Notification types:
- *   REMINDER  — reminder_time has been reached
- *   DUE_DATE  — due_time has been reached (task is now due)
- *   PRIORITY  — high-priority task requiring attention
- *   DEBUG     — generic debug/test notification
+ *   REMINDER      — reminder_time has been reached
+ *   DUE_DATE      — due_time has been reached (task is now due)
+ *   PRIORITY      — high-priority task requiring attention
+ *   SUBTASK_DUE   — a subtask deadline has been reached
+ *   DEBUG         — generic debug/test notification
  */
 
 import { OSNotifier, getAumid } from './osNotifier.js';
@@ -20,6 +21,18 @@ import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
 import { resolvePath } from './pathResolver.js';
+import {
+    NOTIFICATION_POLICY,
+    shouldNotifyTask,
+    recordNotification,
+    snoozeTask,
+    dismissForToday,
+    dismissUntilTomorrow,
+    dismissPermanently,
+    clearTaskNotificationPolicy,
+    getPolicyCooldown,
+    getPolicyStats,
+} from './notificationPolicy.js';
 
 // ---------------------------------------------------------------------------
 // Notification type constants
@@ -29,18 +42,24 @@ export const NOTIFICATION_TYPE = Object.freeze({
     REMINDER: 'reminder',
     DUE_DATE: 'due_date',
     PRIORITY: 'priority',
+    SUBTASK_DUE: 'subtask_due',
     DEBUG: 'debug',
 });
 
 // ---------------------------------------------------------------------------
-// Duplicate-suppression state
+// Duplicate-suppression + cooldown state
 // ---------------------------------------------------------------------------
 
 const STATE_FILE = path.join(app.getPath('userData'), 'notification-suppression.json');
 
+// Default cooldown: 1 hour between notifications for the same task.
+// This prevents the "Reminder + Due Date + High Priority" spam for a single task.
+const DEFAULT_COOLDOWN_MS = 60 * 60 * 1000;
+
 let suppressionState = {
     notifiedTaskIds: [],
     notifiedReminderIds: [],
+    lastNotifiedAt: {}, // taskId -> ISO timestamp of last notification
 };
 
 function loadSuppressionState() {
@@ -51,11 +70,14 @@ function loadSuppressionState() {
             suppressionState = {
                 notifiedTaskIds: Array.isArray(parsed.notifiedTaskIds) ? parsed.notifiedTaskIds : [],
                 notifiedReminderIds: Array.isArray(parsed.notifiedReminderIds) ? parsed.notifiedReminderIds : [],
+                lastNotifiedAt: typeof parsed.lastNotifiedAt === 'object' && parsed.lastNotifiedAt !== null
+                    ? parsed.lastNotifiedAt
+                    : {},
             };
         }
     } catch {
         // Corrupt or unreadable state file — start fresh
-        suppressionState = { notifiedTaskIds: [], notifiedReminderIds: [] };
+        suppressionState = { notifiedTaskIds: [], notifiedReminderIds: [], lastNotifiedAt: {} };
     }
 }
 
@@ -72,24 +94,35 @@ loadSuppressionState();
 
 const notifiedTaskIds = new Set(suppressionState.notifiedTaskIds);
 const notifiedReminderIds = new Set(suppressionState.notifiedReminderIds);
+const lastNotifiedAt = suppressionState.lastNotifiedAt;
 
 function markTaskNotified(taskId) {
     notifiedTaskIds.add(taskId);
     suppressionState.notifiedTaskIds = [...notifiedTaskIds];
+    suppressionState.lastNotifiedAt = { ...lastNotifiedAt, [taskId]: new Date().toISOString() };
     saveSuppressionState();
 }
 
 function markReminderNotified(taskId) {
     notifiedReminderIds.add(taskId);
     suppressionState.notifiedReminderIds = [...notifiedReminderIds];
+    suppressionState.lastNotifiedAt = { ...lastNotifiedAt, [taskId]: new Date().toISOString() };
     saveSuppressionState();
 }
 
 function clearTaskNotificationState(taskId) {
     notifiedTaskIds.delete(taskId);
     notifiedReminderIds.delete(taskId);
+    delete lastNotifiedAt[taskId];
+    // Also clear any failure tracking for this task
+    Object.keys(lastNotifiedAt).forEach(key => {
+        if (key.startsWith(`failure:${taskId}:`)) {
+            delete lastNotifiedAt[key];
+        }
+    });
     suppressionState.notifiedTaskIds = [...notifiedTaskIds];
     suppressionState.notifiedReminderIds = [...notifiedReminderIds];
+    suppressionState.lastNotifiedAt = { ...lastNotifiedAt };
     saveSuppressionState();
 }
 
@@ -99,6 +132,17 @@ function isTaskNotified(taskId) {
 
 function isReminderNotified(taskId) {
     return notifiedReminderIds.has(taskId);
+}
+
+/**
+ * Check if a task is still in its cooldown period.
+ * Returns true if the task was notified recently and should be skipped.
+ */
+function isInCooldown(taskId, cooldownMs = DEFAULT_COOLDOWN_MS) {
+    const last = lastNotifiedAt[taskId];
+    if (!last) return false;
+    const elapsed = Date.now() - new Date(last).getTime();
+    return elapsed < cooldownMs;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +208,21 @@ function buildPriorityPayload(task) {
     };
 }
 
+function buildSubtaskDuePayload(task, subtask) {
+    const parts = [task.title];
+    if (subtask) {
+        parts.push(`Subtask: ${subtask.title}`);
+    }
+    if (subtask?.due_time) parts.push(`Due: ${new Date(subtask.due_time).toLocaleString()}`);
+    if (subtask?.reminder_time) parts.push(`Reminder: ${new Date(subtask.reminder_time).toLocaleString()}`);
+    return {
+        title: 'Subtask deadline',
+        message: parts.join('\n'),
+        urgency: task.priority === 'red' ? 'critical' : task.priority === 'orange' ? 'normal' : 'low',
+        icon: NOTIFICATION_ICON,
+    };
+}
+
 function buildDebugPayload() {
     return {
         title: 'Debug Notification',
@@ -179,13 +238,13 @@ function buildDebugPayload() {
 
 /**
  * Send a task notification of the given type.
- * Duplicate-suppression is applied automatically.
+ * Policy-aware: respects the task's notification_policy and state.
  *
- * @param {Object} task - Task object with at least { id, title, priority }
+ * @param {Object} task - Task object with at least { id, title, priority, notification_policy }
  * @param {string} type - One of NOTIFICATION_TYPE
- * @returns {Promise<{ok: boolean, state: string, error?: string, provider?: string}>}
+ * @returns {Promise<{ok: boolean, state: string, error?: string, provider?: string, policyReason?: string}>}
  */
-export async function sendTaskNotification(task, type) {
+export async function sendTaskNotification(task, type, options = {}, subtask = null) {
     // Debug notifications do not require a task object
     if (type !== NOTIFICATION_TYPE.DEBUG && (!task || !task.id)) {
         return { ok: false, state: 'failed', error: 'Missing task data' };
@@ -196,14 +255,28 @@ export async function sendTaskNotification(task, type) {
         return { ok: false, state: 'failed', error: `Unknown notification type: ${type}` };
     }
 
-    // Duplicate suppression (skip for debug notifications)
-    if (type === NOTIFICATION_TYPE.REMINDER) {
-        if (isReminderNotified(task.id)) {
-            return { ok: false, state: 'duplicate', error: 'Reminder already notified' };
+    // Policy check: should this task be notified?
+    if (type !== NOTIFICATION_TYPE.DEBUG && task?.id) {
+        const policyCheck = shouldNotifyTask(task);
+        if (!policyCheck.shouldNotify) {
+            return { ok: false, state: 'policy', error: policyCheck.reason, policyReason: policyCheck.reason };
         }
-    } else if (type !== NOTIFICATION_TYPE.DEBUG) {
-        if (isTaskNotified(task.id)) {
-            return { ok: false, state: 'duplicate', error: 'Task already notified' };
+    }
+
+    // Legacy cooldown check (kept for backward compatibility)
+    const cooldownMs = options.cooldownMs ?? getPolicyCooldown(task?.notification_policy || NOTIFICATION_POLICY.DAILY, task?.custom_interval_minutes);
+
+    if (type !== NOTIFICATION_TYPE.DEBUG && task?.id && isInCooldown(task.id, cooldownMs)) {
+        return { ok: false, state: 'cooldown', error: `Task is in cooldown period (${Math.round(cooldownMs / 60000)}min)` };
+    }
+
+    // Track failures to prevent log spam
+    const failureKey = `failure:${task?.id || 'debug'}:${type}`;
+    if (!options.force && lastNotifiedAt[failureKey]) {
+        const elapsed = Date.now() - new Date(lastNotifiedAt[failureKey]).getTime();
+        // Only log the same failure once per 5 minutes
+        if (elapsed < 5 * 60 * 1000) {
+            return { ok: false, state: 'suppressed', error: 'Failure already logged recently' };
         }
     }
 
@@ -218,6 +291,9 @@ export async function sendTaskNotification(task, type) {
         case NOTIFICATION_TYPE.PRIORITY:
             payload = buildPriorityPayload(task);
             break;
+        case NOTIFICATION_TYPE.SUBTASK_DUE:
+            payload = buildSubtaskDuePayload(task, subtask);
+            break;
         case NOTIFICATION_TYPE.DEBUG:
             payload = buildDebugPayload();
             break;
@@ -225,20 +301,36 @@ export async function sendTaskNotification(task, type) {
             return { ok: false, state: 'failed', error: `Unhandled type: ${type}` };
     }
 
+    // Record notification attempt BEFORE the OS call.
+    // This prevents a retry loop when the OS notification fails permanently
+    // (e.g. SnoreToast AUMID mismatch / exit code 3). The cooldown starts
+    // from the attempt time, not the success time.
+    if (type !== NOTIFICATION_TYPE.DEBUG && task?.id) {
+        recordNotification(task.id);
+    }
+    if (type === NOTIFICATION_TYPE.REMINDER) {
+        markReminderNotified(task.id);
+    } else if (type !== NOTIFICATION_TYPE.DEBUG) {
+        markTaskNotified(task.id);
+    }
+
     try {
         const result = await OSNotifier.notify(payload);
 
         if (result.ok) {
-            // Mark as notified only on success
-            if (type === NOTIFICATION_TYPE.REMINDER) {
-                markReminderNotified(task.id);
-            } else if (type !== NOTIFICATION_TYPE.DEBUG) {
-                markTaskNotified(task.id);
-            }
+            // Clear failure tracking on success
+            delete lastNotifiedAt[failureKey];
+            suppressionState.lastNotifiedAt = { ...lastNotifiedAt };
+            saveSuppressionState();
         }
 
         return result;
     } catch (err) {
+        // Record failure to prevent log spam
+        lastNotifiedAt[failureKey] = new Date().toISOString();
+        suppressionState.lastNotifiedAt = { ...lastNotifiedAt };
+        saveSuppressionState();
+
         console.error(`[NotificationService] ${type} notification threw:`, err.message);
         return { ok: false, state: 'failed', error: err.message };
     }
@@ -281,14 +373,53 @@ export async function sendTestNotification(task, type) {
  */
 export function resetTaskNotificationState(taskId) {
     clearTaskNotificationState(taskId);
+    clearTaskNotificationPolicy(taskId);
 }
 
 /**
- * Get current suppression statistics for diagnostics.
+ * Snooze a task notification.
+ * @param {string} taskId - Task ID
+ * @param {number} minutes - Snooze duration in minutes
+ */
+export function snoozeTaskNotification(taskId, minutes = 60) {
+    return snoozeTask(taskId, minutes);
+}
+
+/**
+ * Dismiss a task notification for today.
+ * @param {string} taskId - Task ID
+ */
+export function dismissTaskForToday(taskId) {
+    return dismissForToday(taskId);
+}
+
+/**
+ * Dismiss a task notification until tomorrow.
+ * @param {string} taskId - Task ID
+ */
+export function dismissTaskUntilTomorrow(taskId) {
+    return dismissUntilTomorrow(taskId);
+}
+
+/**
+ * Dismiss a task notification permanently.
+ * @param {string} taskId - Task ID
+ */
+export function dismissTaskPermanently(taskId) {
+    return dismissPermanently(taskId);
+}
+
+/**
+ * Get combined notification statistics for diagnostics.
  */
 export function getNotificationStats() {
+    const failureCount = Object.keys(lastNotifiedAt).filter(k => k.startsWith('failure:')).length;
+    const policyStats = getPolicyStats();
     return {
         notifiedTaskCount: notifiedTaskIds.size,
         notifiedReminderCount: notifiedReminderIds.size,
+        cooldownCount: Object.keys(lastNotifiedAt).filter(k => !k.startsWith('failure:')).length,
+        failureCount,
+        ...policyStats,
     };
 }

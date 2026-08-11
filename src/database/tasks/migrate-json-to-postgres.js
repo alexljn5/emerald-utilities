@@ -187,8 +187,9 @@ export async function migrateJsonToPostgres(options = {}) {
                 if (cmp > 0) {
                     await client.query(
                         `UPDATE tasks SET title = $1, description = $2, completed = $3, archived = $4,
-                         priority = $5, due_time = $6, reminder_time = $7, long_term = $8, updated_at = $9
-                         WHERE json_id = $10`,
+                         priority = $5, due_time = $6, reminder_time = $7, long_term = $8,
+                         notification_policy = $9, custom_interval_minutes = $10, updated_at = $11
+                         WHERE json_id = $12`,
                         [
                             jsonTask.title,
                             jsonTask.description || null,
@@ -198,6 +199,8 @@ export async function migrateJsonToPostgres(options = {}) {
                             jsonTask.due_time || null,
                             jsonTask.reminder_time || null,
                             Boolean(jsonTask.long_term),
+                            'daily',
+                            60,
                             jsonTask.updated_at || new Date().toISOString(),
                             jsonTask.id
                         ]
@@ -208,8 +211,8 @@ export async function migrateJsonToPostgres(options = {}) {
             }
 
             await client.query(
-                `INSERT INTO tasks (json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                `INSERT INTO tasks (json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, notification_policy, custom_interval_minutes, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
                 [
                     jsonTask.id,
                     jsonTask.title,
@@ -220,6 +223,8 @@ export async function migrateJsonToPostgres(options = {}) {
                     jsonTask.due_time || null,
                     jsonTask.reminder_time || null,
                     Boolean(jsonTask.long_term),
+                    'daily',
+                    60,
                     jsonTask.created_at || new Date().toISOString(),
                     jsonTask.updated_at || new Date().toISOString()
                 ]

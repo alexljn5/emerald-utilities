@@ -7,7 +7,8 @@ import {
     resolveModsFolder
 } from '../core/modUpdater.js';
 import { autoSetupRAG } from '../database/rag-auto-setup.js';
-import { queryRAG, queryRAGWithContext, assembleContext, queryWithLLM } from '../database/rag-query.js';
+import { queryRAG, assembleContext, queryWithLLM } from '../database/rag-query.js';
+import { getCharacterSheet } from '../database/character-sheets.js';
 import {
     prepareChatRequest,
     saveAssistantResponse,
@@ -17,7 +18,9 @@ import {
     deleteConversation,
     getMessages,
     buildConversationContext,
+    buildConversationDebugView,
 } from '../database/ai-persistence.js';
+import scheduledTaskScheduler, { ScheduledTask } from '../core/scheduledTaskScheduler.js';
 import { enqueuePacket, flushQueue, getPersistenceStatus, recover as recoverNetwork } from '../database/network-persistence.js';
 import {
     getNotes, getNoteById, createNote, updateNote, deleteNote,
@@ -25,6 +28,13 @@ import {
     getTaskTags, addTaskTag, removeTaskTag,
     getPendingReminders, markReminderHandled,
     getTasksConnectionInfo
+} from '../database/tasks/tasks-service.js';
+import {
+    getSubtasks,
+    createSubtask,
+    updateSubtask,
+    deleteSubtask,
+    getSubtaskStats,
 } from '../database/tasks/tasks-service.js';
 import { ragLog } from './logger.js';
 import { shell } from 'electron';
@@ -41,6 +51,20 @@ import {
     resetTaskNotificationState,
     NOTIFICATION_TYPE,
 } from './notificationService.js';
+import {
+    NOTIFICATION_POLICY,
+    shouldNotifyTask,
+    recordNotification,
+    snoozeTask,
+    dismissForToday,
+    dismissUntilTomorrow,
+    dismissPermanently,
+    clearTaskNotificationPolicy,
+    setCustomInterval,
+    getCustomInterval,
+    getAvailablePolicies,
+    getPolicyStats,
+} from './notificationPolicy.js';
 import { DATABASE_MODE } from '../globals.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -267,6 +291,16 @@ export function registerIpcHandlers(context) {
         const safeFile = sanitizeScriptFile(file);
         if (!safeFile) return { ok: false, error: 'Invalid script file' };
 
+        // Platform check: prevent executing Windows-only scripts on Linux/macOS
+        const isWindows = process.platform === 'win32';
+        const windowsOnlyExts = /\.(bat|exe|ahk|ps1)$/i;
+        if (!isWindows && windowsOnlyExts.test(safeFile)) {
+            return {
+                ok: false,
+                error: `Cannot execute ${safeFile} on ${process.platform}. This script is Windows-only.`
+            };
+        }
+
         const config = await readConfig();
         const scriptPath = path.join(getScriptsDir(config), safeFile);
         return startScript(safeFile, scriptPath);
@@ -375,8 +409,21 @@ export function registerIpcHandlers(context) {
             }
 
             const allFiles = await fsPromises.readdir(scriptsDir);
+
+            // Platform-aware script filtering:
+            //   .js, .sh  → cross-platform
+            //   .bat, .exe, .ahk, .ps1 → Windows-only
+            // On Linux/macOS, hide Windows-only scripts so they don't appear
+            // in the script manager as "runnable" when they can't execute.
+            const isWindows = process.platform === 'win32';
+            const windowsOnlyExts = /\.(bat|exe|ahk|ps1)$/i;
+
             const files = allFiles
-                .filter((file) => /\.(js|sh|bat|exe|ahk|ps1)$/i.test(file))
+                .filter((file) => {
+                    if (!/\.(js|sh|bat|exe|ahk|ps1)$/i.test(file)) return false;
+                    if (!isWindows && windowsOnlyExts.test(file)) return false;
+                    return true;
+                })
                 .sort((a, b) => a.localeCompare(b));
 
             pushScriptLog(`[Scripts] dir entries: ${allFiles.length}, matched scripts: ${files.length}`);
@@ -385,10 +432,10 @@ export function registerIpcHandlers(context) {
             }
 
             await ensureConfigEntries(files);
-            return { files, config: await readConfig(), scriptsDir };
+            return { files, config: await readConfig(), scriptsDir, platform: process.platform };
         } catch (err) {
             pushScriptLog(`[Scripts] List error: ${err.message}`);
-            return { files: [], config: await readConfig(), scriptsDir: getDefaultScriptsDir() };
+            return { files: [], config: await readConfig(), scriptsDir: getDefaultScriptsDir(), platform: process.platform };
         }
     });
 
@@ -926,19 +973,23 @@ export function registerIpcHandlers(context) {
     // ============================================================
 
     // Grok Chat Handler - full persistence loop
-    ipcMain.handle('grok-chat', async (_event, { conversationId, userMessage, systemPrompt }) => {
+    ipcMain.handle('grok-chat', async (_event, { conversationId, userMessage, systemPrompt, agentId = 'cream', timeoutMs = 120000, contextMode, maxContextTokens, reservedOutputTokens }) => {
         try {
             if (!userMessage || typeof userMessage !== 'string') {
                 return { ok: false, error: 'Invalid message' };
             }
 
-            ragLog.info('grok-chat', `Processing message for conversation ${conversationId || '(new)'}: "${userMessage.substring(0, 50)}..."`);
+            ragLog.info('grok-chat', `Processing message for conversation ${conversationId || '(new)'} with agent ${agentId}: "${userMessage.substring(0, 50)}..."`);
 
             // 1. Prepare request (get/create conversation, save user message, get history)
             const prepared = await prepareChatRequest({
                 conversationId,
                 userMessage,
                 systemPrompt,
+                agentId,
+                contextMode,
+                maxContextTokens,
+                reservedOutputTokens,
             });
 
             ragLog.info('grok-chat', `Conversation: ${prepared.conversationId}, history messages: ${prepared.history.length}`);
@@ -951,28 +1002,36 @@ export function registerIpcHandlers(context) {
             //    IMPORTANT: Pass conversationId to prevent cross-conversation contamination.
             let retrieved = [];
             try {
-                retrieved = await queryRAGWithContext(userMessage, 8, 2, prepared.conversationId);
-                ragLog.info('grok-chat', `RAG retrieved ${retrieved.length} hits for conversation ${prepared.conversationId}`);
+                // Use queryRAG (individual messages, no windows) like the original code.
+                // queryRAGWithContext returns message windows that smaller models
+                // tend to copy verbatim instead of generating fresh responses.
+                retrieved = await queryRAG(userMessage, 8);
+                ragLog.info('grok-chat', `RAG retrieved ${retrieved.length} messages`);
             } catch (ragErr) {
                 // RAG failure should not block a normal chat reply from recent
                 // history. Log it and continue with recent context only.
                 ragLog.warn('grok-chat', ragErr.message, 'RAG context retrieval skipped; using recent history only');
             }
 
-            // 3. Build the unified, structured context bundle.
-            const bundle = buildConversationContext({
-                systemPrompt,
-                userMessage,
-                recent: prepared.history,
-                retrieved,
-                conversationId: prepared.conversationId,
+            // 3. Build context for the LLM using the OLD simple signature.
+            //    The new multi-message context assembly overwhelms smaller models
+            //    like llama2-uncensored. Revert to the original approach:
+            //    system prompt + user prompt with embedded RAG context.
+            //    Database persistence is preserved separately above.
+            const character = getCharacterSheet(agentId);
+            const contextString = assembleContext(retrieved);
+
+            ragLog.info('grok-chat', `LLM context: ${retrieved.length} RAG messages, system prompt from character sheet`);
+
+            // 4. Query LLM with the simple 2-message format (system + user).
+            //    Pass timeout from caller for overall request timeout.
+            //    Pass character sheet so identity/personality is preserved.
+            const response = await queryWithLLM(userMessage, contextString, retrieved, {
+                timeoutMs,
+                useCharacterSheet: true,
+                characterSheet: character,
+                fallbackResponse: "I'm having trouble connecting right now. Could you try again in a moment? ♡",
             });
-
-            ragLog.info('grok-chat', `Context bundle: system=${bundle.system.length}, recent=${bundle.recent.length}, retrieved=${bundle.retrieved.length}, current=${bundle.current ? 1 : 0}, total=${bundle.messages.length}`);
-
-            // 4. Query LLM with the full ordered message array (system +
-            //    retrieved older context + recent history + current message).
-            const response = await queryWithLLM(bundle.messages, prepared.conversationId);
 
             // 5. Save assistant response
             const saved = await saveAssistantResponse({
@@ -987,17 +1046,83 @@ export function registerIpcHandlers(context) {
                 response,
                 conversationId: prepared.conversationId,
                 messageId: saved.messageId,
+                contextDebug: {
+                    mode: 'legacy-simple',
+                    systemPrompt: !!character.systemPrompt,
+                    ragMessages: retrieved.length,
+                    note: 'Using simple 2-message context (system + user) for compatibility with smaller models',
+                },
             };
         } catch (err) {
             ragLog.error('grok-chat', err, 'Chat persistence failed');
             const msg = `${err.message} ${err.cause?.code || ''}`;
-            const isConn = /ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|socket hang up/i.test(msg);
+            const isConn = /ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|socket hang up|aborted/i.test(msg);
             if (isConn && /1143[0-9]|ollama|embed|chat/i.test(msg + (err.stack || ''))) {
                 return { ok: false, unavailable: 'ollama', error: 'AI service unavailable. Check that Ollama is running and reachable.' };
             }
             if (isConn) {
                 return { ok: false, unavailable: 'database', error: 'Database unavailable. Check the connection to the server.' };
             }
+            return { ok: false, error: err.message };
+        }
+    });
+
+    // ============================================================
+    // AI Debug Handlers
+    // ============================================================
+
+    // Get debug context view for a conversation
+    ipcMain.handle('grok-debug-context', async (_event, { conversationId, limit = 20 }) => {
+        try {
+            if (!conversationId) {
+                return { ok: false, error: 'conversationId required' };
+            }
+
+            const history = await getRecentMessages(conversationId, limit);
+            const bundle = buildConversationContext({
+                userMessage: '(debug view)',
+                recent: history,
+                conversationId,
+                options: {
+                    maxTokens: contextConfig.maxContextTokens,
+                    contextMode: contextConfig.contextMode,
+                    reservedOutputTokens: contextConfig.reservedOutputTokens,
+                },
+            });
+
+            const debugView = buildConversationDebugView(bundle);
+            const debugText = buildDebugContextView(bundle);
+
+            return {
+                ok: true,
+                debugView,
+                debugText,
+            };
+        } catch (err) {
+            ragLog.error('grok-debug-context', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    // Get AI configuration info (no secrets)
+    ipcMain.handle('grok-debug-config', async () => {
+        try {
+            return {
+                ok: true,
+                config: {
+                    provider: AI_PROVIDER,
+                    chatModel: aiConfig.chatModel,
+                    embeddingModel: aiConfig.embeddingModel,
+                    chatEndpoint: aiConfig.chatEndpoint.replace(/\/api\/chat$/, ''),
+                    localAiEnabled: LOCAL_AI_ENABLED,
+                    contextMode: contextConfig.contextMode,
+                    maxContextTokens: contextConfig.maxContextTokens,
+                    reservedOutputTokens: contextConfig.reservedOutputTokens,
+                    contextMessages: DEFAULT_CONTEXT_MESSAGES,
+                },
+            };
+        } catch (err) {
+            ragLog.error('grok-debug-config', err);
             return { ok: false, error: err.message };
         }
     });
@@ -1573,6 +1698,239 @@ export function registerIpcHandlers(context) {
         } catch (err) {
             console.error('[Tasks] removeTaskTag error:', err);
             return { ok: false, error: err.message };
+        }
+    });
+
+    // --- Notification Policy ---
+    ipcMain.handle('notification-policy:snooze', async (_event, { taskId, minutes = 60 }) => {
+        try {
+            const until = snoozeTask(taskId, minutes);
+            return { ok: true, snoozedUntil: until };
+        } catch (err) {
+            console.error('[NotificationPolicy] snooze error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('notification-policy:dismiss-today', async (_event, { taskId }) => {
+        try {
+            const until = dismissForToday(taskId);
+            return { ok: true, dismissedUntil: until };
+        } catch (err) {
+            console.error('[NotificationPolicy] dismiss-today error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('notification-policy:dismiss-tomorrow', async (_event, { taskId }) => {
+        try {
+            const until = dismissUntilTomorrow(taskId);
+            return { ok: true, dismissedUntil: until };
+        } catch (err) {
+            console.error('[NotificationPolicy] dismiss-tomorrow error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('notification-policy:dismiss-permanently', async (_event, { taskId }) => {
+        try {
+            dismissPermanently(taskId);
+            return { ok: true };
+        } catch (err) {
+            console.error('[NotificationPolicy] dismiss-permanently error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('notification-policy:clear', async (_event, { taskId }) => {
+        try {
+            clearTaskNotificationPolicy(taskId);
+            return { ok: true };
+        } catch (err) {
+            console.error('[NotificationPolicy] clear error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('notification-policy:set-interval', async (_event, { taskId, minutes }) => {
+        try {
+            setCustomInterval(taskId, minutes);
+            return { ok: true };
+        } catch (err) {
+            console.error('[NotificationPolicy] set-interval error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('notification-policy:get-interval', async (_event, { taskId }) => {
+        try {
+            const interval = getCustomInterval(taskId);
+            return { ok: true, interval };
+        } catch (err) {
+            console.error('[NotificationPolicy] get-interval error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('notification-policy:get-available', async () => {
+        try {
+            const policies = getAvailablePolicies();
+            return { ok: true, policies };
+        } catch (err) {
+            console.error('[NotificationPolicy] get-available error:', err);
+            return { ok: false, error: err.message, policies: [] };
+        }
+    });
+
+    ipcMain.handle('notification-policy:get-stats', async () => {
+        try {
+            const stats = getPolicyStats();
+            return { ok: true, stats };
+        } catch (err) {
+            console.error('[NotificationPolicy] get-stats error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    // --- Scheduled Tasks ---
+    ipcMain.handle('scheduler:schedule', async (_event, options) => {
+        try {
+            const task = scheduledTaskScheduler.schedule(options);
+            return { ok: true, task: { id: task.id, name: task.name, nextRun: task.nextRun } };
+        } catch (err) {
+            console.error('[Scheduler] schedule error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:cancel', async (_event, { taskId }) => {
+        try {
+            scheduledTaskScheduler.cancel(taskId);
+            return { ok: true };
+        } catch (err) {
+            console.error('[Scheduler] cancel error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:run-now', async (_event, { taskId }) => {
+        try {
+            const result = await scheduledTaskScheduler.runNow(taskId);
+            return result;
+        } catch (err) {
+            console.error('[Scheduler] run-now error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:get-status', async (_event, { taskId }) => {
+        try {
+            const status = scheduledTaskScheduler.getStatus(taskId);
+            return { ok: true, status };
+        } catch (err) {
+            console.error('[Scheduler] get-status error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:get-all-status', async () => {
+        try {
+            const statuses = scheduledTaskScheduler.getAllStatus();
+            return { ok: true, statuses };
+        } catch (err) {
+            console.error('[Scheduler] get-all-status error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:enable', async (_event, { taskId }) => {
+        try {
+            scheduledTaskScheduler.enable(taskId);
+            return { ok: true };
+        } catch (err) {
+            console.error('[Scheduler] enable error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:disable', async (_event, { taskId }) => {
+        try {
+            scheduledTaskScheduler.disable(taskId);
+            return { ok: true };
+        } catch (err) {
+            console.error('[Scheduler] disable error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:update', async (_event, { taskId, updates }) => {
+        try {
+            const task = scheduledTaskScheduler.update(taskId, updates);
+            return { ok: true, task: task ? { id: task.id, name: task.name, nextRun: task.nextRun } : null };
+        } catch (err) {
+            console.error('[Scheduler] update error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('scheduler:get-diagnostics', async () => {
+        try {
+            const diagnostics = scheduledTaskScheduler.getDiagnostics();
+            return { ok: true, diagnostics };
+        } catch (err) {
+            console.error('[Scheduler] get-diagnostics error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    // --- Subtasks ---
+    ipcMain.handle('tasks:getSubtasks', async (_event, { taskId }) => {
+        try {
+            const subtasks = await getSubtasks(taskId);
+            return { ok: true, subtasks };
+        } catch (err) {
+            console.error('[Tasks] getSubtasks error:', err);
+            return { ok: false, error: err.message, subtasks: [] };
+        }
+    });
+
+    ipcMain.handle('tasks:createSubtask', async (_event, { taskId, subtask }) => {
+        try {
+            const created = await createSubtask(taskId, subtask);
+            return { ok: true, subtask: created };
+        } catch (err) {
+            console.error('[Tasks] createSubtask error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('tasks:updateSubtask', async (_event, { id, updates }) => {
+        try {
+            const updated = await updateSubtask(id, updates);
+            return { ok: true, subtask: updated };
+        } catch (err) {
+            console.error('[Tasks] updateSubtask error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('tasks:deleteSubtask', async (_event, { id }) => {
+        try {
+            const deleted = await deleteSubtask(id);
+            return { ok: true, subtask: deleted };
+        } catch (err) {
+            console.error('[Tasks] deleteSubtask error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('tasks:getSubtaskStats', async (_event, { taskId }) => {
+        try {
+            const stats = await getSubtaskStats(taskId);
+            return { ok: true, stats };
+        } catch (err) {
+            console.error('[Tasks] getSubtaskStats error:', err);
+            return { ok: false, error: err.message, stats: { total: 0, completed: 0 } };
         }
     });
 

@@ -188,6 +188,8 @@ export async function createJsonTask(task) {
         due_time: task.due_time || null,
         reminder_time: task.reminder_time || null,
         long_term: Boolean(task.long_term),
+        notification_policy: task.notification_policy || 'daily',
+        custom_interval_minutes: task.custom_interval_minutes || 60,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
     };

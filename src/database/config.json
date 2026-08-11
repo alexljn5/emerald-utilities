@@ -27,12 +27,17 @@
         "ollama": {
             "host": "http://192.168.2.27:11434",
             "embeddingModel": "nomic-embed-text",
-            "chatModel": "llama3.2"
+            "chatModel": "llama2-uncensored",
+            "contextWindow": 8192
         },
         "lmstudio": {
             "host": "http://localhost:1234",
             "embeddingModel": "text-embedding-nomic",
-            "chatModel": "llama-3.2-3b-instruct"
+            "chatModel": "llama-3.2-3b-instruct",
+            "contextWindow": 8192
         }
-    }
+    },
+    "contextMode": "maximum",
+    "maxContextTokens": 32768,
+    "reservedOutputTokens": 2048
 }

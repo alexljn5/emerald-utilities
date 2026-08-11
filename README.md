@@ -40,7 +40,7 @@ Emerald Utilities is a personal desktop utility tool built with **Electron + Rea
                         │  ┌───────────────────────┐   ┌─────────────────┐ │
                         │  │ Docker: emerald-postgres│   │ Ollama (screen) │ │
                         │  │  PostgreSQL 16 +        │   │  nomic-embed-... │ │
-                        │  │  pgvector               │◄──┤  llama3.2        │ │
+                        │  │  pgvector               │◄──┤  llama2-uncensored │ │
                         │  │  DB: emerald_utilities  │   └─────────────────┘ │
                         │  └───────────────────────┘                        │
                         └───────────────────────────────────────────────────┘
@@ -58,7 +58,7 @@ Emerald Utilities is a personal desktop utility tool built with **Electron + Rea
 
 - **Node.js 18+** (developed on 24.x).
 - **Docker** (for the PostgreSQL + pgvector container).
-- **Ollama** with the `nomic-embed-text` (embeddings) and `llama3.2` (chat) models pulled.
+- **Ollama** with the `nomic-embed-text` (embeddings) and `llama2-uncensored` (chat) models pulled.
 
 ## Configuration
 
@@ -77,7 +77,7 @@ Key variables (see [`.env.example`](src/database/.env.example) for the full list
 | `AI_PROVIDER` | `ollama` \| `grok` \| `openai` \| `lmstudio` |
 | `OLLAMA_HOST` | Ollama endpoint (e.g. `http://192.168.2.27:11434`) |
 | `OLLAMA_EMBED_MODEL` / `OLLAMA_EMBED_DIM` | embedding model + dimension (default `nomic-embed-text` / `768`) |
-| `OLLAMA_CHAT_MODEL` | chat model (default `llama3.2`) |
+| `OLLAMA_CHAT_MODEL` | chat model (default `llama2-uncensored`) |
 | `RAG_EMBED_BATCH` / `RAG_MAX_EMBED` | embedding batch size / optional per-run cap |
 | `EMERALD_DEBUG` / `NO_COLOR` | verbose logs / disable ANSI colors |
 

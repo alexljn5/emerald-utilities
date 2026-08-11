@@ -23,12 +23,18 @@ import {
     getPendingReminders,
     markReminderHandled,
     getTasks,
+    getSubtasks,
 } from './database/tasks/tasks-service.js';
 import {
     sendTaskNotification,
     sendDebugNotification,
     NOTIFICATION_TYPE,
 } from './utils/notificationService.js';
+import {
+    NOTIFICATION_POLICY,
+    shouldNotifyTask,
+    recordNotification,
+} from './utils/notificationPolicy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1477,25 +1483,46 @@ function stopTaskNotificationScheduler() {
 
 async function checkTaskNotifications() {
     try {
+        // Track which tasks already got a notification this cycle to prevent
+        // multiple notification types for the same task.
+        const notifiedThisCycle = new Set();
+        // Track subtask notifications separately to avoid spamming
+        const notifiedSubtasksThisCycle = new Set();
+
         // 1) Check for pending reminders (reminder_time reached)
+        //    Reminders have the highest priority — if a reminder fires, skip
+        //    due-date and priority notifications for the same task.
         const reminders = await getPendingReminders();
         for (const reminder of reminders) {
+            if (notifiedThisCycle.has(reminder.id)) continue;
+
+            // Policy check
+            const policyCheck = shouldNotifyTask(reminder);
+            if (!policyCheck.shouldNotify) {
+                console.log(`[TaskNotifications] Reminder skipped for task ${reminder.id}: ${policyCheck.reason}`);
+                continue;
+            }
+
             const result = await sendTaskNotification(reminder, NOTIFICATION_TYPE.REMINDER);
             if (result.ok) {
                 await markReminderHandled(reminder.id);
+                notifiedThisCycle.add(reminder.id);
+                recordNotification(reminder.id);
                 console.log(`[TaskNotifications] Reminder sent for task ${reminder.id}: ${reminder.title}`);
-            } else if (result.state === 'duplicate') {
-                // Already notified — skip
+            } else if (result.state === 'duplicate' || result.state === 'cooldown' || result.state === 'policy') {
+                // Already notified, in cooldown, or blocked by policy — skip
             } else {
                 console.warn(`[TaskNotifications] Reminder notification failed for task ${reminder.id}:`, result.error);
             }
         }
 
         // 2) Check for overdue tasks (due_date reached)
+        //    Only send if the task didn't already get a reminder this cycle.
         const tasks = await getTasks();
         const now = new Date().toISOString();
         for (const task of tasks) {
             if (task.completed || task.archived) continue;
+            if (notifiedThisCycle.has(task.id)) continue;
             if (!task.due_time) continue;
 
             const dueDate = new Date(task.due_time);
@@ -1503,25 +1530,111 @@ async function checkTaskNotifications() {
 
             // Send due-date notification if task is due
             if (dueDate <= nowDate) {
+                // Policy check
+                const policyCheck = shouldNotifyTask(task);
+                if (!policyCheck.shouldNotify) {
+                    console.log(`[TaskNotifications] Due-date skipped for task ${task.id}: ${policyCheck.reason}`);
+                    continue;
+                }
+
                 const result = await sendTaskNotification(task, NOTIFICATION_TYPE.DUE_DATE);
                 if (result.ok) {
+                    notifiedThisCycle.add(task.id);
+                    recordNotification(task.id);
                     console.log(`[TaskNotifications] Due-date notification sent for task ${task.id}: ${task.title}`);
-                } else if (result.state !== 'duplicate') {
+                } else if (result.state !== 'duplicate' && result.state !== 'cooldown' && result.state !== 'policy') {
                     console.warn(`[TaskNotifications] Due-date notification failed for task ${task.id}:`, result.error);
                 }
+                continue;
             }
 
             // 3) Send priority notification for high-priority tasks
-            // that are due within 1 hour or already overdue
+            // that are due within 1 hour or already overdue.
+            // Only send if the task didn't already get a reminder or due-date notification.
+            if (notifiedThisCycle.has(task.id)) continue;
             if (task.priority === 'red' || task.priority === 'orange') {
                 const oneHourMs = 60 * 60 * 1000;
                 const diff = dueDate.getTime() - nowDate.getTime();
                 if (diff <= oneHourMs) {
+                    // Policy check
+                    const policyCheck = shouldNotifyTask(task);
+                    if (!policyCheck.shouldNotify) {
+                        console.log(`[TaskNotifications] Priority skipped for task ${task.id}: ${policyCheck.reason}`);
+                        continue;
+                    }
+
                     const result = await sendTaskNotification(task, NOTIFICATION_TYPE.PRIORITY);
                     if (result.ok) {
+                        notifiedThisCycle.add(task.id);
+                        recordNotification(task.id);
                         console.log(`[TaskNotifications] Priority notification sent for task ${task.id}: ${task.title}`);
-                    } else if (result.state !== 'duplicate') {
+                    } else if (result.state !== 'duplicate' && result.state !== 'cooldown' && result.state !== 'policy') {
                         console.warn(`[TaskNotifications] Priority notification failed for task ${task.id}:`, result.error);
+                    }
+                }
+            }
+        }
+
+        // 4) Check subtask deadlines
+        //    Notify about subtask due dates and reminders independently of the parent task.
+        //    Legacy tasks without subtasks are unaffected (getSubtasks returns []).
+        const oneHourMs = 60 * 60 * 1000;
+        for (const task of tasks) {
+            if (task.completed || task.archived) continue;
+            const subtasks = await getSubtasks(task.id);
+            if (!subtasks.length) continue;
+
+            const nowDate = new Date(now);
+            for (const subtask of subtasks) {
+                if (subtask.completed) continue;
+                const subtaskKey = `${task.id}:${subtask.id}`;
+                if (notifiedSubtasksThisCycle.has(subtaskKey)) continue;
+
+                // Check subtask reminder
+                if (subtask.reminder_time) {
+                    const reminderDate = new Date(subtask.reminder_time);
+                    if (reminderDate <= nowDate) {
+                        const policyCheck = shouldNotifyTask(task);
+                        if (policyCheck.shouldNotify) {
+                            const result = await sendTaskNotification(task, NOTIFICATION_TYPE.REMINDER, {}, subtask);
+                            if (result.ok) {
+                                notifiedSubtasksThisCycle.add(subtaskKey);
+                                recordNotification(task.id);
+                                console.log(`[TaskNotifications] Subtask reminder sent for task ${task.id}: ${subtask.title}`);
+                            }
+                        }
+                        continue;
+                    }
+                }
+
+                // Check subtask due date
+                if (subtask.due_time) {
+                    const subtaskDueDate = new Date(subtask.due_time);
+                    if (subtaskDueDate <= nowDate) {
+                        // Overdue subtask
+                        const policyCheck = shouldNotifyTask(task);
+                        if (policyCheck.shouldNotify) {
+                            const result = await sendTaskNotification(task, NOTIFICATION_TYPE.SUBTASK_DUE, {}, subtask);
+                            if (result.ok) {
+                                notifiedSubtasksThisCycle.add(subtaskKey);
+                                recordNotification(task.id);
+                                console.log(`[TaskNotifications] Subtask due notification sent for task ${task.id}: ${subtask.title}`);
+                            }
+                        }
+                    } else if (!notifiedThisCycle.has(task.id) && (task.priority === 'red' || task.priority === 'orange')) {
+                        // High-priority subtask due within 1 hour
+                        const diff = subtaskDueDate.getTime() - nowDate.getTime();
+                        if (diff <= oneHourMs) {
+                            const policyCheck = shouldNotifyTask(task);
+                            if (policyCheck.shouldNotify) {
+                                const result = await sendTaskNotification(task, NOTIFICATION_TYPE.PRIORITY, {}, subtask);
+                                if (result.ok) {
+                                    notifiedSubtasksThisCycle.add(subtaskKey);
+                                    recordNotification(task.id);
+                                    console.log(`[TaskNotifications] Subtask priority notification sent for task ${task.id}: ${subtask.title}`);
+                                }
+                            }
+                        }
                     }
                 }
             }

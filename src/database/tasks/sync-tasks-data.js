@@ -308,28 +308,41 @@ export async function reconcileTasksData(options = {}) {
             // Insert new tasks
             for (const task of taskInserts) {
                 await client.query(
-                    `INSERT INTO tasks (json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, created_at, updated_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    `INSERT INTO tasks (json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, notification_policy, custom_interval_minutes, created_at, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                      RETURNING id`,
                     [
                         task.json_id, task.title, task.description, task.completed,
                         task.archived, task.priority, task.due_time, task.reminder_time,
-                        task.long_term, task.created_at, task.updated_at
+                        task.long_term, task.notification_policy || 'daily', task.custom_interval_minutes || 60,
+                        task.created_at, task.updated_at
                     ]
                 );
             }
 
             // Update tasks
             for (const task of taskUpdates) {
+                const fields = ['title = $1', 'description = $2', 'completed = $3', 'archived = $4',
+                    'priority = $5', 'due_time = $6', 'reminder_time = $7', 'long_term = $8',
+                    'updated_at = $9'];
+                const params = [
+                    task.title, task.description, task.completed, task.archived,
+                    task.priority, task.due_time, task.reminder_time, task.long_term,
+                    task.updated_at
+                ];
+                let idx = 10;
+                if (task.notification_policy !== undefined) {
+                    fields.push(`notification_policy = $${idx++}`);
+                    params.push(task.notification_policy);
+                }
+                if (task.custom_interval_minutes !== undefined) {
+                    fields.push(`custom_interval_minutes = $${idx++}`);
+                    params.push(task.custom_interval_minutes);
+                }
+                params.push(task.id);
                 await client.query(
-                    `UPDATE tasks SET title = $1, description = $2, completed = $3, archived = $4,
-                     priority = $5, due_time = $6, reminder_time = $7, long_term = $8, updated_at = $9
-                     WHERE id = $10`,
-                    [
-                        task.title, task.description, task.completed, task.archived,
-                        task.priority, task.due_time, task.reminder_time, task.long_term,
-                        task.updated_at, task.id
-                    ]
+                    `UPDATE tasks SET ${fields.join(', ')} WHERE id = $${idx}`,
+                    params
                 );
             }
         }
@@ -478,7 +491,7 @@ async function loadPgNotes(client) {
 
 async function loadPgTasks(client) {
     const res = await client.query(
-        `SELECT id, json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, created_at, updated_at
+        `SELECT id, json_id, title, description, completed, archived, priority, due_time, reminder_time, long_term, notification_policy, custom_interval_minutes, created_at, updated_at
          FROM tasks
          ORDER BY created_at ASC`
     );

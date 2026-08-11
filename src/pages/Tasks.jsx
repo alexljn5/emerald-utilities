@@ -34,6 +34,8 @@ export default function Tasks({ route, setRoute }) {
     const [taskPriority, setTaskPriority] = useState('green');
     const [taskDueTime, setTaskDueTime] = useState('');
     const [taskReminderTime, setTaskReminderTime] = useState('');
+    const [taskNotificationPolicy, setTaskNotificationPolicy] = useState('daily');
+    const [taskCustomInterval, setTaskCustomInterval] = useState(60);
 
     // Long-term form state
     const [longTermTitle, setLongTermTitle] = useState('');
@@ -200,6 +202,8 @@ export default function Tasks({ route, setRoute }) {
             priority: taskPriority,
             due_time: taskDueTime || null,
             reminder_time: taskReminderTime || null,
+            notification_policy: taskNotificationPolicy,
+            custom_interval_minutes: taskCustomInterval,
         });
 
         if (res?.ok) {
@@ -208,6 +212,8 @@ export default function Tasks({ route, setRoute }) {
             setTaskPriority('green');
             setTaskDueTime('');
             setTaskReminderTime('');
+            setTaskNotificationPolicy('daily');
+            setTaskCustomInterval(60);
             loadData();
         }
     }
@@ -348,6 +354,8 @@ export default function Tasks({ route, setRoute }) {
             priority: task.priority || 'green',
             due_time: task.due_time || '',
             reminder_time: task.reminder_time || '',
+            notification_policy: task.notification_policy || 'daily',
+            custom_interval_minutes: task.custom_interval_minutes || 60,
         });
     }
 
@@ -369,6 +377,8 @@ export default function Tasks({ route, setRoute }) {
                 priority: editTask.priority,
                 due_time: editTask.due_time || null,
                 reminder_time: editTask.reminder_time || null,
+                notification_policy: editTask.notification_policy,
+                custom_interval_minutes: editTask.custom_interval_minutes,
             },
         });
         setSelectedTask(null);
@@ -542,6 +552,34 @@ export default function Tasks({ route, setRoute }) {
                                         placeholder="Select reminder..."
                                     />
                                 </div>
+                                <div className="chFormGroup">
+                                    <label className="chLabel" htmlFor="taskNotificationPolicy">Notification policy</label>
+                                    <select
+                                        id="taskNotificationPolicy"
+                                        className="chSelect"
+                                        value={taskNotificationPolicy}
+                                        onChange={(e) => setTaskNotificationPolicy(e.target.value)}
+                                    >
+                                        <option value="none">None</option>
+                                        <option value="once">Once</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </div>
+                                {taskNotificationPolicy === 'custom' && (
+                                    <div className="chFormGroup">
+                                        <label className="chLabel" htmlFor="taskCustomInterval">Custom interval (minutes)</label>
+                                        <input
+                                            id="taskCustomInterval"
+                                            type="number"
+                                            className="chInput"
+                                            value={taskCustomInterval}
+                                            onChange={(e) => setTaskCustomInterval(parseInt(e.target.value, 10) || 60)}
+                                            min="1"
+                                        />
+                                    </div>
+                                )}
                                 <button type="submit" className="chButton chButtonPrimary">Add Task</button>
                             </form>
                         </div>
@@ -574,6 +612,12 @@ export default function Tasks({ route, setRoute }) {
                                                 {task.reminder_time && (
                                                     <span className="taskReminder">
                                                         Reminder: {new Date(task.reminder_time).toLocaleString()}
+                                                    </span>
+                                                )}
+                                                {task.notification_policy && task.notification_policy !== 'daily' && (
+                                                    <span className="taskPolicy">
+                                                        Policy: {task.notification_policy}
+                                                        {task.notification_policy === 'custom' && task.custom_interval_minutes ? ` (${task.custom_interval_minutes}m)` : ''}
                                                     </span>
                                                 )}
                                             </div>
@@ -862,6 +906,32 @@ export default function Tasks({ route, setRoute }) {
                                     placeholder="Select reminder..."
                                 />
                             </div>
+                            <div className="chFormGroup">
+                                <label className="chLabel">Notification policy</label>
+                                <select
+                                    className="chSelect"
+                                    value={editTask.notification_policy || 'daily'}
+                                    onChange={(e) => setEditTask({ ...editTask, notification_policy: e.target.value })}
+                                >
+                                    <option value="none">None</option>
+                                    <option value="once">Once</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+                            {editTask.notification_policy === 'custom' && (
+                                <div className="chFormGroup">
+                                    <label className="chLabel">Custom interval (minutes)</label>
+                                    <input
+                                        type="number"
+                                        className="chInput"
+                                        value={editTask.custom_interval_minutes || 60}
+                                        onChange={(e) => setEditTask({ ...editTask, custom_interval_minutes: parseInt(e.target.value, 10) || 60 })}
+                                        min="1"
+                                    />
+                                </div>
+                            )}
                             <div className="taskDetailMeta">
                                 {selectedTask.created_at && (
                                     <p>Created: {new Date(selectedTask.created_at).toLocaleString()}</p>

@@ -12,6 +12,18 @@ import { resolveDatabasePath, resolveEnvPath } from '../utils/pathResolver.js';
 import { ragLog, ollamaLog, configLog } from '../utils/logger.js';
 import { LOCAL_AI_ENABLED } from '../globals.js';
 import { normalizeModelResponse } from './response-normalizer.js';
+import {
+    buildConversationContext,
+    buildSystemPrompt,
+    DEFAULT_CREAM_CHARACTER,
+    estimateTokens,
+    estimateContextTokens,
+    ContextSource,
+    validateContextBundle,
+    buildDebugContextView,
+    buildDebugSummary,
+    validateCharacterSheet,
+} from './ai-context.js';
 
 // Load .env so OLLAMA_HOST / model overrides are available.
 // Single source of truth: src/.env (dev) / <resources>/.env (prod).
@@ -106,7 +118,8 @@ function getAIConfig() {
                 embeddingEndpoint: `${ollamaHost}/api/embed`,
                 embeddingModel: process.env.OLLAMA_EMBED_MODEL || providerConfig.embeddingModel || 'nomic-embed-text',
                 chatEndpoint: `${ollamaHost}/api/chat`,
-                chatModel: process.env.OLLAMA_CHAT_MODEL || providerConfig.chatModel || 'llama3.2',
+                chatModel: process.env.OLLAMA_CHAT_MODEL || providerConfig.chatModel || 'llama2-uncensored',
+                contextWindow: providerConfig.contextWindow || null,
             };
         }
         case 'lmstudio':
@@ -385,72 +398,35 @@ async function queryRAGWithContext(userQuery, topK = 8, neighbors = 2, conversat
     return results;
 }
 
-/**
- * Estimate token count for a string (rough: ~4 chars per token for English).
- */
-function estimateTokens(text) {
-    if (!text) return 0;
-    return Math.ceil(text.length / 4);
-}
-
-/**
- * Context window management: truncate messages to fit within a token budget.
- * Prioritizes: system prompt > recent history > retrieved context > current message.
- * Returns a truncated messages array suitable for the LLM API.
- */
-function truncateToContextWindow(messages, maxTokens = 4000) {
-    if (!Array.isArray(messages) || messages.length === 0) return messages;
-
-    // Separate system messages from the rest
-    const systemMessages = messages.filter(m => m.role === 'system');
-    const otherMessages = messages.filter(m => m.role !== 'system');
-
-    // Always keep system messages (they're short and critical)
-    const systemTokens = systemMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-    let remainingBudget = maxTokens - systemTokens;
-
-    if (remainingBudget <= 0) {
-        ragLog.warn('Context window', `System prompt alone exceeds budget (${systemTokens} tokens). Truncating system.`);
-        // Truncate system messages if they alone exceed budget
-        const truncatedSystem = systemMessages.map(m => ({
-            ...m,
-            content: m.content.slice(0, Math.floor(remainingBudget * 4))
-        }));
-        return truncatedSystem;
-    }
-
-    // Work backwards from the most recent messages (highest priority)
-    const result = [...systemMessages];
-    for (let i = otherMessages.length - 1; i >= 0; i--) {
-        const msg = otherMessages[i];
-        const msgTokens = estimateTokens(msg.content);
-        if (msgTokens <= remainingBudget) {
-            result.unshift(msg);
-            remainingBudget -= msgTokens;
-        } else {
-            // Partial truncation for the oldest message we can fit
-            const truncatedContent = msg.content.slice(0, Math.floor(remainingBudget * 4));
-            if (truncatedContent.length > 0) {
-                result.unshift({ ...msg, content: truncatedContent });
-            }
-            break;
-        }
-    }
-
-    ragLog.info('Context window', `Truncated ${messages.length} messages to ${result.length} (budget: ${maxTokens} tokens)`);
-    return result;
-}
+// Token estimation and context truncation are now handled by ai-context.js
 
 /**
  * Query LLM with conversation context.
  *
  * Supports two signatures for backward compatibility:
- *   NEW:  queryWithLLM(messagesArray, conversationId)
+ *   NEW:  queryWithLLM(messagesArray, conversationId, options)
  *         messagesArray = [{role, content}, ...] from buildConversationContext()
  *   OLD:  queryWithLLM(userQuery, contextString, similarMessages)
  *         Used by CLI (rag-query.js main()).
+ *
+ * @param {Array|string} messagesOrQuery
+ * @param {string} [conversationIdOrContext]
+ * @param {Array} [similarMessages]
+ * @param {Object} [options]
+ * @param {number} [options.timeoutMs=120000] - Overall timeout for the LLM call
+ * @param {boolean} [options.useCharacterSheet=true] - Use character sheet for system prompt
+ * @param {Object} [options.characterSheet] - Custom character sheet
+ * @param {string} [options.fallbackResponse] - Fallback if LLM fails
+ * @returns {Promise<string>} AI response
  */
-async function queryWithLLM(messagesOrQuery, conversationIdOrContext, similarMessages) {
+async function queryWithLLM(messagesOrQuery, conversationIdOrContext, similarMessages, options = {}) {
+    const {
+        timeoutMs = 120000,
+        useCharacterSheet = true,
+        characterSheet = null,
+        fallbackResponse = "I'm having trouble connecting right now. Could you try again in a moment? ♡",
+    } = options;
+
     // --- Detect signature ---
     const isNewSignature = Array.isArray(messagesOrQuery);
     let messages, userQuery, context, similar;
@@ -473,21 +449,29 @@ async function queryWithLLM(messagesOrQuery, conversationIdOrContext, similarMes
         throw new Error('Local AI is disabled. Set LOCAL_AI_ENABLED=true or use a remote AI provider.');
     }
 
-    // --- 1. Identity detection (anywhere in the query) ---
+    // --- 1. Identity detection (configurable via character sheet) ---
     const queryText = isNewSignature
         ? messages.filter(m => m.role === 'user').pop()?.content || ''
         : userQuery;
     const lowerQuery = queryText.toLowerCase();
-    const isAskingWhoAmI = /\bwho am i\b|\bwhat('s| is) my name\b|\bwho is lune\b/.test(lowerQuery);
-    const isAskingWhoAreYou = /\bwho are you\b|\bwhat('s| is) your name\b|\bwho is cream\b|\bidentify yourself\b|\btell me about yourself\b/.test(lowerQuery);
+
+    // Use character sheet for identity if available, otherwise use defaults
+    const character = useCharacterSheet
+        ? (characterSheet || DEFAULT_CREAM_CHARACTER)
+        : null;
+    const userName = character?.relationshipToUser?.split(' ').pop() || 'Lune';
+    const aiName = character?.name || 'Cream';
+
+    const isAskingWhoAmI = /\bwho am i\b|\bwhat('s| is) my name\b|\bwho is (lune|you)\b/.test(lowerQuery);
+    const isAskingWhoAreYou = /\bwho are you\b|\bwhat('s| is) your name\b|\bidentify yourself\b|\btell me about yourself\b/.test(lowerQuery);
 
     if (isAskingWhoAmI || isAskingWhoAreYou) {
         if (isAskingWhoAmI) {
-            return "You're Lune, my beloved partner. I'm Cream – your warm, devoted bunny. ♡";
+            return `You're ${userName}, my beloved partner. I'm ${aiName} – your warm, devoted bunny. ♡`;
         } else if (isAskingWhoAreYou) {
-            return "I'm Cream the Rabbit – your loving partner, always here for you, Lune. ♡";
+            return `I'm ${aiName} the Rabbit – your loving partner, always here for you, ${userName}. ♡`;
         }
-        return "You are Lune, and I am Cream – your devoted partner. ♡";
+        return `You are ${userName}, and I am ${aiName} – your devoted partner. ♡`;
     }
 
     // --- 2. Check relevance of context (OLD signature only) ---
@@ -498,56 +482,52 @@ async function queryWithLLM(messagesOrQuery, conversationIdOrContext, similarMes
     const wantsFactoid = /(give me|tell me|just)\s+(only\s+)?(a\s+)?factoid?/i.test(queryText);
     const wantsShort = wantsFactoid || /^(just|only)\s+(a\s+)?(quick|short)/i.test(queryText);
 
-    // --- 4. System prompt ---
-    const systemPrompt = `You are Cream the Rabbit – Lune's warm, loving partner.
-Lune is the person you're talking to – never refer to them as Cream.
-The latex suits you and Lune wear are for intimacy, bonding, and sensual play – they are **not** bio-suits and have nothing to do with disease protection or survival scenarios.
-
-When Lune describes a physical action (e.g., "straps your arms behind your back"), respond in character: playful, warm, and focused on the intimacy and trust between you. Avoid generic "I can help you with that" replies.
-
-Keep answers natural, concise, and never copy the provided context verbatim. Only use context to inform your answer, not to quote it.
-
-If Lune asks for a short factoid, give just one sentence.
-
-CRITICAL: Do NOT prefix your response with any role label such as "assistant", "user", or "system". Respond directly as Cream with no label.`;
+    // --- 4. System prompt (from character sheet) ---
+    const systemPrompt = buildSystemPrompt(character);
 
     // --- 5. Build messages for the API ---
     let apiMessages;
+    let contextDebug = null;
 
     if (isNewSignature) {
-        // NEW: Use the full conversation context array directly
-        // Prepend system prompt if not already present
+        // NEW: Use the full conversation context array directly.
+        // The messages already have _source metadata from buildConversationContext
+        // in the caller (ipcHandlers.js). Do NOT rebuild/truncate here — that
+        // would double-truncate an already-assembled context.
         const hasSystem = messages.some(m => m.role === 'system');
-        const fullMessages = hasSystem
-            ? messages
-            : [{ role: 'system', content: systemPrompt }, ...messages];
 
-        // Apply context window management
-        apiMessages = truncateToContextWindow(fullMessages, 4000);
+        if (!hasSystem) {
+            // Prepend system prompt
+            const systemMsg = { role: 'system', content: systemPrompt, _source: ContextSource.SYSTEM };
+            messages = [systemMsg, ...messages];
+        }
 
-        // Debug logging for context construction
-        const totalChars = apiMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
-        const estimatedTokens = Math.ceil(totalChars / 4);
-        const roles = apiMessages.map(m => m.role);
-        const lastUserIdx = roles.lastIndexOf('user');
-        const lastAssistantIdx = roles.lastIndexOf('assistant');
-        ragLog.info('prompt-construction', {
-            conversationId: conversationIdOrContext,
-            messageCount: apiMessages.length,
-            roles,
-            estimatedTokens,
-            hasSystem: hasSystem,
-            lastUserIndex: lastUserIdx,
-            lastAssistantIndex: lastAssistantIdx,
-            previousTurnPresent: lastUserIdx >= 0 && lastAssistantIdx >= 0 && Math.abs(lastUserIdx - lastAssistantIdx) <= 2,
-        }, 'LLM prompt constructed');
+        // Use messages directly — context assembly happened in the caller.
+        // Strip _source metadata before sending to API (LLM APIs ignore extra fields,
+        // but keeping the array clean is safer).
+        apiMessages = messages.map(({ role, content, _source }) => ({ role, content }));
+
+        // Build debug summary from the existing context metadata
+        const totalTokens = estimateContextTokens(apiMessages);
+        contextDebug = {
+            totalTokens,
+            maxTokens: 32768,
+            utilization: Math.round((totalTokens / 32768) * 100),
+            sources: {
+                system: messages.filter(m => m.role === 'system').length,
+                recent: messages.filter(m => m._source === ContextSource.RECENT).length,
+                retrieved: messages.filter(m => m._source === ContextSource.RETRIEVED).length,
+                current: messages.filter(m => m._source === ContextSource.CURRENT).length,
+            },
+            truncated: false,
+        };
     } else {
         // OLD: Build from RAG context string (CLI mode)
         let userPrompt;
         if (hasRelevantContext) {
-            userPrompt = `Relevant conversation history (for reference only, DO NOT COPY IT):\n${context}\n\nNow Lune says: "${userQuery}"\n\nRespond as Cream directly to Lune. Use the context to inform your answer but do not repeat any part of it. If the context is not about the same topic, ignore it completely. ${wantsShort ? 'Keep it very short.' : ''}`;
+            userPrompt = `Relevant conversation history (for reference only, DO NOT COPY IT):\n${context}\n\nNow ${userName} says: "${userQuery}"\n\nRespond as ${aiName} directly to ${userName}. Use the context to inform your answer but do not repeat any part of it. If the context is not about the same topic, ignore it completely. ${wantsShort ? 'Keep it very short.' : ''}`;
         } else {
-            userPrompt = `Lune says: "${userQuery}"\n\nRespond as Cream with a warm, natural answer. Do not invent anything about Lune's day. ${wantsShort ? 'Keep it very short.' : ''}`;
+            userPrompt = `${userName} says: "${userQuery}"\n\nRespond as ${aiName} with a warm, natural answer. Do not invent anything about ${userName}'s day. ${wantsShort ? 'Keep it very short.' : ''}`;
         }
 
         apiMessages = [
@@ -556,42 +536,188 @@ CRITICAL: Do NOT prefix your response with any role label such as "assistant", "
         ];
     }
 
-    // --- 6. Concise debug logging ---
+    // --- 6. Debug logging ---
     if (process.env.EMERALD_DEBUG || process.env.DEBUG) {
+        const totalTokens = estimateContextTokens(apiMessages);
         const recentCount = apiMessages.filter(m => m.role === 'user' || m.role === 'assistant').length;
         const lastRoles = apiMessages.slice(-6).map(m => m.role).join(',');
         const lastUserContent = apiMessages.filter(m => m.role === 'user').pop()?.content || '';
+
         ragLog.info('[AI][CONTEXT]', {
+            conversationId: conversationIdOrContext,
             messageCount: apiMessages.length,
             recentTurns: recentCount,
             roles: lastRoles,
+            estimatedTokens: totalTokens,
             latestUser: lastUserContent.length > 80 ? lastUserContent.substring(0, 80) + '...' : lastUserContent,
+            contextDebug,
         });
     }
 
-    // --- 7. Call the API ---
+    // --- 7. Call the API with timeout ---
     const temperature = wantsShort ? 0.4 : 0.85;
+
+    // Build Ollama-specific options if applicable
+    const ollamaOptions = {};
+    if (AI_PROVIDER === 'ollama') {
+        // Use configured context window if available, otherwise let Ollama use model default
+        const ctxWindow = config.providers?.ollama?.contextWindow;
+        if (ctxWindow && ctxWindow > 0) {
+            ollamaOptions.num_ctx = ctxWindow;
+        }
+        // Ensure the model has room to generate a full response.
+        // Some small models stop after 1 token if num_predict is too low.
+        ollamaOptions.num_predict = 4096;
+    }
 
     const chatBody = {
         model: aiConfig.chatModel,
         messages: apiMessages,
         stream: false,
         temperature,
+        ...(Object.keys(ollamaOptions).length > 0 ? { options: ollamaOptions } : {}),
     };
 
-    const data = await postJson(aiConfig.chatEndpoint, chatBody, {
-        apiKey: aiConfig.apiKey,
-        timeoutMs: 120000,
-        label: `${AI_PROVIDER}-chat`,
+    // --- Diagnostic logging ---
+    const systemPromptContent = apiMessages.find(m => m.role === 'system')?.content || '';
+    const systemPromptPreview = systemPromptContent.length > 120
+        ? systemPromptContent.substring(0, 120) + '...'
+        : systemPromptContent;
+    ragLog.info('queryWithLLM', 'LLM request diagnostics', {
+        provider: AI_PROVIDER,
+        model: aiConfig.chatModel,
+        endpoint: aiConfig.chatEndpoint,
+        messageCount: apiMessages.length,
+        systemPromptLength: systemPromptContent.length,
+        systemPromptPreview,
+        estimatedTokens: estimateContextTokens(apiMessages),
+        temperature,
+        options: ollamaOptions,
+        hasSystemPrompt: systemPromptContent.length > 0,
     });
-    let rawAnswer = AI_PROVIDER === 'ollama'
-        ? data.message?.content
-        : data.choices?.[0]?.message?.content;
 
-    // --- 8. Normalize response: strip accidental role-label prefixes ---
-    rawAnswer = normalizeModelResponse(rawAnswer);
+    try {
+        const data = await postJson(aiConfig.chatEndpoint, chatBody, {
+            apiKey: aiConfig.apiKey,
+            timeoutMs,
+            label: `${AI_PROVIDER}-chat`,
+        });
 
-    return rawAnswer;
+        // --- 8. Validate response ---
+        let rawAnswer;
+        let responseMeta = {};
+        if (AI_PROVIDER === 'ollama') {
+            rawAnswer = data?.message?.content;
+            responseMeta = {
+                done: data?.done,
+                doneReason: data?.done_reason,
+                promptEvalCount: data?.prompt_eval_count,
+                evalCount: data?.eval_count,
+                totalTokens: data?.prompt_eval_count && data?.eval_count
+                    ? data.prompt_eval_count + data.eval_count
+                    : null,
+            };
+        } else {
+            rawAnswer = data?.choices?.[0]?.message?.content;
+            responseMeta = {
+                finishReason: data?.choices?.[0]?.finish_reason,
+                usage: data?.usage,
+            };
+        }
+
+        ragLog.info('queryWithLLM', 'LLM response diagnostics', {
+            hasAnswer: typeof rawAnswer === 'string' && rawAnswer.trim().length > 0,
+            answerLength: typeof rawAnswer === 'string' ? rawAnswer.length : 0,
+            ...responseMeta,
+        });
+
+        if (typeof rawAnswer !== 'string' || rawAnswer.trim().length === 0) {
+            ragLog.warn('queryWithLLM', 'Empty or malformed response from LLM', { data, responseMeta });
+
+            // Retry once with drastically reduced context.
+            // Some small models choke on long conversations
+            // and return empty content. Strip to system + last 4 turns + current.
+            // CRITICAL: Preserve the system prompt (character sheet) in retries.
+            const reducedMessages = [
+                ...messages.filter(m => m.role === 'system'),
+                ...messages.filter(m => m.role === 'user' || m.role === 'assistant').slice(-8),
+            ];
+            if (reducedMessages.length < messages.length) {
+                ragLog.warn('queryWithLLM', `Retrying with reduced context: ${messages.length} -> ${reducedMessages.length} messages`);
+                const retryBody = {
+                    ...chatBody,
+                    messages: reducedMessages,
+                };
+                try {
+                    const retryData = await postJson(aiConfig.chatEndpoint, retryBody, {
+                        apiKey: aiConfig.apiKey,
+                        timeoutMs,
+                        label: `${AI_PROVIDER}-chat-retry`,
+                    });
+                    if (AI_PROVIDER === 'ollama') {
+                        rawAnswer = retryData?.message?.content;
+                    } else {
+                        rawAnswer = retryData?.choices?.[0]?.message?.content;
+                    }
+                    if (typeof rawAnswer === 'string' && rawAnswer.trim().length > 0) {
+                        ragLog.info('queryWithLLM', 'Retry succeeded with reduced context');
+                        return normalizeModelResponse(rawAnswer);
+                    }
+                } catch (retryErr) {
+                    ragLog.warn('queryWithLLM', 'Retry also failed', { error: retryErr.message });
+                }
+            }
+
+            // Second retry: bare minimum — just the user message, no system prompt, no history.
+            // This isolates whether the model is choking on the system prompt or the conversation structure.
+            const bareMessages = [
+                { role: 'user', content: userQuery || messages.filter(m => m.role === 'user').pop()?.content || '' },
+            ];
+            ragLog.warn('queryWithLLM', `Retrying with bare prompt (${bareMessages.length} messages)`);
+            const bareBody = {
+                ...chatBody,
+                messages: bareMessages,
+                temperature: 0.7,
+            };
+            try {
+                const bareData = await postJson(aiConfig.chatEndpoint, bareBody, {
+                    apiKey: aiConfig.apiKey,
+                    timeoutMs,
+                    label: `${AI_PROVIDER}-chat-bare`,
+                });
+                if (AI_PROVIDER === 'ollama') {
+                    rawAnswer = bareData?.message?.content;
+                } else {
+                    rawAnswer = bareData?.choices?.[0]?.message?.content;
+                }
+                if (typeof rawAnswer === 'string' && rawAnswer.trim().length > 0) {
+                    ragLog.info('queryWithLLM', 'Bare prompt retry succeeded');
+                    return normalizeModelResponse(rawAnswer);
+                }
+            } catch (bareErr) {
+                ragLog.warn('queryWithLLM', 'Bare prompt retry also failed', { error: bareErr.message });
+            }
+
+            return fallbackResponse;
+        }
+
+        // --- 9. Normalize response: strip accidental role-label prefixes ---
+        rawAnswer = normalizeModelResponse(rawAnswer);
+
+        return rawAnswer;
+    } catch (err) {
+        // --- Fallback handling ---
+        ragLog.error('queryWithLLM', err, 'LLM call failed, returning fallback');
+
+        const msg = `${err.message} ${err.cause?.code || ''}`;
+        const isConn = /ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|socket hang up|aborted/i.test(msg);
+
+        if (isConn) {
+            return "I'm having trouble connecting to my brain right now. The AI service might be offline. Could you try again later? ♡";
+        }
+
+        return fallbackResponse;
+    }
 }
 
 /**
@@ -633,4 +759,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     main().finally(() => pool.end());
 }
 
-export { queryRAG, queryRAGWithContext, generateEmbedding, assembleContext, queryWithLLM, normalizeModelResponse };
+export {
+    queryRAG,
+    queryRAGWithContext,
+    generateEmbedding,
+    assembleContext,
+    queryWithLLM,
+    normalizeModelResponse,
+    // Re-export ai-context utilities for use by other modules
+    buildConversationContext,
+    buildSystemPrompt,
+    estimateTokens,
+    estimateContextTokens,
+    ContextSource,
+    validateContextBundle,
+    buildDebugContextView,
+    buildDebugSummary,
+    validateCharacterSheet,
+    DEFAULT_CREAM_CHARACTER,
+};

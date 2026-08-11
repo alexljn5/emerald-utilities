@@ -11,19 +11,57 @@
  *
  * All operations use the shared db-pool.js.
  * No separate database, no migrations at runtime.
+ *
+ * Invariant: The database is the canonical complete history.
+ * Context assembly decides what the model receives.
+ * Persistence and context limitation are never the same operation.
  */
 
 import { pool, checkDbHealth } from './db-pool.js';
 import { ragLog } from '../utils/logger.js';
 import { reconcileScrapedMessages, contentHashOf } from './xscraper-sync.js';
 import { normalizeModelResponse } from './response-normalizer.js';
+import {
+    buildConversationContext,
+    buildSystemPrompt,
+    estimateTokens,
+    estimateContextTokens,
+    ContextSource,
+    validateContextBundle,
+    buildDebugContextView,
+    buildDebugSummary,
+    validateCharacterSheet,
+} from './ai-context.js';
+import { loadCharacterSheet as loadCharacterSheetFromRegistry, getAgentSystemPrompt as getAgentSystemPromptFromRegistry, getAvailableAgents, getAgent, isValidAgentId } from './character-sheets.js';
+import { readFile } from 'fs/promises';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 // ============================================================
 // Configuration
 // ============================================================
 
-const DEFAULT_CONTEXT_MESSAGES = parseInt(process.env.AI_CONTEXT_MESSAGES || '20', 10);
+const DEFAULT_CONTEXT_MESSAGES = parseInt(process.env.AI_CONTEXT_MESSAGES || '100', 10);
 const DEFAULT_CONVERSATION_TITLE = 'New Conversation';
+
+// Load context configuration from config.json
+const __dirname = dirname(fileURLToPath(import.meta.url));
+let contextConfig = {
+    contextMode: 'maximum',
+    maxContextTokens: 32768,
+    reservedOutputTokens: 2048,
+};
+
+try {
+    const configPath = join(__dirname, 'config.json');
+    const raw = await readFile(configPath, 'utf8');
+    const config = JSON.parse(raw);
+    if (config.contextMode) contextConfig.contextMode = config.contextMode;
+    if (config.maxContextTokens) contextConfig.maxContextTokens = config.maxContextTokens;
+    if (config.reservedOutputTokens) contextConfig.reservedOutputTokens = config.reservedOutputTokens;
+} catch (err) {
+    ragLog.warn('ai-persistence', 'Could not load context config, using defaults', { error: err.message });
+}
 
 // ============================================================
 // Health Check
@@ -214,6 +252,23 @@ export async function getRecentMessages(conversationId, limit = DEFAULT_CONTEXT_
     return result.rows.reverse();
 }
 
+/**
+ * Get ALL messages for a conversation (no limit).
+ * Used in "maximum" context mode where the full history is fetched
+ * and the context builder decides what to include.
+ */
+export async function getAllMessages(conversationId) {
+    const p = await ensureDb();
+    const result = await p.query(
+        `SELECT id, conversation_id, content, author, timestamp, scraped_at, payload
+         FROM grok_messages
+         WHERE conversation_id = $1
+         ORDER BY timestamp ASC`,
+        [conversationId]
+    );
+    return result.rows;
+}
+
 // ============================================================
 // XScraper Real-time Forwarding
 // ============================================================
@@ -281,6 +336,8 @@ export async function forwardScrapedMessagesToPostgres(messages, conversationId,
 /**
  * Build model context from conversation history.
  * Returns an array of { role, content } objects suitable for LLM API.
+ *
+ * @deprecated Use buildConversationContext from ai-context.js instead
  */
 export function buildContext(messages, systemPrompt = null) {
     const context = [];
@@ -300,123 +357,9 @@ export function buildContext(messages, systemPrompt = null) {
     return context;
 }
 
-/**
- * Build a structured, de-duplicated context bundle for an AI request.
- *
- * PRIORITY ORDER (for truncation):
- *   1. System prompt (always kept)
- *   2. Current user message (highest priority)
- *   3. Recent conversation history (high priority)
- *   4. Retrieved RAG context (lower priority, for semantic recall)
- *
- * The messages array is ordered so that truncation (which works backwards
- * from the end) preserves the most important context first.
- *
- * @param {Object} opts
- * @param {string} [opts.systemPrompt]
- * @param {string} opts.userMessage  the current user message
- * @param {Array}  [opts.recent]     recent history messages (chronological)
- * @param {Array}  [opts.retrieved]  RAG hits with `.window`
- * @param {string} [opts.conversationId] for debug logging
- * @returns {{
- *   system: Array<{role, content}>,
- *   current: {role, content} | null,
- *   recent: Array<{role, content, author?, timestamp?}>,
- *   retrieved: Array<{role, content, author?, timestamp?, source}>,
- *   messages: Array<{role, content}>  // full ordered array for the LLM API
- * }}
- */
-export function buildConversationContext({
-    systemPrompt = null,
-    userMessage = null,
-    recent = [],
-    retrieved = [],
-    conversationId = null,
-}) {
-    const system = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
-
-    const current = userMessage
-        ? { role: 'user', content: userMessage }
-        : null;
-
-    const seen = new Set();
-    const toRoleContent = (msg, source) => ({
-        role: roleOf(msg.author || msg.role),
-        content: msg.content || '',
-        author: msg.author || msg.role || null,
-        timestamp: msg.timestamp || null,
-        source,
-    });
-
-    // Deduplicate recent messages
-    const recentList = [];
-    for (const msg of recent || []) {
-        const key = `${msg.id || ''}|${msg.content || ''}|${msg.timestamp || ''}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        recentList.push(toRoleContent(msg, 'recent'));
-    }
-
-    // Retrieved older context: each hit carries a `.window` of surrounding
-    // turns. Flatten them, mark them as retrieved, and skip any that also
-    // appear in the recent history (de-dupe).
-    const retrievedList = [];
-    for (const hit of retrieved || []) {
-        const win = Array.isArray(hit.window) && hit.window.length
-            ? hit.window
-            : [hit];
-        for (const msg of win) {
-            const key = `${msg.id || ''}|${msg.content || ''}|${msg.timestamp || ''}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            retrievedList.push({
-                ...toRoleContent(msg, 'retrieved'),
-                sourceConversation: hit.conversation_id || msg.conversation_id || null,
-                similarity: hit.similarity != null ? Number(hit.similarity) : null,
-            });
-        }
-    }
-
-    // CRITICAL: Order messages so truncation (backwards from end) preserves
-    // priority: current > recent > retrieved > system.
-    // System is always kept by truncateToContextWindow.
-    const messages = [
-        ...system,
-        ...retrievedList.map(({ role, content }) => ({ role, content })),
-        ...recentList.map(({ role, content }) => ({ role, content })),
-    ];
-    if (current) messages.push({ role: current.role, content: current.content });
-
-    // Defensive: ensure recent messages are never empty when we have history.
-    // If truncation would drop all recent messages, force at least the last
-    // few turns into the context so the model has conversational state.
-    if (recentList.length > 0 && messages.filter(m => m.role === 'user' || m.role === 'assistant').length === 0) {
-        // This shouldn't happen with correct ordering, but guard against it.
-        messages.push(...recentList.slice(-4).map(({ role, content }) => ({ role, content })));
-        if (current) messages.push({ role: current.role, content: current.content });
-    }
-
-    // Concise debug logging
-    if (process.env.EMERALD_DEBUG || process.env.DEBUG) {
-        const roles = messages.map(m => m.role).join(',');
-        const lastUser = messages.filter(m => m.role === 'user').pop()?.content || '';
-        ragLog.info('[AI][CONTEXT]', {
-            recent: recentList.length,
-            retrieved: retrievedList.length,
-            total: messages.length,
-            roles,
-            latestUser: lastUser.length > 80 ? lastUser.substring(0, 80) + '...' : lastUser,
-        });
-    }
-
-    return {
-        system,
-        current,
-        recent: recentList,
-        retrieved: retrievedList,
-        messages,
-    };
-}
+// Re-export buildConversationContext from ai-context.js for backward compatibility
+// The actual implementation is in ai-context.js
+export { buildConversationContext } from './ai-context.js';
 
 /**
  * Build a simple context string from messages (for legacy RAG-style prompts).
@@ -443,6 +386,36 @@ export function roleOf(author) {
 }
 
 // ============================================================
+// Character Sheet Support
+// ============================================================
+
+/**
+ * Load a character sheet for a specific agent, with optional overrides.
+ * Character sheets are stored separately from user memories to prevent
+ * the AI from accidentally treating personality instructions as factual history.
+ *
+ * @param {string} [agentId='cream'] - Agent ID (cream, patches, vesper, clover)
+ * @param {Object} [overrides] - Optional character sheet overrides
+ * @returns {Object} Validated character sheet
+ */
+export function loadCharacterSheet(agentId = 'cream', overrides = null) {
+    // Delegate to the imported function from character-sheets.js
+    return loadCharacterSheetFromRegistry(agentId, overrides);
+}
+
+/**
+ * Get the system prompt for a specific agent.
+ * This is separate from factual memory and should never be stored in
+ * the conversation history as a user/assistant message.
+ */
+export function getCharacterSystemPrompt(agentId = 'cream', additionalInstructions = '') {
+    return getAgentSystemPromptFromRegistry(agentId, additionalInstructions);
+}
+
+// Re-export character sheet functions for backward compatibility
+export { getAvailableAgents, getAgent, isValidAgentId } from './character-sheets.js';
+
+// ============================================================
 // Full Chat Persistence Loop
 // ============================================================
 
@@ -451,7 +424,7 @@ export function roleOf(author) {
  * 1. Get or create conversation
  * 2. Retrieve history (BEFORE saving current message to avoid duplicate)
  * 3. Save user message
- * 4. Build context
+ * 4. Build context with improved token estimation and source labeling
  * 5. Return context + conversation info for caller to send to AI
  *
  * The caller is responsible for:
@@ -463,13 +436,23 @@ export async function prepareChatRequest({
     userMessage,
     systemPrompt = null,
     contextLimit = DEFAULT_CONTEXT_MESSAGES,
+    agentId = 'cream',
+    contextMode = null,
+    maxContextTokens = null,
+    reservedOutputTokens = null,
 }) {
     // 1. Get or create conversation
     const conversation = await getOrCreateConversation(conversationId);
 
     // 2. Retrieve history BEFORE saving the current message.
     //    This ensures the current message is not duplicated in the context.
-    const history = await getRecentMessages(conversation.id, contextLimit);
+    //    In "maximum" mode, fetch the full conversation history.
+    //    In "balanced" mode, fetch the configured limit.
+    const effectiveMode = contextMode || contextConfig.contextMode;
+    const fetchLimit = effectiveMode === 'maximum' ? null : contextLimit;
+    const history = fetchLimit
+        ? await getRecentMessages(conversation.id, fetchLimit)
+        : await getAllMessages(conversation.id);
 
     // 3. Save user message
     const userMsgId = await saveMessage({
@@ -478,15 +461,34 @@ export async function prepareChatRequest({
         content: userMessage,
     });
 
-    // 4. Build context (deprecated - use buildConversationContext instead)
-    const context = buildContext(history, systemPrompt);
+    // 4. Build context with improved token estimation and source labeling
+    //    Use agent-specific system prompt if no custom system prompt is provided
+    const contextBundle = buildConversationContext({
+        systemPrompt: systemPrompt || getCharacterSystemPrompt(agentId),
+        userMessage,
+        recent: history,
+        retrieved: [], // RAG is handled separately by the caller
+        conversationId: conversation.id,
+        options: {
+            maxTokens: maxContextTokens || contextConfig.maxContextTokens,
+            contextMode: effectiveMode,
+            reservedOutputTokens: reservedOutputTokens || contextConfig.reservedOutputTokens,
+        },
+    });
+
+    // 5. Validate context
+    const warnings = validateContextBundle(contextBundle);
+    if (warnings.length > 0 && (process.env.EMERALD_DEBUG || process.env.DEBUG)) {
+        ragLog.warn('prepareChatRequest', warnings.join('; '));
+    }
 
     return {
         conversationId: conversation.id,
         conversation,
         userMessageId: userMsgId,
         history,
-        context,
+        context: contextBundle.messages,
+        contextBundle,
     };
 }
 
@@ -518,6 +520,64 @@ export async function saveAssistantResponse({
         conversation,
         recentMessages,
     };
+}
+
+// ============================================================
+// Debug Utilities
+// ============================================================
+
+/**
+ * Build a debug view of a conversation's context for the UI.
+ * This powers the "what context was supplied?" debug view.
+ */
+export function buildConversationDebugView(contextBundle) {
+    if (!contextBundle) {
+        return {
+            summary: 'No context available',
+            details: [],
+        };
+    }
+
+    const summary = buildDebugSummary(contextBundle);
+    const details = [];
+
+    if (contextBundle.system?.length > 0) {
+        details.push({
+            source: 'System Prompt',
+            count: contextBundle.system.length,
+            tokens: contextBundle.system.reduce((sum, m) => sum + (m._tokens || 0), 0),
+            preview: contextBundle.system[0].content.slice(0, 200),
+        });
+    }
+
+    if (contextBundle.current) {
+        details.push({
+            source: 'Current Message',
+            count: 1,
+            tokens: contextBundle.current._tokens || 0,
+            preview: contextBundle.current.content.slice(0, 200),
+        });
+    }
+
+    if (contextBundle.recent?.length > 0) {
+        details.push({
+            source: 'Recent History',
+            count: contextBundle.recent.length,
+            tokens: contextBundle.recent.reduce((sum, m) => sum + (m._tokens || 0), 0),
+            preview: `${contextBundle.recent[0].author}: ${contextBundle.recent[0].content.slice(0, 100)}`,
+        });
+    }
+
+    if (contextBundle.retrieved?.length > 0) {
+        details.push({
+            source: 'Retrieved Context',
+            count: contextBundle.retrieved.length,
+            tokens: contextBundle.retrieved.reduce((sum, m) => sum + (m._tokens || 0), 0),
+            preview: `From ${new Set(contextBundle.retrieved.map(m => m.sourceConversation)).size} conversations`,
+        });
+    }
+
+    return { summary, details };
 }
 
 // ============================================================

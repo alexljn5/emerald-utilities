@@ -3,9 +3,12 @@ import '../css/the-ai.css';
 import { useState, useRef, useEffect } from 'react';
 import scaryBunny from '../../img/the-ai/scary_bunny.png';
 import { normalizeModelResponse } from '../database/response-normalizer.js';
+import { getAvailableAgents, getAgent, isValidAgentId } from '../database/character-sheets.js';
 
 const STORAGE_KEY = 'ai-chat-messages';
 const ACTIVE_CONVERSATION_KEY = 'ai-active-conversation-id';
+const DEBUG_MODE_KEY = 'ai-debug-mode';
+const SELECTED_AGENT_KEY = 'ai-selected-agent';
 
 // Role mapping for display
 const ROLE_LABELS = {
@@ -29,7 +32,31 @@ export default function TheAI({ route, setRoute }) {
     const [autoSaveChat, setAutoSaveChat] = useState(true);
     const [conversationId, setConversationId] = useState(null);
     const [dbAvailable, setDbAvailable] = useState(true);
+    const [debugMode, setDebugMode] = useState(false);
+    const [lastContextDebug, setLastContextDebug] = useState(null);
+    const [selectedAgent, setSelectedAgent] = useState('cream');
+    const [availableAgents, setAvailableAgents] = useState([]);
+    const [contextMode, setContextMode] = useState('maximum');
+    const [maxContextTokens, setMaxContextTokens] = useState(32768);
     const outputRef = useRef(null);
+
+    // Load available agents
+    useEffect(() => {
+        const agents = getAvailableAgents();
+        setAvailableAgents(agents);
+    }, []);
+
+    // Load selected agent from localStorage
+    useEffect(() => {
+        try {
+            const savedAgent = localStorage.getItem(SELECTED_AGENT_KEY);
+            if (savedAgent && isValidAgentId(savedAgent)) {
+                setSelectedAgent(savedAgent);
+            }
+        } catch (e) {
+            console.warn('[AI] Failed to load selected agent:', e);
+        }
+    }, []);
 
     // Load auto-save setting and chat history on mount
     useEffect(() => {
@@ -44,6 +71,14 @@ export default function TheAI({ route, setRoute }) {
                 // Default to true if settings can't be loaded
                 setAutoSaveChat(true);
             });
+
+        // Load debug mode preference
+        try {
+            const savedDebug = localStorage.getItem(DEBUG_MODE_KEY);
+            if (savedDebug) setDebugMode(JSON.parse(savedDebug));
+        } catch (e) {
+            console.warn('[AI] Failed to load debug mode:', e);
+        }
 
         // Load chat history from PostgreSQL (primary source)
         loadChatHistory();
@@ -60,41 +95,52 @@ export default function TheAI({ route, setRoute }) {
                 console.warn('[AI] Failed to load active conversation ID:', e);
             }
 
-            // If we have an active conversation ID, try to load it
+            console.log('[AI] Loading chat history, activeConvId:', activeConvId);
+
+            // If we have an active conversation ID, try to load it directly
+            // This avoids the problem where the active conversation is not in the
+            // first 50 results from grok-conversations.
             if (activeConvId) {
-                const convResult = await window.electronAPI.invoke('grok-conversations', { limit: 50 });
-                if (convResult?.ok && convResult.conversations?.length > 0) {
-                    const activeConv = convResult.conversations.find(c => c.id === activeConvId);
-                    if (activeConv) {
-                        setConversationId(activeConv.id);
-                        const msgResult = await window.electronAPI.invoke('grok-messages', {
-                            conversationId: activeConv.id,
-                            limit: 100
-                        });
-                        if (msgResult?.ok && Array.isArray(msgResult.messages)) {
-                            const formatted = msgResult.messages.map(msg => ({
-                                role: msg.author === 'alexljn5' ? 'user' : msg.author === 'Cream' ? 'assistant' : msg.author,
-                                content: msg.content,
-                                timestamp: msg.timestamp,
-                            }));
-                            setMessages(formatted);
-                            setDbAvailable(true);
-                            return;
-                        }
-                    }
+                console.log('[AI] Attempting direct load of active conversation:', activeConvId);
+                const msgResult = await window.electronAPI.invoke('grok-messages', {
+                    conversationId: activeConvId,
+                    limit: 100
+                });
+                console.log('[AI] Direct grok-messages result:', msgResult?.ok ? `${msgResult.messages?.length} messages` : msgResult?.error);
+                if (msgResult?.ok && Array.isArray(msgResult.messages) && msgResult.messages.length > 0) {
+                    setConversationId(activeConvId);
+                    const formatted = msgResult.messages.map(msg => ({
+                        role: msg.author === 'alexljn5' ? 'user' : msg.author === 'Cream' ? 'assistant' : msg.author,
+                        content: msg.content,
+                        timestamp: msg.timestamp,
+                    }));
+                    console.log('[AI] Loaded', formatted.length, 'messages for active conversation', activeConvId);
+                    setMessages(formatted);
+                    setDbAvailable(true);
+                    return;
+                }
+                console.log('[AI] Active conversation not found or empty, clearing stale ID');
+                // Clear stale conversation ID from localStorage
+                try {
+                    localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+                } catch (e) {
+                    console.warn('[AI] Failed to clear stale conversation ID:', e);
                 }
             }
 
             // Fall back to the most recent conversation
             const convResult = await window.electronAPI.invoke('grok-conversations', { limit: 1 });
+            console.log('[AI] Fallback grok-conversations result:', convResult?.ok ? `${convResult.conversations?.length} conversations` : convResult?.error);
             if (convResult?.ok && convResult.conversations?.length > 0) {
                 const latestConv = convResult.conversations[0];
+                console.log('[AI] Using most recent conversation:', latestConv.id, latestConv.title);
                 setConversationId(latestConv.id);
 
                 const msgResult = await window.electronAPI.invoke('grok-messages', {
                     conversationId: latestConv.id,
                     limit: 100
                 });
+                console.log('[AI] Fallback grok-messages result:', msgResult?.ok ? `${msgResult.messages?.length} messages` : msgResult?.error);
 
                 if (msgResult?.ok && Array.isArray(msgResult.messages)) {
                     const formatted = msgResult.messages.map(msg => ({
@@ -102,6 +148,7 @@ export default function TheAI({ route, setRoute }) {
                         content: msg.content,
                         timestamp: msg.timestamp,
                     }));
+                    console.log('[AI] Loaded', formatted.length, 'messages for conversation', latestConv.id);
                     setMessages(formatted);
                     setDbAvailable(true);
                     return;
@@ -112,6 +159,7 @@ export default function TheAI({ route, setRoute }) {
             try {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
+                    console.log('[AI] Falling back to localStorage:', JSON.parse(saved).length, 'messages');
                     setMessages(JSON.parse(saved));
                 }
             } catch (e) {
@@ -162,6 +210,24 @@ export default function TheAI({ route, setRoute }) {
         }
     }, [messages, autoSaveChat]);
 
+    // Persist selected agent
+    useEffect(() => {
+        try {
+            localStorage.setItem(SELECTED_AGENT_KEY, selectedAgent);
+        } catch (e) {
+            console.warn('[AI] Failed to persist selected agent:', e);
+        }
+    }, [selectedAgent]);
+
+    // Persist debug mode preference
+    useEffect(() => {
+        try {
+            localStorage.setItem(DEBUG_MODE_KEY, JSON.stringify(debugMode));
+        } catch (e) {
+            console.warn('[AI] Failed to persist debug mode:', e);
+        }
+    }, [debugMode]);
+
     useEffect(() => {
         if (outputRef.current) {
             // Use requestAnimationFrame to ensure the DOM has fully updated
@@ -187,6 +253,10 @@ export default function TheAI({ route, setRoute }) {
             const result = await window.electronAPI.invoke('grok-chat', {
                 conversationId,
                 userMessage,
+                agentId: selectedAgent,
+                timeoutMs: 120000,
+                contextMode,
+                maxContextTokens,
             });
 
             if (result.ok) {
@@ -200,6 +270,11 @@ export default function TheAI({ route, setRoute }) {
                     console.warn('[AI] Failed to persist active conversation ID:', e);
                 }
                 setDbAvailable(true);
+
+                // Store context debug info if available
+                if (result.contextDebug && debugMode) {
+                    setLastContextDebug(result.contextDebug);
+                }
             } else {
                 setMessages(prev => [...prev, { role: 'error', content: result.error, timestamp: new Date().toISOString() }]);
                 if (result.unavailable === 'database') {
@@ -210,6 +285,28 @@ export default function TheAI({ route, setRoute }) {
             setMessages(prev => [...prev, { role: 'error', content: error.message, timestamp: new Date().toISOString() }]);
         } finally {
             setIsRunning(false);
+        }
+    };
+
+    const toggleDebugMode = async () => {
+        const newMode = !debugMode;
+        setDebugMode(newMode);
+
+        // Fetch debug context for current conversation if enabling debug
+        if (newMode && conversationId) {
+            try {
+                const result = await window.electronAPI.invoke('grok-debug-context', {
+                    conversationId,
+                    limit: 20,
+                });
+                if (result.ok) {
+                    setLastContextDebug(result.debugView);
+                }
+            } catch (e) {
+                console.warn('[AI] Failed to fetch debug context:', e);
+            }
+        } else {
+            setLastContextDebug(null);
         }
     };
 
@@ -250,6 +347,85 @@ export default function TheAI({ route, setRoute }) {
         }
     };
 
+    const renderDebugPanel = () => {
+        if (!debugMode) return null;
+
+        const debugInfo = lastContextDebug || {
+            summary: 'Send a message to see context debug info',
+            details: [],
+        };
+
+        // Build details array from the new debug summary format
+        let details = debugInfo.details || [];
+        if (!details.length && debugInfo.sources) {
+            details = Object.entries(debugInfo.sources).map(([source, count]) => ({
+                source: source.charAt(0).toUpperCase() + source.slice(1),
+                count,
+                tokens: '-',
+                preview: '-',
+            }));
+        }
+
+        return (
+            <div className="aiDebugPanel">
+                <div className="aiDebugHeader">
+                    <h4>AI Context Debug</h4>
+                    <button onClick={toggleDebugMode} className="aiDebugClose">×</button>
+                </div>
+                <div className="aiDebugContent">
+                    {debugInfo.contextMode && (
+                        <div className="aiDebugSummary">
+                            <strong>Mode:</strong> {debugInfo.contextMode} |
+                            <strong> Budget:</strong> {debugInfo.maxTokens?.toLocaleString?.() || debugInfo.maxTokens} tokens |
+                            <strong> Used:</strong> {debugInfo.totalTokens?.toLocaleString?.() || debugInfo.totalTokens} tokens ({debugInfo.utilization}%) |
+                            <strong> Reserved:</strong> {debugInfo.reservedOutputTokens?.toLocaleString?.() || debugInfo.reservedOutputTokens} output tokens
+                        </div>
+                    )}
+                    {debugInfo.omittedCount > 0 && (
+                        <div className="aiDebugSummary" style={{ color: '#ff6b6b' }}>
+                            <strong>Omitted:</strong> {debugInfo.omittedCount} messages ({debugInfo.omittedRecentCount} recent) could not fit in context.
+                        </div>
+                    )}
+                    {debugInfo.summary && (
+                        <div className="aiDebugSummary">
+                            <strong>Summary:</strong> {typeof debugInfo.summary === 'string' ? debugInfo.summary : JSON.stringify(debugInfo.summary)}
+                        </div>
+                    )}
+                    {details.length > 0 && (
+                        <div className="aiDebugDetails">
+                            <strong>Context Sources:</strong>
+                            {details.map((detail, i) => (
+                                <div key={i} className="aiDebugDetail">
+                                    <span className="aiDebugSource">{detail.source}</span>
+                                    <span className="aiDebugMeta">{detail.count} msgs, {detail.tokens} tokens</span>
+                                    <div className="aiDebugPreview">{detail.preview}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {!details.length && (
+                        <div className="aiDebugEmpty">No context details available</div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const handleAgentChange = (e) => {
+        const newAgent = e.target.value;
+        if (isValidAgentId(newAgent)) {
+            setSelectedAgent(newAgent);
+            const agent = getAgent(newAgent);
+            if (agent) {
+                console.log('[AI] Switched to agent:', agent.name, '-', agent.role);
+            }
+        }
+    };
+
+    const currentAgent = getAgent(selectedAgent);
+
+    const isCream = selectedAgent === 'cream';
+
     return (
         <PageShell title="AI" route={route} setRoute={setRoute} leftChildren={
             <div className="aiFace">
@@ -257,60 +433,124 @@ export default function TheAI({ route, setRoute }) {
             </div>
         }>
             <div className="aiChamber">
-                {!dbAvailable && (
-                    <div className="aiWarning">
-                        <p>Database unavailable. Chat is running in local mode.</p>
-                    </div>
-                )}
-                <div className="aiTerminal" ref={outputRef}>
-                    {isSettingUp ? (
-                        <div className="aiWelcome">
-                            <p className="aiQuestion">SETTING UP RAG...</p>
-                            <p className="aiHint">Loading context from Grok messages...</p>
-                        </div>
-                    ) : messages.length === 0 ? (
-                        <div className="aiWelcome">
-                            <p className="aiQuestion">GROK TERMINAL READY</p>
-                            <p className="aiHint">Type your message below to query Grok...</p>
-                        </div>
-                    ) : (
-                        messages.map((msg, i) => (
-                            <div key={i} className={`aiMessage aiMessage--${msg.role}`}>
-                                <span className="aiMessageLabel">{ROLE_LABELS[msg.role] || msg.role}:</span>
-                                <span className="aiMessageContent">{msg.content}</span>
-                            </div>
-                        ))
-                    )}
-                </div>
-                <div className="aiInput">
-                    <textarea
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder="Type your message to Cream..."
+                <div className="aiAgentSelector">
+                    <label htmlFor="agent-select">Agent:</label>
+                    <select
+                        id="agent-select"
+                        value={selectedAgent}
+                        onChange={handleAgentChange}
                         disabled={isRunning}
-                        rows={3}
-                    />
-                    <button onClick={handleSend} disabled={isRunning || !input.trim()}>
-                        {isRunning ? 'SENDING...' : 'SEND'}
-                    </button>
-                    {messages.length > 0 && (
-                        <button
-                            onClick={handleClearChat}
-                            disabled={isRunning}
-                            className="aiClearBtn"
-                        >
-                            CLEAR
-                        </button>
-                    )}
-                    <button
-                        onClick={handleNewConversation}
-                        disabled={isRunning}
-                        className="aiNewConvBtn"
+                        title="Select AI agent personality"
                     >
-                        NEW CONVERSATION
+                        {availableAgents.map(agent => (
+                            <option key={agent.id} value={agent.id}>
+                                {agent.label || agent.id}
+                            </option>
+                        ))}
+                    </select>
+                    <button
+                        type="button"
+                        className="aiContextModeBtn"
+                        onClick={() => setContextMode(contextMode === 'maximum' ? 'balanced' : 'maximum')}
+                        disabled={isRunning}
+                        title={`Context mode: ${contextMode}`}
+                    >
+                        {contextMode === 'maximum' ? 'MAX' : 'BAL'}
+                    </button>
+                    <button
+                        type="button"
+                        className="aiContextTokenBtn"
+                        onClick={() => setMaxContextTokens(Math.max(4096, maxContextTokens - 4096))}
+                        disabled={isRunning}
+                        title="Decrease context tokens"
+                    >
+                        -4k
+                    </button>
+                    <span className="aiContextTokenDisplay" title="Max context tokens">
+                        {maxContextTokens >= 1024 ? `${maxContextTokens / 1024}k` : maxContextTokens}
+                    </span>
+                    <button
+                        type="button"
+                        className="aiContextTokenBtn"
+                        onClick={() => setMaxContextTokens(Math.min(131072, maxContextTokens + 4096))}
+                        disabled={isRunning}
+                        title="Increase context tokens"
+                    >
+                        +4k
                     </button>
                 </div>
+                {!isCream ? (
+                    <div className="aiWelcome">
+                        <p className="aiQuestion">{currentAgent?.label ? currentAgent.label.toUpperCase() : currentAgent?.id?.toUpperCase() || 'AGENT'}</p>
+                        <p className="aiHint">This agent is not yet available.</p>
+                    </div>
+                ) : (
+                    <>
+                        {!dbAvailable && (
+                            <div className="aiWarning">
+                                <p>Database unavailable. Chat is running in local mode.</p>
+                            </div>
+                        )}
+                        <div className="aiTerminal" ref={outputRef}>
+                            {isSettingUp ? (
+                                <div className="aiWelcome">
+                                    <p className="aiQuestion">SETTING UP RAG...</p>
+                                    <p className="aiHint">Loading context from Grok messages...</p>
+                                </div>
+                            ) : messages.length === 0 ? (
+                                <div className="aiWelcome">
+                                    <p className="aiQuestion">GROK TERMINAL READY</p>
+                                    <p className="aiHint">Type your message below to query Grok...</p>
+                                </div>
+                            ) : (
+                                messages.map((msg, i) => (
+                                    <div key={i} className={`aiMessage aiMessage--${msg.role}`}>
+                                        <span className="aiMessageLabel">{ROLE_LABELS[msg.role] || msg.role}:</span>
+                                        <span className="aiMessageContent">{msg.content}</span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <div className="aiInput">
+                            <textarea
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                placeholder="Type your message to Cream..."
+                                disabled={isRunning}
+                                rows={3}
+                            />
+                            <button onClick={handleSend} disabled={isRunning || !input.trim()}>
+                                {isRunning ? 'SENDING...' : 'SEND'}
+                            </button>
+                            {messages.length > 0 && (
+                                <button
+                                    onClick={handleClearChat}
+                                    disabled={isRunning}
+                                    className="aiClearBtn"
+                                >
+                                    CLEAR
+                                </button>
+                            )}
+                            <button
+                                onClick={handleNewConversation}
+                                disabled={isRunning}
+                                className="aiNewConvBtn"
+                            >
+                                NEW CONVERSATION
+                            </button>
+                            <button
+                                onClick={toggleDebugMode}
+                                disabled={isRunning}
+                                className={`aiDebugBtn ${debugMode ? 'aiDebugBtn--active' : ''}`}
+                                title="Toggle AI context debug view"
+                            >
+                                {debugMode ? 'DEBUG ON' : 'DEBUG'}
+                            </button>
+                        </div>
+                        {renderDebugPanel()}
+                    </>
+                )}
             </div>
         </PageShell>
     );

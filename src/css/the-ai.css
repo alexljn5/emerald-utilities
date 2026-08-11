@@ -18,6 +18,95 @@
     margin-bottom: 1rem;
 }
 
+.aiAgentSelector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: var(--color-surface);
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+}
+
+.aiAgentSelector label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+}
+
+.aiAgentSelector select {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    font-family: 'pixelSans', monospace;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 200px;
+}
+
+.aiAgentSelector select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.aiContextModeBtn {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.7rem;
+    font-family: 'pixelSans', monospace;
+    font-weight: bold;
+    background: var(--color-accent);
+    color: #000;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.aiContextModeBtn:hover:not(:disabled) {
+    filter: brightness(1.1);
+}
+
+.aiContextModeBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.aiContextTokenBtn {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.7rem;
+    font-family: 'pixelSans', monospace;
+    font-weight: bold;
+    background: transparent;
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.aiContextTokenBtn:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    border-color: var(--color-accent);
+}
+
+.aiContextTokenBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.aiContextTokenDisplay {
+    font-size: 0.75rem;
+    font-family: 'pixelSans', monospace;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    min-width: 3rem;
+    text-align: center;
+}
+
 @keyframes aiFloat {
     0% {
         transform: translateY(0);
@@ -300,4 +389,153 @@
 .aiInput .aiClearBtn:hover:not(:disabled) {
     background: var(--color-accent);
     filter: brightness(1.1);
+}
+
+.aiInput .aiNewConvBtn {
+    background: transparent;
+    color: var(--color-accent);
+    border: 1px solid var(--color-accent);
+    margin-left: 0.5rem;
+}
+
+.aiInput .aiNewConvBtn:hover:not(:disabled) {
+    background: var(--color-accent);
+    color: #000;
+}
+
+.aiInput .aiDebugBtn {
+    background: transparent;
+    color: #888;
+    border: 1px solid #444;
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    padding: 0 0.75rem;
+}
+
+.aiInput .aiDebugBtn:hover:not(:disabled) {
+    border-color: #888;
+    color: #aaa;
+}
+
+.aiInput .aiDebugBtn--active {
+    background: #333;
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+}
+
+/* Debug Panel */
+.aiDebugPanel {
+    position: absolute;
+    bottom: 80px;
+    right: 1rem;
+    width: 350px;
+    max-height: 400px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.aiDebugHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.aiDebugHeader h4 {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.aiDebugClose {
+    background: none;
+    border: none;
+    color: var(--color-text);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.aiDebugClose:hover {
+    color: var(--color-accent);
+}
+
+.aiDebugContent {
+    padding: 0.75rem;
+    overflow-y: auto;
+    font-size: 0.75rem;
+    font-family: 'pixelSans', monospace;
+}
+
+.aiDebugSummary {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+    word-break: break-word;
+}
+
+.aiDebugDetails {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.aiDebugDetail {
+    padding: 0.4rem;
+    background: var(--color-bg);
+    border-radius: 2px;
+    border-left: 2px solid var(--color-accent);
+}
+
+.aiDebugSource {
+    font-weight: bold;
+    color: var(--color-accent);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+}
+
+.aiDebugMeta {
+    color: #888;
+    font-size: 0.65rem;
+    margin-left: 0.5rem;
+}
+
+.aiDebugPreview {
+    margin-top: 0.25rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    word-break: break-word;
+    white-space: pre-wrap;
+    max-height: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.aiDebugEmpty {
+    color: #666;
+    font-style: italic;
+    text-align: center;
+    padding: 1rem;
+}
+
+@media (max-width: 760px) {
+    .aiDebugPanel {
+        width: calc(100% - 2rem);
+        right: 1rem;
+        left: 1rem;
+        max-height: 300px;
+    }
 }

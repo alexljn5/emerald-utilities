@@ -53,59 +53,6 @@
     cursor: not-allowed;
 }
 
-.aiContextModeBtn {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.7rem;
-    font-family: 'pixelSans', monospace;
-    font-weight: bold;
-    background: var(--color-accent);
-    color: #000;
-    border: 1px solid var(--color-accent);
-    border-radius: 4px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.aiContextModeBtn:hover:not(:disabled) {
-    filter: brightness(1.1);
-}
-
-.aiContextModeBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.aiContextTokenBtn {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.7rem;
-    font-family: 'pixelSans', monospace;
-    font-weight: bold;
-    background: transparent;
-    color: var(--color-text);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.aiContextTokenBtn:hover:not(:disabled) {
-    background: var(--color-surface-hover);
-    border-color: var(--color-accent);
-}
-
-.aiContextTokenBtn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.aiContextTokenDisplay {
-    font-size: 0.75rem;
-    font-family: 'pixelSans', monospace;
-    color: var(--color-text-muted);
-    white-space: nowrap;
-    min-width: 3rem;
-    text-align: center;
-}
 
 @keyframes aiFloat {
     0% {

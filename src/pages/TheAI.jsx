@@ -36,9 +36,8 @@ export default function TheAI({ route, setRoute }) {
     const [lastContextDebug, setLastContextDebug] = useState(null);
     const [selectedAgent, setSelectedAgent] = useState('cream');
     const [availableAgents, setAvailableAgents] = useState([]);
-    const [contextMode, setContextMode] = useState('maximum');
-    const [maxContextTokens, setMaxContextTokens] = useState(32768);
     const outputRef = useRef(null);
+    const shouldAutoScroll = useRef(true);
 
     // Load available agents
     useEffect(() => {
@@ -228,10 +227,17 @@ export default function TheAI({ route, setRoute }) {
         }
     }, [debugMode]);
 
+    // Track whether user is near the bottom so we only auto-scroll
+    // when appropriate (e.g. on new messages, not when reading history).
+    const handleScroll = () => {
+        if (!outputRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = outputRef.current;
+        // Consider "near bottom" if within 150px of the bottom
+        shouldAutoScroll.current = scrollHeight - scrollTop - clientHeight < 150;
+    };
+
     useEffect(() => {
-        if (outputRef.current) {
-            // Use requestAnimationFrame to ensure the DOM has fully updated
-            // before scrolling to the bottom
+        if (outputRef.current && shouldAutoScroll.current) {
             requestAnimationFrame(() => {
                 if (outputRef.current) {
                     outputRef.current.scrollTop = outputRef.current.scrollHeight;
@@ -249,14 +255,15 @@ export default function TheAI({ route, setRoute }) {
         setMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp }]);
         setIsRunning(true);
 
+        // Enable auto-scroll when user sends a message
+        shouldAutoScroll.current = true;
+
         try {
             const result = await window.electronAPI.invoke('grok-chat', {
                 conversationId,
                 userMessage,
                 agentId: selectedAgent,
                 timeoutMs: 120000,
-                contextMode,
-                maxContextTokens,
             });
 
             if (result.ok) {
@@ -448,36 +455,6 @@ export default function TheAI({ route, setRoute }) {
                             </option>
                         ))}
                     </select>
-                    <button
-                        type="button"
-                        className="aiContextModeBtn"
-                        onClick={() => setContextMode(contextMode === 'maximum' ? 'balanced' : 'maximum')}
-                        disabled={isRunning}
-                        title={`Context mode: ${contextMode}`}
-                    >
-                        {contextMode === 'maximum' ? 'MAX' : 'BAL'}
-                    </button>
-                    <button
-                        type="button"
-                        className="aiContextTokenBtn"
-                        onClick={() => setMaxContextTokens(Math.max(4096, maxContextTokens - 4096))}
-                        disabled={isRunning}
-                        title="Decrease context tokens"
-                    >
-                        -4k
-                    </button>
-                    <span className="aiContextTokenDisplay" title="Max context tokens">
-                        {maxContextTokens >= 1024 ? `${maxContextTokens / 1024}k` : maxContextTokens}
-                    </span>
-                    <button
-                        type="button"
-                        className="aiContextTokenBtn"
-                        onClick={() => setMaxContextTokens(Math.min(131072, maxContextTokens + 4096))}
-                        disabled={isRunning}
-                        title="Increase context tokens"
-                    >
-                        +4k
-                    </button>
                 </div>
                 {!isCream ? (
                     <div className="aiWelcome">
@@ -491,7 +468,7 @@ export default function TheAI({ route, setRoute }) {
                                 <p>Database unavailable. Chat is running in local mode.</p>
                             </div>
                         )}
-                        <div className="aiTerminal" ref={outputRef}>
+                        <div className="aiTerminal" ref={outputRef} onScroll={handleScroll}>
                             {isSettingUp ? (
                                 <div className="aiWelcome">
                                     <p className="aiQuestion">SETTING UP RAG...</p>

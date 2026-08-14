@@ -498,15 +498,17 @@ async function createMediaContainer(accessToken, text, mediaUrl, mediaType = 'IM
 }
 
 async function getContainerStatus(containerId, accessToken) {
+    // Threads API uses GET /{container_id}?fields=status for container status
+    // The field is `status`, not `status_code`
     const params = {
-        fields: 'status_code,error_message',
+        fields: 'status',
     };
 
-    threadsLog.info(`[THREADS] API request: GET /me/threads/${containerId}`);
+    threadsLog.info(`[THREADS] Container status request: GET /${containerId}?fields=status`);
 
     const response = await threadsApiRequest(
         'GET',
-        `/me/threads/${containerId}`,
+        `/${containerId}`,
         accessToken,
         null,
         params
@@ -543,13 +545,15 @@ async function waitForContainerReady(containerId, accessToken, maxAttempts) {
 
     for (let i = 0; i < attempts; i++) {
         const status = await getContainerStatus(containerIdStr, accessToken);
-        threadsLog.info(`[PUBLISH] Container ${containerIdStr} status: ${status.status_code}`);
+        // Threads API returns `status` field (not `status_code`)
+        const containerStatus = status.status || status.status_code || 'UNKNOWN';
+        threadsLog.info(`[THREADS] Container status: ${containerStatus}`);
 
-        if (status.status_code === 'FINISHED') {
-            threadsLog.info(`[PUBLISH] Container ${containerIdStr} is ready`);
+        if (containerStatus === 'FINISHED') {
+            threadsLog.info(`[THREADS] Container ready, publishing...`);
             return status;
         }
-        if (status.status_code === 'ERROR') {
+        if (containerStatus === 'ERROR') {
             throw new Error(
                 `Container ${containerIdStr} processing failed: ` +
                 `${status.error_message || 'Unknown error'}`
@@ -886,16 +890,14 @@ export const ThreadsService = {
             } else {
                 container = await createMediaContainer(accessToken, text, mediaUrl, mediaType);
             }
-            threadsLog.info(`[PUBLISH] Container created: id=${container.id}`);
+            threadsLog.info(`[THREADS] Container created: ${container.id}`);
 
             // Wait for container to be ready
             const containerStatus = await waitForContainerReady(container.id, accessToken);
-            threadsLog.info(`[PUBLISH] Container ready: ${container.id}`);
 
             // Publish the container
-            threadsLog.info('[PUBLISH] Publishing container...');
             const published = await publishContainer(accessToken, container.id);
-            threadsLog.info(`[PUBLISH] Published successfully: id=${published.id}`);
+            threadsLog.info(`[THREADS] Published successfully: ${published.id}`);
 
             return {
                 success: true,

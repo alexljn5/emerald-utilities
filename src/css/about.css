@@ -7,21 +7,6 @@
     gap: var(--space-md);
 }
 
-.aboutHeader {
-    margin-bottom: var(--space-lg);
-}
-
-.aboutHeader h1 {
-    font-size: clamp(2rem, 3vw, 2.5rem);
-    margin-bottom: var(--space-sm);
-}
-
-.aboutTagline {
-    font-size: var(--space-md);
-    color: var(--color-text-secondary);
-    max-width: 600px;
-}
-
 .aboutSection {
     margin-bottom: var(--space-xl);
 }
@@ -224,7 +209,7 @@
 
 .techList li {
     padding: var(--space-xs) 0;
-    font-size: var(--space-sm);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
     color: var(--color-text-secondary);
     border-bottom: 1px solid var(--color-border);
 }
@@ -244,7 +229,7 @@
 .aboutFooter p {
     margin-bottom: var(--space-xs);
     color: var(--color-text-secondary);
-    font-size: var(--space-sm);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
 }
 
 /* ==================== RESPONSIVE ==================== */

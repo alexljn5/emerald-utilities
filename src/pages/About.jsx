@@ -10,10 +10,6 @@ export default function About({ route, setRoute }) {
     return (
         <PageShell title="About" route={route} setRoute={setRoute} leftChildren={
             <>
-                <h3>Navigation</h3>
-
-                <button type="button" onClick={() => setRoute('dashboard')}>Main App</button>
-
                 <div className="aboutLogoContainer">
                     <img
                         src={sigilLogo}
@@ -24,27 +20,6 @@ export default function About({ route, setRoute }) {
             </>
         }>
             <div className="aboutContent">
-                <header className="aboutHeader">
-                    <h1>Emerald Utilities</h1>
-                    <p className="aboutTagline">A private desktop utility environment for automation, development tools, creator workflows, and system management.</p>
-                </header>
-
-                {/* Floating image: sigil + bunny icon combined */}
-                <div className="aboutFloatContainer">
-                    <div className="aboutFloatImage">
-                        <img
-                            src={sigilLogo}
-                            alt=""
-                            className="aboutFloatSigil"
-                        />
-                        <img
-                            src={bunnyIcon}
-                            alt=""
-                            className="aboutFloatBunny"
-                        />
-                    </div>
-                </div>
-
                 <section className="aboutSection developerSection">
                     <h2>Developer</h2>
                     <div className="developerInfo">

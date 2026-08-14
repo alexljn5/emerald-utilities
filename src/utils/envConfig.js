@@ -34,7 +34,7 @@ const VARIABLE_SCHEMA = [
     { key: 'THREADS_REDIRECT_URI', label: 'Threads Redirect URI', provider: 'Threads', type: 'public', required: true },
 
     // ── Bluesky ──────────────────────────────────────────────────
-    { key: 'BLUESKY_USERNAME', label: 'Bluesky Handle', provider: 'Bluesky', type: 'public', required: true },
+    { key: 'BLUESKY_USERNAME', label: 'Bluesky Handle', provider: 'Bluesky', type: 'public', required: false },
     { key: 'BLUESKY_APP_PASSWORD', label: 'Bluesky App Password', provider: 'Bluesky', type: 'secret', required: true },
 
     // ── Database ─────────────────────────────────────────────────

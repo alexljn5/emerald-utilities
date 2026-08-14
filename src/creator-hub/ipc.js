@@ -75,7 +75,13 @@ function loadEnvCredentials() {
             accessToken: env.X_ACCESS_TOKEN || '',
             accessTokenSecret: env.X_ACCESS_TOKEN_SECRET || '',
             username: env.X_USERNAME || '',
-            blueskyAppSecret: env.BLUESKY_APP_SECRET || ''
+            blueskyAppSecret: env.BLUESKY_APP_SECRET || '',
+            threadsAppId: env.THREADS_APP_ID || env.INSTAGRAM_APP_ID || '',
+            threadsAppSecret: env.THREADS_APP_SECRET || env.INSTAGRAM_APP_SECRET || '',
+            tiktokClientKey: env.TIKTOK_CLIENT_KEY || '',
+            tiktokClientSecret: env.TIKTOK_CLIENT_SECRET || '',
+            youtubeClientId: env.YOUTUBE_CLIENT_ID || '',
+            youtubeClientSecret: env.YOUTUBE_CLIENT_SECRET || ''
         };
     } catch (err) {
         console.error('[CreatorHub] Failed to load env credentials:', err);
@@ -341,6 +347,20 @@ export function registerCreatorHubIpc(ipcMain) {
             }
             await deleteAccount(accountId);
             return { ok: true };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('creator-hub:get-threads-env-status', async () => {
+        try {
+            const threadsToken = process.env.THREADS_ACCESS_TOKEN;
+            const hasToken = !!(threadsToken && threadsToken.trim() !== '');
+            return {
+                ok: true,
+                hasToken,
+                authenticationMode: hasToken ? 'access-token' : 'oauth'
+            };
         } catch (err) {
             return { ok: false, error: err.message };
         }

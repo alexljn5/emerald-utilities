@@ -12,11 +12,12 @@ import { registerIpcHandlers } from './utils/ipcHandlers.js';
 import { registerXScraperIpcHandlers } from './utils/xscraperIpcHandlers.js';
 import { startWorker as startXScraperForwardWorker, getStatus as getXScraperForwardStatus } from './database/xscraper-forwarder.js';
 import { registerCreatorHubIpc } from './creator-hub/ipc.js';
+import { ThreadsService } from './creator-hub/services/threads.js';
 import { registerEnvIpc } from './utils/envIpc.js';
 import { resolvePath, resolveInternalScriptsPath } from './utils/pathResolver.js';
 import { default as databaseService } from './database/wrath.js';
 import { recover as recoverNetworkPersistence } from './database/network-persistence.js';
-import { ENABLE_DEVTOOLS, ENABLE_INAPP_NOTIFICATIONS, AI_MODE, DATABASE_MODE, LOCAL_AI_ENABLED } from './globals.js';
+import { ENABLE_DEVTOOLS, ENABLE_INAPP_NOTIFICATIONS, AI_MODE, DATABASE_MODE, LOCAL_AI_ENABLED, ACCOUNT_STATUS } from './globals.js';
 import { registerDeepLinkHandler } from './creator-hub/oauth.js';
 import { getAumid } from './utils/osNotifier.js';
 import {
@@ -1758,9 +1759,68 @@ app.whenReady().then(async () => {
         toWslPath
     });
 
+    // ==================== CREATOR HUB IPC ====================
+    // Register BEFORE window creation so renderer can safely invoke handlers.
+    registerCreatorHubIpc(ipcMain);
+
+    // Auto-configure Threads from environment access token if available
+    // Runs BEFORE window creation so the account is visible on first load.
+    try {
+        const threadsToken = process.env.THREADS_ACCESS_TOKEN;
+        if (threadsToken && threadsToken.trim() !== '') {
+            console.log('[THREADS] Access token configured: yes');
+            console.log('[THREADS] Authentication mode: access-token');
+            const validation = await ThreadsService.testConnection({ credentials: { accessToken: threadsToken.trim() } });
+            if (validation.valid) {
+                console.log(`[THREADS] Environment token validated for @${validation.username}`);
+                // Check if Threads account already exists in storage
+                const storage = await import('./creator-hub/storage.js');
+                const models = await import('./creator-hub/models.js');
+                const existing = await storage.getAccountByPlatform('threads');
+                if (!existing) {
+                    const account = models.createPlatformAccount({
+                        id: `acc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                        platform: 'threads',
+                        username: validation.username,
+                        displayName: validation.displayName || validation.username,
+                        status: ACCOUNT_STATUS.CONNECTED,
+                        encryptedCredentials: storage.encryptCredentials({ accessToken: threadsToken.trim() }),
+                        capabilities: { text: true, images: true, video: true, maxChars: 500 }
+                    });
+                    models.validatePlatformAccount(account);
+                    await storage.upsertAccount(account);
+                    console.log(`[THREADS] Auto-created account: @${validation.username}`);
+                } else {
+                    // Update existing account with current token
+                    const updated = {
+                        ...existing,
+                        encryptedCredentials: storage.encryptCredentials({ accessToken: threadsToken.trim() }),
+                        status: ACCOUNT_STATUS.CONNECTED,
+                        username: validation.username,
+                        displayName: validation.displayName || validation.username,
+                        lastUsed: new Date().toISOString()
+                    };
+                    models.validatePlatformAccount(updated);
+                    await storage.upsertAccount(updated);
+                    console.log(`[THREADS] Updated existing account: @${validation.username}`);
+                }
+            } else {
+                console.warn(`[THREADS] Environment token validation failed: ${validation.error}`);
+            }
+        } else {
+            console.log('[THREADS] Access token configured: no');
+            console.log('[THREADS] Authentication mode: oauth (fallback)');
+        }
+    } catch (err) {
+        console.error('[THREADS] Startup token check failed:', err.message);
+    }
+
+    // Register Environment Configuration IPC handlers
+    registerEnvIpc();
+
     // ==================== WINDOW CREATION ====================
-    // Create window AFTER IPC handlers are registered so the renderer
-    // can safely invoke handlers on first load.
+    // Create window AFTER IPC handlers and Threads auto-config are registered
+    // so the renderer can safely invoke handlers on first load.
     await createWindow();
     createTray();
 
@@ -1798,12 +1858,6 @@ app.whenReady().then(async () => {
         console.error('[XScraper] Failed to auto-start forward worker:', err.message);
         pushScriptLog(`[XScraper] Forward worker auto-start failed: ${err.message}`);
     }
-
-    // Register Creator Hub IPC handlers
-    registerCreatorHubIpc(ipcMain);
-
-    // Register Environment Configuration IPC handlers
-    registerEnvIpc();
 
     // DevTools toggle handler
     ipcMain.handle('devtools:toggle', async (_event, show) => {

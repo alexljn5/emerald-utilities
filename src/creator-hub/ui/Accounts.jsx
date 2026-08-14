@@ -22,10 +22,12 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
     const [submitting, setSubmitting] = useState(false);
     const [envLoaded, setEnvLoaded] = useState(false);
     const [envCredentials, setEnvCredentials] = useState({});
+    const [threadsEnvStatus, setThreadsEnvStatus] = useState({ hasToken: false, authenticationMode: 'oauth' });
 
     useEffect(() => {
         loadAccounts();
         loadEnvCredentials();
+        loadThreadsEnvStatus();
     }, []);
 
     async function loadEnvCredentials() {
@@ -38,12 +40,32 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                     accessToken: result.credentials.accessToken || '',
                     accessTokenSecret: result.credentials.accessTokenSecret || '',
                     username: result.credentials.username || '',
-                    blueskyAppSecret: result.credentials.blueskyAppSecret || ''
+                    blueskyAppSecret: result.credentials.blueskyAppSecret || '',
+                    threadsAppId: result.credentials.threadsAppId || '',
+                    threadsAppSecret: result.credentials.threadsAppSecret || '',
+                    tiktokClientKey: result.credentials.tiktokClientKey || '',
+                    tiktokClientSecret: result.credentials.tiktokClientSecret || '',
+                    youtubeClientId: result.credentials.youtubeClientId || '',
+                    youtubeClientSecret: result.credentials.youtubeClientSecret || ''
                 });
                 setEnvLoaded(true);
             }
         } catch (err) {
             // Silently fail — env credentials are optional
+        }
+    }
+
+    async function loadThreadsEnvStatus() {
+        try {
+            const result = await invoke('creator-hub:get-threads-env-status');
+            if (result.ok) {
+                setThreadsEnvStatus({
+                    hasToken: result.hasToken,
+                    authenticationMode: result.authenticationMode
+                });
+            }
+        } catch (err) {
+            // Silently fail
         }
     }
 
@@ -74,6 +96,35 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
             setError(err.message || 'Authentication failed');
         } finally {
             setAuthenticating(false);
+        }
+    }
+
+    function getPlatformAuthLabel(platform) {
+        switch (platform) {
+            case 'instagram': return 'Connect Instagram';
+            case 'threads':
+                return threadsEnvStatus.hasToken ? 'Threads (Configured)' : 'Connect Threads';
+            case 'tiktok': return 'Connect TikTok';
+            case 'youtube': return 'Connect YouTube';
+            default: return `Connect ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
+        }
+    }
+
+    function getPlatformAuthDescription(platform) {
+        switch (platform) {
+            case 'instagram':
+                return 'Connect your Instagram Creator or Business account via OAuth. This will open Meta\'s authorization page in your browser.';
+            case 'threads':
+                if (threadsEnvStatus.hasToken) {
+                    return 'Threads is configured with an access token from your environment. Publishing will use this token directly. Click to re-authorize via OAuth if needed.';
+                }
+                return 'Connect your Threads account via Meta OAuth. This will open the Threads authorization page in your browser.';
+            case 'tiktok':
+                return 'Connect your TikTok account via OAuth. This will open TikTok\'s authorization page in your browser.';
+            case 'youtube':
+                return 'Connect your YouTube channel via Google OAuth. This will open Google\'s authorization page in your browser.';
+            default:
+                return `Connect your ${platform} account via OAuth.`;
         }
     }
 
@@ -268,16 +319,28 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                     <div className="chButtonGroup">
                         {supportedPlatforms.map(platform => {
                             const isConnected = connectedPlatforms.has(platform);
+                            const isThreadsConfigured = platform === 'threads' && threadsEnvStatus.hasToken;
+                            const disabled = isConnected;
+                            const label = isConnected
+                                ? 'Connected'
+                                : isThreadsConfigured
+                                    ? 'Threads (Configured)'
+                                    : `Add ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
+                            const title = isConnected
+                                ? 'Already connected'
+                                : isThreadsConfigured
+                                    ? 'Threads configured via environment token — click to create account'
+                                    : `Add ${platform} account`;
                             return (
                                 <button
                                     key={platform}
                                     type="button"
                                     className="chButton"
                                     onClick={() => openForm(platform)}
-                                    disabled={isConnected}
-                                    title={isConnected ? 'Already connected' : `Add ${platform} account`}
+                                    disabled={disabled}
+                                    title={title}
                                 >
-                                    {isConnected ? 'Connected' : `Add ${platform.charAt(0).toUpperCase() + platform.slice(1)}`}
+                                    {label}
                                 </button>
                             );
                         })}
@@ -457,8 +520,7 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                                 </div>
                                 <div className="chFormGroup" style={{ marginTop: '1rem' }}>
                                     <p style={{ color: '#ccc', marginBottom: '0.5rem' }}>
-                                        Connect your Instagram Creator or Business account via OAuth.
-                                        This will open Meta's authorization page in your browser.
+                                        {getPlatformAuthDescription('instagram')}
                                     </p>
                                     <button
                                         type="button"
@@ -473,7 +535,7 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                                                 Connecting to Instagram...
                                             </>
                                         ) : (
-                                            'Connect Instagram'
+                                            getPlatformAuthLabel('instagram')
                                         )}
                                     </button>
                                     {envLoaded && envCredentials.apiKey && (
@@ -484,7 +546,59 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                                 </div>
                             </>
                         )}
-                        {formPlatform && !['x', 'bluesky', 'instagram'].includes(formPlatform) && (
+                        {(formPlatform === 'threads' || formPlatform === 'tiktok' || formPlatform === 'youtube') && (
+                            <>
+                                <div className="chFormGroup">
+                                    <label className="chLabel" htmlFor="form-username">Username / Channel Name</label>
+                                    <input
+                                        id="form-username"
+                                        className="chInput"
+                                        type="text"
+                                        value={formData.username || ''}
+                                        onChange={e => setFormData(prev => ({ ...prev, username: e.target.value }))}
+                                        placeholder={`Your ${formPlatform} username`}
+                                    />
+                                    <div style={{ fontSize: '0.85em', color: '#888', marginTop: '0.3rem' }}>
+                                        Optional. Will be retrieved automatically after connecting.
+                                    </div>
+                                </div>
+                                <div className="chFormGroup" style={{ marginTop: '1rem' }}>
+                                    <p style={{ color: '#ccc', marginBottom: '0.5rem' }}>
+                                        {getPlatformAuthDescription(formPlatform)}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        className="chButton chButtonPrimary"
+                                        onClick={() => handleAuthenticate(formPlatform)}
+                                        disabled={authenticating}
+                                        style={{ width: '100%', padding: '0.8rem' }}
+                                    >
+                                        {authenticating ? (
+                                            <>
+                                                <span className="chSpinner" style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #000', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite', marginRight: '0.5rem', verticalAlign: 'middle' }}></span>
+                                                Connecting to {formPlatform.charAt(0).toUpperCase() + formPlatform.slice(1)}...
+                                            </>
+                                        ) : (
+                                            getPlatformAuthLabel(formPlatform)
+                                        )}
+                                    </button>
+                                    {envLoaded && (
+                                        <div style={{ fontSize: '0.85em', marginTop: '0.5rem' }}>
+                                            {formPlatform === 'threads' && envCredentials.threadsAppId && (
+                                                <span style={{ color: '#4f4' }}>Threads API credentials found in environment configuration.</span>
+                                            )}
+                                            {formPlatform === 'tiktok' && envCredentials.tiktokClientKey && (
+                                                <span style={{ color: '#4f4' }}>TikTok API credentials found in environment configuration.</span>
+                                            )}
+                                            {formPlatform === 'youtube' && envCredentials.youtubeClientId && (
+                                                <span style={{ color: '#4f4' }}>YouTube API credentials found in environment configuration.</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                        {formPlatform && !['x', 'bluesky', 'instagram', 'threads', 'tiktok', 'youtube'].includes(formPlatform) && (
                             <>
                                 <div className="chFormGroup">
                                     <label className="chLabel" htmlFor="form-username">Username</label>

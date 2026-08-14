@@ -15,10 +15,13 @@ function getStatusLabel(status) {
     }
 }
 
-export default function PublishProgress({ results, platforms, isPublishing }) {
+export default function PublishProgress({ results, platforms, isPublishing, onRetry }) {
     if (!isPublishing && results.length === 0) {
         return null;
     }
+
+    // If no platforms specified, derive from results
+    const displayPlatforms = platforms.length > 0 ? platforms : [...new Set(results.map(r => r.platform))];
 
     return (
         <div className="chPublishProgress">
@@ -26,9 +29,9 @@ export default function PublishProgress({ results, platforms, isPublishing }) {
                 {isPublishing ? 'Publishing...' : 'Publish Complete'}
             </div>
             <div className="chPublishProgressList">
-                {platforms.map(platform => {
+                {displayPlatforms.map(platform => {
                     const result = results.find(r => r.platform === platform);
-                    const status = result?.status || 'pending';
+                    const status = result?.status || (isPublishing ? 'pending' : 'skipped');
                     const error = result?.error;
 
                     return (
@@ -41,6 +44,16 @@ export default function PublishProgress({ results, platforms, isPublishing }) {
                                 <span className="chPublishProgressError" title={error}>
                                     {error.length > 40 ? `${error.slice(0, 40)}...` : error}
                                 </span>
+                            )}
+                            {status === 'failed' && onRetry && result?.accountId && (
+                                <button
+                                    type="button"
+                                    className="chButton chButtonSmall"
+                                    onClick={() => onRetry(result.accountId)}
+                                    style={{ marginLeft: '0.5rem' }}
+                                >
+                                    Retry
+                                </button>
                             )}
                         </div>
                     );

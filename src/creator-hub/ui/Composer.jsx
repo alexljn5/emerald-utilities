@@ -31,6 +31,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
     const [publishing, setPublishing] = useState(false);
     const [publishResults, setPublishResults] = useState([]);
     const [error, setError] = useState('');
+    const [currentPostId, setCurrentPostId] = useState(null);
 
     // Load accounts for multi-platform mode
     useEffect(() => {
@@ -249,6 +250,8 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
 
             const result = await invoke('creator-hub:create-post', postData);
             if (result.ok) {
+                setCurrentPostId(result.post.id);
+
                 // Reset form
                 setMessage('');
                 setMedia([]);
@@ -526,6 +529,25 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
 
             {/* ==================== ACTIONS ==================== */}
             <div className="chButtonGroup">
+                {mode === 'multi' && accounts.length > 0 && (
+                    <button
+                        type="button"
+                        className="chButton chButtonSecondary"
+                        onClick={() => {
+                            // Select all connected accounts as targets
+                            const allTargets = accounts.map(a => ({
+                                accountId: a.id,
+                                platform: a.platform,
+                                enabled: true,
+                                override: {}
+                            }));
+                            setTargets(allTargets);
+                        }}
+                        disabled={loading || publishing}
+                    >
+                        Publish Everywhere
+                    </button>
+                )}
                 <button
                     type="submit"
                     className="chButton chButtonPrimary"
@@ -557,7 +579,25 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
 
             {/* ==================== PUBLISH PROGRESS ==================== */}
             {(publishing || publishResults.length > 0) && (
-                <PublishProgress results={publishResults} />
+                <PublishProgress
+                    results={publishResults}
+                    platforms={targets.filter(t => t.enabled).map(t => t.platform)}
+                    isPublishing={publishing}
+                    onRetry={async (historyEntryId) => {
+                        const retryResult = await invoke('creator-hub:retry-publish', { historyEntryId });
+                        if (retryResult.ok && retryResult.success) {
+                            // Refresh results by re-publishing
+                            if (currentPostId) {
+                                const newPublishResult = await invoke('creator-hub:publish', { postId: currentPostId });
+                                if (newPublishResult.ok && newPublishResult.summary) {
+                                    setPublishResults(newPublishResult.summary.results || []);
+                                }
+                            }
+                        } else {
+                            setError(retryResult.error || 'Retry failed');
+                        }
+                    }}
+                />
             )}
         </form>
     );

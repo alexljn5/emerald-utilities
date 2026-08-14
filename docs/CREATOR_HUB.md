@@ -19,10 +19,10 @@ Creator Hub is the social media publishing module of Emerald Utilities. It provi
 | X (Twitter) | Stable | Yes | Yes | Yes | OAuth 2.0 / 1.0a |
 | Bluesky | Stable | Yes | Yes | No | AT Protocol |
 | Instagram | Stable | No | Yes | Yes | Instagram API with Instagram Login |
-| Threads | Prepared | Yes | Yes | Yes | Meta API (not implemented) |
+| Threads | Implemented | Yes | Yes | Yes | Meta Graph API |
+| TikTok | Implemented | Yes | No | Yes | TikTok Content Posting API |
+| YouTube | Implemented | Yes | No | Yes | YouTube Data API v3 |
 | Facebook | Stub | No | No | No | Placeholder only |
-| TikTok | Stub | No | No | No | Placeholder only |
-| YouTube | Stub | No | No | No | Placeholder only |
 | itch.io | Stub | No | No | No | Placeholder only |
 
 ---
@@ -192,14 +192,34 @@ Creator Hub uses a structured logging system:
 
 ---
 
-## Future Platforms
+## Implemented Platforms
 
-### Threads Adapter TODO
+### Threads
 
-Requirements:
-- Authentication: Meta API
-- Capabilities: `{ text: true, images: true, video: true }`
-- Required: text posts, image posts, reply support, thread chains
+- Authentication: Meta OAuth (reuses Instagram/Facebook Meta app)
+- Scopes: `threads_basic`, `threads_content_publish`
+- Publishing: Meta Graph API `/threads/media` → `/threads/media_publish`
+- Media: Images and video via public URL (Cloudflare tunnel)
+- Text-only posts supported
+
+### TikTok
+
+- Authentication: OAuth 2.0 PKCE
+- Scopes: `video.publish`, `video.upload`
+- Publishing: TikTok Content Posting API `/post/publish/video/init/`
+- Media: Video upload via direct upload to TikTok CDN
+- Status polling until `PUBLISH_COMPLETE`
+- Text-only posts not supported (video required)
+
+### YouTube
+
+- Authentication: Google OAuth 2.0
+- Scopes: `https://www.googleapis.com/auth/youtube.upload`
+- Publishing: YouTube Data API v3 resumable upload
+- Media: Video upload in 256KB chunks
+- Supports title, description, tags, privacy status
+- Thumbnail upload from first image in media batch
+- Default privacy: private (user can change in YouTube Studio)
 
 ---
 
@@ -301,4 +321,6 @@ Every publish attempt records:
 1. **Media path handling** — Fixed: Composer now uses Electron dialog for reliable paths
 2. **Image upload to Bluesky** — Fixed: `uploadBlob()` implemented using AT Protocol
 3. **Publisher crash on success** — Fixed: Guarded `publishResult.error.match()`
-4. **Threads adapter** — Not implemented yet (stub only)
+4. **Retry variable shadowing** — Fixed: Renamed shadowed `entry` variable in `retryPublish`
+5. **TikTok video requirements** — TikTok requires video files; image posts not yet supported via Content Posting API
+6. **YouTube privacy** — Defaults to private; user must change to public in YouTube Studio if desired

@@ -124,8 +124,9 @@ export async function publishPost(post) {
         const account = await getAccountById(target.accountId);
         if (!account) {
             publisherLog.error(`Account not found: ${target.accountId}`);
+            const historyEntryId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const entry = {
-                id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: historyEntryId,
                 postId: post.id,
                 accountId: target.accountId,
                 platform: target.platform || 'unknown',
@@ -142,6 +143,7 @@ export async function publishPost(post) {
                 platform: target.platform || 'unknown',
                 accountId: target.accountId,
                 success: false,
+                historyEntryId,
                 error: 'Account not found'
             });
             continue;
@@ -149,8 +151,9 @@ export async function publishPost(post) {
 
         if (account.status !== ACCOUNT_STATUS.CONNECTED) {
             publisherLog.warn(`Account not connected: ${target.accountId} (status: ${account.status})`);
+            const historyEntryId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const entry = {
-                id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: historyEntryId,
                 postId: post.id,
                 accountId: target.accountId,
                 platform: account.platform,
@@ -167,6 +170,7 @@ export async function publishPost(post) {
                 platform: account.platform,
                 accountId: target.accountId,
                 success: false,
+                historyEntryId,
                 error: `Account is ${account.status}`
             });
             continue;
@@ -186,8 +190,9 @@ export async function publishPost(post) {
             const validation = validatePublishRequest(account, post, text);
             publisherLog.info(`Validation result: valid=${validation.valid}, error=${validation.error || 'none'}`);
             if (!validation.valid) {
+                const historyEntryId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                 const entry = {
-                    id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                    id: historyEntryId,
                     postId: post.id,
                     accountId: target.accountId,
                     platform: account.platform,
@@ -204,6 +209,7 @@ export async function publishPost(post) {
                     platform: account.platform,
                     accountId: target.accountId,
                     success: false,
+                    historyEntryId,
                     error: validation.error
                 });
                 continue;
@@ -220,8 +226,9 @@ export async function publishPost(post) {
                 } catch {
                     // Ignore status update errors
                 }
+                const historyEntryId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                 const entry = {
-                    id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                    id: historyEntryId,
                     postId: post.id,
                     accountId: target.accountId,
                     platform: account.platform,
@@ -238,6 +245,7 @@ export async function publishPost(post) {
                     platform: account.platform,
                     accountId: target.accountId,
                     success: false,
+                    historyEntryId,
                     error: connectionValid.error || 'Connection invalid'
                 });
                 continue;
@@ -264,8 +272,9 @@ export async function publishPost(post) {
             const finishedAt = new Date().toISOString();
             const durationMs = new Date(finishedAt) - new Date(startedAt);
 
+            const historyEntryId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const entry = {
-                id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: historyEntryId,
                 postId: post.id,
                 accountId: target.accountId,
                 platform: account.platform,
@@ -299,6 +308,7 @@ export async function publishPost(post) {
                 accountId: target.accountId,
                 success: publishResult.success,
                 postId: publishResult.postId,
+                historyEntryId,
                 error: translatedError
             });
         } catch (err) {
@@ -316,8 +326,9 @@ export async function publishPost(post) {
                 const networkError = translateNetworkError(err.message);
                 translatedError = networkError.message;
             }
+            const historyEntryId = `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const entry = {
-                id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: historyEntryId,
                 postId: post.id,
                 accountId: target.accountId,
                 platform: account.platform,
@@ -335,6 +346,7 @@ export async function publishPost(post) {
                 platform: account.platform,
                 accountId: target.accountId,
                 success: false,
+                historyEntryId,
                 error: translatedError
             });
         }
@@ -472,7 +484,7 @@ export async function retryPublish(historyEntryId) {
             const networkError = translateNetworkError(err.message);
             translatedError = networkError.message;
         }
-        const entry = {
+        const newEntry = {
             id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             postId: entry.postId,
             accountId: entry.accountId,
@@ -485,7 +497,7 @@ export async function retryPublish(historyEntryId) {
             durationMs,
             errorMessage: translatedError
         };
-        await addPublishHistoryEntry(entry);
+        await addPublishHistoryEntry(newEntry);
 
         return { success: false, error: translatedError };
     }

@@ -367,7 +367,7 @@ function buildAuthUrl({ clientId, redirectUri, state }) {
         client_id: clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: REQUIRED_SCOPES.join(','),
+        scope: REQUIRED_SCOPES.join(' '),
         state: state || '',
     });
     return `${IG_AUTH_URL}?${params.toString()}`;

@@ -4,9 +4,9 @@
 
 # Emerald Utilities
 
-**Version:** 0.1.5  
-**Author:** alexljn5  
-**License:** MIT  
+**Version:** 0.1.5
+**Author:** alexljn5
+**License:** Proprietary — All Rights Reserved
 **Platform:** Windows · Linux · macOS
 
 [![Electron](https://img.shields.io/badge/Electron-37.2.5-47848F?logo=electron)](https://www.electronjs.org/)
@@ -232,6 +232,37 @@ fonts/                  Custom pixel font (FS Pixel Sans Unicode)
   destroy populated embeddings. Any dimension change is only auto-applied to an **empty** column.
 - **Dev server:** Vite dev server binds to `127.0.0.1:5173` with strict port enforcement and
   WebSocket HMR on the same host/port.
+
+## License
+
+This project is **proprietary software**. All rights reserved by alexljn5.
+
+Unauthorized copying, modification, distribution, or use of this software, via any
+medium, is strictly prohibited. See [LICENSE](LICENSE) for the full terms.
+
+## Dependency Licenses
+
+This project incorporates open-source software licensed under the following terms:
+
+| Dependency | License |
+|------------|---------|
+| Electron | MIT |
+| React | MIT |
+| React DOM | MIT |
+| Vite | MIT |
+| Express | MIT |
+| PostgreSQL (pg) | MIT |
+| SQLite3 | Public Domain |
+| dotenv | BSD-2-Clause |
+| node-notifier | MIT |
+| adm-zip | MIT |
+| cors | MIT |
+| body-parser | MIT |
+| uuid | MIT |
+
+All other dependencies are subject to their respective licenses as published by their
+authors. This proprietary license applies only to the original code authored by
+alexljn5 and does not override the terms of any third-party open-source components.
 
 ## Documentation
 

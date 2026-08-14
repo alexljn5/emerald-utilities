@@ -5,6 +5,7 @@
   "description": "alexljn5's Personal Utility Program.",
   "main": "dist-electron/heavensgate.js",
   "author": "alexljn5",
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "vite",
     "dev:electron": "vite",

@@ -1,10 +1,22 @@
-# Emerald Utilities
+<div align="center">
 
 ![Emerald Utilities Logo](img/favicons/android-chrome-512x512.png)
 
-**Version:** 0.1.5
-**Author:** alexljn5
-**License:** MIT
+# Emerald Utilities
+
+**Version:** 0.1.5  
+**Author:** alexljn5  
+**License:** MIT  
+**Platform:** Windows · Linux · macOS
+
+[![Electron](https://img.shields.io/badge/Electron-37.2.5-47848F?logo=electron)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React-19.2.7-61DAFB?logo=react)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6.x-646CFF?logo=vite)](https://vitejs.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql)](https://www.postgresql.org/)
+[![pgvector](https://img.shields.io/badge/pgvector-0.7-00C7B7?logo=postgresql)](https://github.com/pgvector/pgvector)
+[![Ollama](https://img.shields.io/badge/Ollama-local-000000?logo=ollama)](https://ollama.com/)
+
+</div>
 
 ## Overview
 
@@ -15,9 +27,10 @@ Emerald Utilities is a personal desktop utility tool built with **Electron + Rea
 - **Script Management** — run, schedule (cron), and manage custom scripts.
 - **Network Monitoring** — capture and analyze traffic via `tcpdump`, with blacklist/threat tracking.
 - **Database Integration** — PostgreSQL (Dockerized) with JSONB storage and a JSON import pipeline.
-- **RAG Assistant** — vector similarity search (pgvector) + local LLM answers (Ollama).
+- **RAG Assistant ("The AI")** — vector similarity search (pgvector) + local LLM answers (Ollama).
 - **Internet Browser (XScraper)** — built-in browser that scrapes Grok/X conversations.
 - **Portfolio Monitor** — price tracking via pluggable providers.
+- **Creator Hub** — multi-platform social media publishing (Bluesky, Threads, TikTok, YouTube, Instagram, Facebook).
 
 ## Architecture
 
@@ -31,19 +44,20 @@ Emerald Utilities is a personal desktop utility tool built with **Electron + Rea
 │  │ Database / TheAI  │◄──────────► │ scriptManager / networkMgr   │ │
 │  │ NetworkMonitoring │            │ db-pool.js (pg Pool)          │ │
 │  │ ScriptTool        │            │ rag-query / rag-prepare       │ │
+│  │ CreatorHub        │            │ xscraperIpcHandlers           │ │
 │  └───────────────────┘            └──────────────┬───────────────┘ │
 └─────────────────────────────────────────────────┼─────────────────┘
-                                                   │ LAN (TCP)
-                        ┌──────────────────────────┼───────────────────────┐
-                        │           Headless server (Arch Linux)            │
-                        │                                                   │
-                        │  ┌───────────────────────┐   ┌─────────────────┐ │
-                        │  │ Docker: emerald-postgres│   │ Ollama (screen) │ │
-                        │  │  PostgreSQL 16 +        │   │  nomic-embed-... │ │
-                        │  │  pgvector               │◄──┤  llama2-uncensored │ │
-                        │  │  DB: emerald_utilities  │   └─────────────────┘ │
-                        │  └───────────────────────┘                        │
-                        └───────────────────────────────────────────────────┘
+                                                    │ LAN (TCP)
+                         ┌──────────────────────────┼───────────────────────┐
+                         │           Headless server (Arch Linux)            │
+                         │                                                   │
+                         │  ┌───────────────────────┐   ┌─────────────────┐ │
+                         │  │ Docker: emerald-postgres│   │ Ollama (screen) │ │
+                         │  │  PostgreSQL 16 +        │   │  nomic-embed-... │ │
+                         │  │  pgvector               │◄──┤  llama2-uncensored │ │
+                         │  │  DB: emerald_utilities  │   └─────────────────┘ │
+                         │  └───────────────────────┘                        │
+                         └───────────────────────────────────────────────────┘
 ```
 
 **RAG data flow**
@@ -185,13 +199,27 @@ npm run build:all    # macOS + Windows + Linux
 ```
 src/
   heavensgate.js        Electron main entry
-  utils/                logger, IPC handlers, path resolver
+  preload.js            IPC bridge (contextIsolation)
+  main.jsx              React entry
+  index.html            Vite shell
+  globals.js            Shared constants / theme tokens
+  utils/                logger, IPC handlers, path resolver, env config
+  core/                 archiveScheduler, modUpdater, networkManager, scriptManager
+  creator-hub/          Multi-platform social publishing (Bluesky, Threads, TikTok, etc.)
+  css/                  Global and feature-specific stylesheets
   database/             db-pool, RAG (query/prepare/chunk), schema (envy.sql), docker-compose
   internal-scripts/     db-start/stop, rag-setup, volume backup/restore (cross-platform bash)
-  pages/ core/ css/     React renderer, feature modules, styles
-  scrapers/xscraper/    browser extension + local server for scraping
+  pages/                React page components (Dashboard, Database, Network, ScriptTool, etc.)
+  portfolio/            Price tracking providers
+  scrapers/xscraper/    Browser extension + local server for scraping
+  services/             Backend service integrations
+  tasks/                Task scheduling and sync
+  mascot/               Dashboard mascot images
 tests/                  unit + integration tests, fixtures
 scripts/                encrypt-secrets and misc tooling
+docs/                   Extended documentation (architecture, API, changelog, etc.)
+img/                    Logos, favicons, mascots, backgrounds
+fonts/                  Custom pixel font (FS Pixel Sans Unicode)
 ```
 
 ## Maintenance notes
@@ -202,7 +230,9 @@ scripts/                encrypt-secrets and misc tooling
   on `package-lock.json`.
 - **Idempotency / safety:** DB scripts and schema are designed to be re-run safely and will never
   destroy populated embeddings. Any dimension change is only auto-applied to an **empty** column.
+- **Dev server:** Vite dev server binds to `127.0.0.1:5173` with strict port enforcement and
+  WebSocket HMR on the same host/port.
 
 ## Documentation
 
-See [DOCUMENTATION.md](DOCUMENTATION.md) for extended architecture and usage information (if present).
+See [DOCUMENTATION.md](DOCUMENTATION.md) for extended architecture and usage information.

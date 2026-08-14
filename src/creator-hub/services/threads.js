@@ -1,7 +1,10 @@
 // src/creator-hub/services/threads.js
 // Threads API service — Meta Graph API integration.
-// Primary authentication: THREADS_ACCESS_TOKEN from environment.
-// Fallback: OAuth flow for obtaining/re-authorizing a token.
+// Uses the Threads API (graph.threads.net) for all operations.
+//
+// Authentication modes:
+//   1. Direct access token via THREADS_ACCESS_TOKEN environment variable
+//   2. OAuth flow (fallback when no env token is configured)
 //
 // OAuth scopes required:
 //   threads_basic, threads_content_publish
@@ -12,10 +15,10 @@
 //   2. HTTPS localhost — requires mkcert certificates in src/oauth/certs/
 //
 // Env vars:
-//   THREADS_APP_ID        — Meta app ID (can reuse INSTAGRAM_APP_ID)
-//   THREADS_APP_SECRET    — Meta app secret (can reuse INSTAGRAM_APP_SECRET)
-//   THREADS_ACCESS_TOKEN  — Pre-configured Threads access token (primary)
-//   THREADS_REDIRECT_URI  — OAuth redirect URI (emerald:// or https://)
+//   THREADS_ACCESS_TOKEN   — Direct access token (preferred, no OAuth needed)
+//   THREADS_APP_ID         — Meta app ID (can reuse INSTAGRAM_APP_ID)
+//   THREADS_APP_SECRET     — Meta app secret (can reuse INSTAGRAM_APP_SECRET)
+//   THREADS_REDIRECT_URI   — OAuth redirect URI (emerald:// or https://)
 
 import { PlatformService } from './base.js';
 import { startDeepLinkOAuthFlow, startLocalhostOAuthFlow, generateState } from '../oauth.js';
@@ -62,7 +65,8 @@ async function showMainWindow() {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const THREADS_API = 'https://graph.threads.net';
+// Threads API hostname — NOT the Facebook Graph API hostname
+const THREADS_API = 'https://graph.threads.net/v1.0';
 
 const REQUIRED_SCOPES = [
     'threads_basic',
@@ -85,21 +89,17 @@ function getEnv() {
     return {
         clientId: process.env.THREADS_APP_ID || process.env.INSTAGRAM_APP_ID || '',
         clientSecret: process.env.THREADS_APP_SECRET || process.env.INSTAGRAM_APP_SECRET || '',
-        accessToken: process.env.THREADS_ACCESS_TOKEN || '',
         redirectUri: process.env.THREADS_REDIRECT_URI || process.env.INSTAGRAM_REDIRECT_URI || '',
+        accessToken: process.env.THREADS_ACCESS_TOKEN || '',
     };
 }
 
 /**
- * Get the configured access token from environment.
- * @returns {string|null} The access token, or null if not configured.
+ * Check if a direct access token is configured in the environment.
+ * @returns {boolean}
  */
-function getConfiguredAccessToken() {
-    const token = process.env.THREADS_ACCESS_TOKEN;
-    if (!token || token.trim() === '') {
-        return null;
-    }
-    return token.trim();
+function hasEnvAccessToken() {
+    return !!process.env.THREADS_ACCESS_TOKEN;
 }
 
 // ── File helpers ────────────────────────────────────────────────────────────
@@ -314,7 +314,7 @@ function buildAuthUrl({ clientId, redirectUri, state }) {
 }
 
 async function exchangeCodeForToken(code, { clientId, clientSecret, redirectUri }) {
-    threadsLog.debug('[AUTH] Exchanging authorization code for token');
+    threadsLog.debug(`[AUTH] Exchanging authorization code for token`);
 
     const response = await fetch(`${THREADS_API}/oauth/access_token`, {
         method: 'POST',
@@ -334,7 +334,7 @@ async function exchangeCodeForToken(code, { clientId, clientSecret, redirectUri 
     }
 
     const data = await response.json();
-    threadsLog.debug('[AUTH] Token exchange response keys: ' + Object.keys(data).join(', '));
+    threadsLog.debug(`[AUTH] Token exchange response keys: ${Object.keys(data).join(', ')}`);
     return data;
 }
 
@@ -362,44 +362,113 @@ async function refreshLongLivedToken(currentToken) {
 // ── Threads API helpers ─────────────────────────────────────────────────────
 
 /**
- * Make an authenticated request to the Threads API.
- * Uses Authorization: Bearer header.
+ * Centralized Threads API request helper.
+ * Attaches the access token via Authorization: Bearer header.
+ * Adds diagnostic logging for all requests.
  *
- * @param {string} accessToken - The Threads access token
- * @param {string} endpoint - The API endpoint (e.g. '/me')
- * @param {Object} [options] - Fetch options
- * @returns {Promise<Object>} The JSON response
+ * @param {string} method - HTTP method
+ * @param {string} path - API path (e.g. '/me', '/me/threads')
+ * @param {string} accessToken - Threads access token
+ * @param {Object} [body] - Request body for POST/PATCH
+ * @param {Object} [queryParams] - Additional query parameters
+ * @returns {Promise<Object>} Parsed JSON response
  */
-async function threadsApiRequest(accessToken, endpoint, options = {}) {
-    const url = `${THREADS_API}${endpoint}`;
+async function threadsApiRequest(method, path, accessToken, body = null, queryParams = {}) {
+    const url = new URL(`${THREADS_API}${path}`);
+
+    // Add query parameters
+    for (const [key, value] of Object.entries(queryParams)) {
+        if (value !== undefined && value !== null) {
+            url.searchParams.set(key, String(value));
+        }
+    }
+
     const headers = {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        ...options.headers,
     };
 
-    const response = await fetch(url, {
-        ...options,
+    const options = {
+        method,
         headers,
-    });
+    };
 
-    if (!response.ok) {
-        const text = await response.text();
-        let errorDetail = text;
-        try {
-            const errorJson = JSON.parse(text);
-            errorDetail = errorJson.error?.message || text;
-        } catch {
-            // Keep raw text if not JSON
-        }
-        throw new Error(`Threads API error (HTTP ${response.status}): ${errorDetail}`);
+    if (body && (method === 'POST' || method === 'PATCH')) {
+        options.body = JSON.stringify(body);
     }
 
-    return response.json();
+    // Diagnostic logging — never log the actual token
+    threadsLog.info(`[THREADS] API request: ${method} ${path}`);
+
+    const response = await fetch(url.toString(), options);
+
+    const status = response.status;
+    threadsLog.info(`[THREADS] API response status: ${status} for ${method} ${path}`);
+
+    let responseData;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        responseData = await response.json();
+    } else {
+        responseData = await response.text();
+    }
+
+    // Sanitize response for logging — remove any token fields
+    let sanitizedResponse;
+    if (typeof responseData === 'object' && responseData !== null) {
+        sanitizedResponse = { ...responseData };
+        // Remove any potential token fields from log output
+        delete sanitizedResponse.access_token;
+        delete sanitizedResponse.accessToken;
+    } else {
+        sanitizedResponse = responseData;
+    }
+
+    threadsLog.info(`[THREADS] API response: ${JSON.stringify(sanitizedResponse)}`);
+
+    if (!response.ok) {
+        const errorMessage = typeof responseData === 'string'
+            ? responseData
+            : JSON.stringify(responseData);
+        throw new Error(`Threads API error (HTTP ${status}): ${errorMessage}`);
+    }
+
+    return responseData;
+}
+
+/**
+ * Validate a Threads access token by fetching the authenticated user's profile.
+ * Uses the correct Threads API endpoint and authentication.
+ *
+ * @param {string} accessToken - The Threads access token to validate
+ * @returns {Promise<Object>} Profile data with id, username, name
+ */
+async function validateThreadsToken(accessToken) {
+    threadsLog.info('[THREADS] Token validation endpoint: GET /me?fields=id,username,name');
+    threadsLog.info('[THREADS] Token validation status: pending');
+
+    try {
+        const profile = await threadsApiRequest(
+            'GET',
+            '/me',
+            accessToken,
+            null,
+            { fields: 'id,username,name' }
+        );
+
+        threadsLog.info(`[THREADS] Token validation successful: yes`);
+        threadsLog.info(`[THREADS] Authenticated as: @${profile.username || profile.id}`);
+
+        return profile;
+    } catch (err) {
+        threadsLog.info(`[THREADS] Token validation successful: no`);
+        threadsLog.info(`[THREADS] Token validation error: ${err.message}`);
+        throw err;
+    }
 }
 
 async function getThreadsProfile(accessToken) {
-    return threadsApiRequest(accessToken, '/me?fields=id,username,name');
+    return validateThreadsToken(accessToken);
 }
 
 async function createMediaContainer(accessToken, text, mediaUrl, mediaType = 'IMAGE') {
@@ -416,26 +485,49 @@ async function createMediaContainer(accessToken, text, mediaUrl, mediaType = 'IM
         }
     }
 
-    return threadsApiRequest(accessToken, '/me/threads', {
-        method: 'POST',
-        body: JSON.stringify(body),
-    });
+    threadsLog.info(`[THREADS] API request: POST /me/threads`);
+
+    const response = await threadsApiRequest(
+        'POST',
+        '/me/threads',
+        accessToken,
+        body
+    );
+
+    return { ...response, id: String(response.id) };
 }
 
 async function getContainerStatus(containerId, accessToken) {
-    const params = new URLSearchParams({
+    const params = {
         fields: 'status_code,error_message',
-    });
-    return threadsApiRequest(accessToken, `/${String(containerId)}?${params.toString()}`);
+    };
+
+    threadsLog.info(`[THREADS] API request: GET /me/threads/${containerId}`);
+
+    const response = await threadsApiRequest(
+        'GET',
+        `/me/threads/${containerId}`,
+        accessToken,
+        null,
+        params
+    );
+
+    return response;
 }
 
 async function publishContainer(accessToken, creationId) {
-    return threadsApiRequest(accessToken, '/me/threads_publish', {
-        method: 'POST',
-        body: JSON.stringify({
+    threadsLog.info(`[THREADS] API request: POST /me/threads_publish`);
+
+    const response = await threadsApiRequest(
+        'POST',
+        '/me/threads_publish',
+        accessToken,
+        {
             creation_id: String(creationId),
-        }),
-    });
+        }
+    );
+
+    return { ...response, id: String(response.id) };
 }
 
 async function waitForContainerReady(containerId, accessToken, maxAttempts) {
@@ -508,39 +600,49 @@ export const ThreadsService = {
 
     async authenticate(params = {}) {
         const env = getEnv();
-        const configuredToken = getConfiguredAccessToken();
 
-        threadsLog.info('[AUTH] ============================================');
-        threadsLog.info(`[AUTH] Access token configured: ${configuredToken ? 'yes' : 'no'}`);
-
-        // ── Primary path: use configured access token ────────────────────────
-        if (configuredToken) {
+        // ── Mode 1: Direct access token from environment ──────────────────────
+        if (hasEnvAccessToken()) {
+            threadsLog.info('[AUTH] Access token configured: yes');
             threadsLog.info('[AUTH] Authentication mode: access-token');
+
+            const accessToken = env.accessToken;
+
             try {
-                const profile = await getThreadsProfile(configuredToken);
-                threadsLog.info(`[AUTH] Token validated successfully for @${profile.username}`);
+                // Validate the token by fetching the user profile
+                const profile = await validateThreadsToken(accessToken);
+
+                threadsLog.info(`[AUTH] Token validation successful: yes`);
+                threadsLog.info(`[AUTH] Authenticated Threads user: @${profile.username}`);
 
                 return {
                     success: true,
                     credentials: {
-                        accessToken: configuredToken,
+                        accessToken,
                         username: profile.username,
                         threadsUserId: profile.id,
+                        // No expiresAt for env tokens — they don't expire in the same way
                     },
                     username: profile.username,
                 };
             } catch (err) {
-                threadsLog.error(`[AUTH] Configured token validation failed: ${err.message}`);
-                // Fall through to OAuth if token is invalid
+                threadsLog.error(`[AUTH] Token validation failed: ${err.message}`);
+                return {
+                    success: false,
+                    error: `Threads access token is invalid or expired: ${err.message}`,
+                };
             }
         }
 
-        // ── Fallback path: OAuth flow ────────────────────────────────────────
+        // ── Mode 2: OAuth flow (fallback) ────────────────────────────────────
+        threadsLog.info('[AUTH] Access token configured: no');
+        threadsLog.info('[AUTH] Authentication mode: oauth');
+
         if (!env.clientId || !env.clientSecret) {
             threadsLog.error('[AUTH] Missing THREADS_APP_ID or THREADS_APP_SECRET in environment');
             return {
                 success: false,
-                error: 'Threads API credentials not configured. Add THREADS_APP_ID and THREADS_APP_SECRET to your .env file.',
+                error: 'Threads API credentials not configured. Add THREADS_APP_ID and THREADS_APP_SECRET to your .env file, or set THREADS_ACCESS_TOKEN.',
             };
         }
 
@@ -551,8 +653,6 @@ export const ThreadsService = {
                 error: 'THREADS_REDIRECT_URI is not configured. Set it in your .env file.',
             };
         }
-
-        threadsLog.info('[AUTH] Authentication mode: oauth');
 
         try {
             const state = generateState();
@@ -569,15 +669,17 @@ export const ThreadsService = {
                 state,
             });
 
+            threadsLog.info('[AUTH] ============================================');
             threadsLog.info(`[AUTH] Configured Redirect URI: ${env.redirectUri}`);
             threadsLog.info(`[AUTH] Effective Redirect URI: ${effectiveRedirectUri}`);
             threadsLog.info(`[AUTH] Authorization URL: ${authUrl}`);
+            threadsLog.info('[AUTH] ============================================');
 
             await showMainWindow();
 
             const modules = await getElectronModules();
             if (modules?.shell) {
-                threadsLog.info('[AUTH] Opening browser to Threads OAuth URL via shell.openExternal');
+                threadsLog.info(`[AUTH] Opening browser to Threads OAuth URL via shell.openExternal`);
                 try {
                     await modules.shell.openExternal(authUrl);
                     threadsLog.info('[AUTH] shell.openExternal succeeded');
@@ -629,7 +731,7 @@ export const ThreadsService = {
             });
 
             const accessToken = tokenData.access_token;
-            threadsLog.info('[AUTH] Access token obtained');
+            threadsLog.info(`[AUTH] Access token obtained`);
 
             // Exchange for long-lived token
             let longLivedToken = accessToken;
@@ -675,12 +777,11 @@ export const ThreadsService = {
 
     async connect(credentials) {
         try {
-            const accessToken = credentials.accessToken || getConfiguredAccessToken();
-            if (!accessToken) {
+            if (!credentials || !credentials.accessToken) {
                 return { success: false, error: 'Threads requires an access token.' };
             }
 
-            const profile = await getThreadsProfile(accessToken);
+            const profile = await getThreadsProfile(credentials.accessToken);
             return {
                 success: true,
                 username: profile.username || credentials.username || 'threads_user',
@@ -697,10 +798,10 @@ export const ThreadsService = {
     async testConnection(account) {
         try {
             const credentials = account.credentials || {};
-            const accessToken = credentials.accessToken || getConfiguredAccessToken();
+            const accessToken = credentials.accessToken;
 
             if (!accessToken) {
-                return { valid: false, error: 'No access token available. Configure THREADS_ACCESS_TOKEN or reconnect via OAuth.' };
+                return { valid: false, error: 'No access token stored. Reconnect account.' };
             }
 
             const profile = await getThreadsProfile(accessToken);
@@ -736,7 +837,7 @@ export const ThreadsService = {
 
     async publish(account, post, text, mediaPaths = []) {
         const credentials = account.credentials || {};
-        const accessToken = credentials.accessToken || getConfiguredAccessToken();
+        const accessToken = credentials.accessToken;
 
         threadsLog.debug(`[PUBLISH] Account lookup: id=${account.id}, username=${credentials.username || 'unknown'}, token_exists=${!!accessToken}`);
 
@@ -822,8 +923,7 @@ export const ThreadsService = {
     async uploadMedia(account, mediaPath) {
         try {
             const credentials = account.credentials || {};
-            const accessToken = credentials.accessToken || getConfiguredAccessToken();
-            if (!accessToken) {
+            if (!credentials.accessToken) {
                 return { success: false, error: 'Not authenticated' };
             }
             return { success: true, mediaId: mediaPath };

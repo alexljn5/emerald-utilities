@@ -352,20 +352,6 @@ export function registerCreatorHubIpc(ipcMain) {
         }
     });
 
-    ipcMain.handle('creator-hub:get-threads-env-status', async () => {
-        try {
-            const threadsToken = process.env.THREADS_ACCESS_TOKEN;
-            const hasToken = !!(threadsToken && threadsToken.trim() !== '');
-            return {
-                ok: true,
-                hasToken,
-                authenticationMode: hasToken ? 'access-token' : 'oauth'
-            };
-        } catch (err) {
-            return { ok: false, error: err.message };
-        }
-    });
-
     // ==================== POSTS ====================
 
     ipcMain.handle('creator-hub:list-posts', async () => {

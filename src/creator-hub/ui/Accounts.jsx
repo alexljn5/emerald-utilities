@@ -22,12 +22,10 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
     const [submitting, setSubmitting] = useState(false);
     const [envLoaded, setEnvLoaded] = useState(false);
     const [envCredentials, setEnvCredentials] = useState({});
-    const [threadsEnvStatus, setThreadsEnvStatus] = useState({ hasToken: false, authenticationMode: 'oauth' });
 
     useEffect(() => {
         loadAccounts();
         loadEnvCredentials();
-        loadThreadsEnvStatus();
     }, []);
 
     async function loadEnvCredentials() {
@@ -52,20 +50,6 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
             }
         } catch (err) {
             // Silently fail — env credentials are optional
-        }
-    }
-
-    async function loadThreadsEnvStatus() {
-        try {
-            const result = await invoke('creator-hub:get-threads-env-status');
-            if (result.ok) {
-                setThreadsEnvStatus({
-                    hasToken: result.hasToken,
-                    authenticationMode: result.authenticationMode
-                });
-            }
-        } catch (err) {
-            // Silently fail
         }
     }
 
@@ -102,8 +86,7 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
     function getPlatformAuthLabel(platform) {
         switch (platform) {
             case 'instagram': return 'Connect Instagram';
-            case 'threads':
-                return threadsEnvStatus.hasToken ? 'Threads (Configured)' : 'Connect Threads';
+            case 'threads': return 'Connect Threads';
             case 'tiktok': return 'Connect TikTok';
             case 'youtube': return 'Connect YouTube';
             default: return `Connect ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
@@ -115,9 +98,6 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
             case 'instagram':
                 return 'Connect your Instagram Creator or Business account via OAuth. This will open Meta\'s authorization page in your browser.';
             case 'threads':
-                if (threadsEnvStatus.hasToken) {
-                    return 'Threads is configured with an access token from your environment. Publishing will use this token directly. Click to re-authorize via OAuth if needed.';
-                }
                 return 'Connect your Threads account via Meta OAuth. This will open the Threads authorization page in your browser.';
             case 'tiktok':
                 return 'Connect your TikTok account via OAuth. This will open TikTok\'s authorization page in your browser.';
@@ -319,28 +299,16 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                     <div className="chButtonGroup">
                         {supportedPlatforms.map(platform => {
                             const isConnected = connectedPlatforms.has(platform);
-                            const isThreadsConfigured = platform === 'threads' && threadsEnvStatus.hasToken;
-                            const disabled = isConnected;
-                            const label = isConnected
-                                ? 'Connected'
-                                : isThreadsConfigured
-                                    ? 'Threads (Configured)'
-                                    : `Add ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
-                            const title = isConnected
-                                ? 'Already connected'
-                                : isThreadsConfigured
-                                    ? 'Threads configured via environment token — click to create account'
-                                    : `Add ${platform} account`;
                             return (
                                 <button
                                     key={platform}
                                     type="button"
                                     className="chButton"
                                     onClick={() => openForm(platform)}
-                                    disabled={disabled}
-                                    title={title}
+                                    disabled={isConnected}
+                                    title={isConnected ? 'Already connected' : `Add ${platform} account`}
                                 >
-                                    {label}
+                                    {isConnected ? 'Connected' : `Add ${platform.charAt(0).toUpperCase() + platform.slice(1)}`}
                                 </button>
                             );
                         })}

@@ -1,8 +1,10 @@
 # Emerald Utilities — UI Standardisation
 
-**Version:** 0.1.3  
-**Status:** Active  
+**Version:** 0.1.5
+**Status:** Active
 **Last Updated:** 22 July 2026
+
+> **Maintenance reminder:** When bumping the app version, update the `**Version:**` and `**Last Updated:**` fields above to match [`src/globals.js`](src/globals.js:5) and today's date. This prevents documentation drift.
 
 ---
 

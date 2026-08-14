@@ -1,6 +1,6 @@
 # Emerald Utilities — Master Documentation
 
-**Version:** 0.1.3
+**Version:** 0.1.5
 **Status:** Hardening Phase
 **Last Updated:** 22 July 2026
 

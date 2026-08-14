@@ -1,6 +1,6 @@
 # Emerald Utilities — Configuration Guide
 
-**Version:** 0.1.3  
+**Version:** 0.1.5
 **Last Updated:** 23 July 2026
 
 ---

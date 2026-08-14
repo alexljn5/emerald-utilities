@@ -82,8 +82,12 @@ body {
     flex-direction: column;
     gap: clamp(0.6rem, 1vw, 1rem);
     overflow-y: auto;
+    overflow-x: hidden;
     min-height: 0;
     min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    z-index: 0;
 }
 
 .rightPanel {
@@ -95,6 +99,7 @@ body {
     overflow-x: hidden;
     min-height: 0;
     min-width: 0;
+    z-index: 1;
 }
 
 /* ==================== HEADER ==================== */

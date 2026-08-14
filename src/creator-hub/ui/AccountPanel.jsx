@@ -96,7 +96,7 @@ export default function AccountPanel({ account, platformMeta, onTest, onDisconne
                         {meta.totalPublished} published, {meta.totalFailed} failed
                     </div>
                     {meta.lastSuccessfulPublish && (
-                        <div style={{ fontSize: 'clamp(0.8rem, 0.9vw, 0.9rem)', color: '#888' }}>
+                        <div className="chAccountPanelMeta">
                             Last success: {formatDate(meta.lastSuccessfulPublish)}
                         </div>
                     )}

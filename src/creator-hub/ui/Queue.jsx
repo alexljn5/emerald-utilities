@@ -34,32 +34,34 @@ export default function Queue() {
         <div className="chPanel">
             <div className="chPanelHeader">Publish Queue</div>
             {results.length === 0 ? (
-                <div className="chEmpty">No publish history yet.</div>
+                <div className="chQueueEmpty">No publish history yet. Publish a post to see it here.</div>
             ) : (
-                <ul className="chList">
+                <div className="chList">
                     {results.map((result, idx) => (
-                        <li key={idx} className="chListItem">
-                            <div className="chListItemTitle">
-                                Post: {result.postId?.slice(0, 8) || 'unknown'}
+                        <div key={idx} className="chQueueResult">
+                            <div className="chQueueResultHeader">
+                                <span className="chQueueResultPlatform">
+                                    Post: {result.postId?.slice(0, 8) || 'unknown'}
+                                </span>
+                                <span className="chQueueResultMeta">
+                                    {formatDate(result.startedAt)} - {formatDate(result.finishedAt)}
+                                </span>
                             </div>
-                            <div className="chListItemMeta">
-                                {formatDate(result.startedAt)} - {formatDate(result.finishedAt)}
-                            </div>
-                            <div>
+                            <div className="chList">
                                 {result.results?.map((r, i) => (
-                                    <div key={i}>
+                                    <div key={i} className="chListItem chQueueResultItem">
                                         <span className={`chStatus ${r.success ? 'chStatusSuccess' : 'chStatusError'}`}>
                                             {r.platform}
                                         </span>
-                                        <span>
+                                        <span className="chListItemMeta">
                                             {r.success ? 'Published' : (r.error || 'Failed')}
                                         </span>
                                     </div>
                                 ))}
                             </div>
-                        </li>
+                        </div>
                     ))}
-                </ul>
+                </div>
             )}
         </div>
     );

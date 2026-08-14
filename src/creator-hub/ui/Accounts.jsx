@@ -482,24 +482,23 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                                         onChange={e => setFormData(prev => ({ ...prev, username: e.target.value }))}
                                         placeholder="e.g. ceferial"
                                     />
-                                    <div style={{ fontSize: '0.85em', color: '#888', marginTop: '0.3rem' }}>
+                                    <div className="chFormHelper">
                                         Optional. Will be retrieved automatically from Instagram after connecting.
                                     </div>
                                 </div>
-                                <div className="chFormGroup" style={{ marginTop: '1rem' }}>
-                                    <p style={{ color: '#ccc', marginBottom: '0.5rem' }}>
+                                <div className="chFormGroup">
+                                    <p className="chAuthDescription">
                                         {getPlatformAuthDescription('instagram')}
                                     </p>
                                     <button
                                         type="button"
-                                        className="chButton chButtonPrimary"
+                                        className="chButton chButtonPrimary chButtonFull"
                                         onClick={() => handleAuthenticate('instagram')}
                                         disabled={authenticating}
-                                        style={{ width: '100%', padding: '0.8rem' }}
                                     >
                                         {authenticating ? (
                                             <>
-                                                <span className="chSpinner" style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #000', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite', marginRight: '0.5rem', verticalAlign: 'middle' }}></span>
+                                                <span className="chSpinner"></span>
                                                 Connecting to Instagram...
                                             </>
                                         ) : (
@@ -507,7 +506,7 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                                         )}
                                     </button>
                                     {envLoaded && envCredentials.apiKey && (
-                                        <div style={{ fontSize: '0.85em', color: '#4f4', marginTop: '0.5rem' }}>
+                                        <div className="chFormHelper chFormHelper--success">
                                             Instagram API credentials found in environment configuration.
                                         </div>
                                     )}
@@ -526,24 +525,23 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                                         onChange={e => setFormData(prev => ({ ...prev, username: e.target.value }))}
                                         placeholder={`Your ${formPlatform} username`}
                                     />
-                                    <div style={{ fontSize: '0.85em', color: '#888', marginTop: '0.3rem' }}>
+                                    <div className="chFormHelper">
                                         Optional. Will be retrieved automatically after connecting.
                                     </div>
                                 </div>
-                                <div className="chFormGroup" style={{ marginTop: '1rem' }}>
-                                    <p style={{ color: '#ccc', marginBottom: '0.5rem' }}>
+                                <div className="chFormGroup">
+                                    <p className="chAuthDescription">
                                         {getPlatformAuthDescription(formPlatform)}
                                     </p>
                                     <button
                                         type="button"
-                                        className="chButton chButtonPrimary"
+                                        className="chButton chButtonPrimary chButtonFull"
                                         onClick={() => handleAuthenticate(formPlatform)}
                                         disabled={authenticating}
-                                        style={{ width: '100%', padding: '0.8rem' }}
                                     >
                                         {authenticating ? (
                                             <>
-                                                <span className="chSpinner" style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #000', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite', marginRight: '0.5rem', verticalAlign: 'middle' }}></span>
+                                                <span className="chSpinner"></span>
                                                 Connecting to {formPlatform.charAt(0).toUpperCase() + formPlatform.slice(1)}...
                                             </>
                                         ) : (
@@ -551,15 +549,15 @@ export default function Accounts({ onAccountAdded, onSelectAccountForCompose }) 
                                         )}
                                     </button>
                                     {envLoaded && (
-                                        <div style={{ fontSize: '0.85em', marginTop: '0.5rem' }}>
+                                        <div className="chFormHelper chFormHelper--spaced">
                                             {formPlatform === 'threads' && envCredentials.threadsAppId && (
-                                                <span style={{ color: '#4f4' }}>Threads API credentials found in environment configuration.</span>
+                                                <span className="chFormHelper--success">Threads API credentials found in environment configuration.</span>
                                             )}
                                             {formPlatform === 'tiktok' && envCredentials.tiktokClientKey && (
-                                                <span style={{ color: '#4f4' }}>TikTok API credentials found in environment configuration.</span>
+                                                <span className="chFormHelper--success">TikTok API credentials found in environment configuration.</span>
                                             )}
                                             {formPlatform === 'youtube' && envCredentials.youtubeClientId && (
-                                                <span style={{ color: '#4f4' }}>YouTube API credentials found in environment configuration.</span>
+                                                <span className="chFormHelper--success">YouTube API credentials found in environment configuration.</span>
                                             )}
                                         </div>
                                     )}

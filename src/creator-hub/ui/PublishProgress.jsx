@@ -50,7 +50,6 @@ export default function PublishProgress({ results, platforms, isPublishing, onRe
                                     type="button"
                                     className="chButton chButtonSmall"
                                     onClick={() => onRetry(result.accountId)}
-                                    style={{ marginLeft: '0.5rem' }}
                                 >
                                     Retry
                                 </button>

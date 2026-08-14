@@ -31,8 +31,6 @@ start_build_emerald_utilities_windows.sh
 start_build_emerald_utilities_linux.sh
 start_build_emerald_utilities_all.sh
 out_put_files.sh
-start_prod.sh
-start_dev.sh
 src/database/POSTGRES_JSON_PROPOSAL.md
 src/database/nuhuh.sh
 src/database/nuhuh.sh

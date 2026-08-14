@@ -2,7 +2,7 @@
 
 ![Emerald Utilities Logo](img/favicons/android-chrome-512x512.png)
 
-**Version:** 0.1.2
+**Version:** 0.1.5
 **Author:** alexljn5
 **License:** MIT
 

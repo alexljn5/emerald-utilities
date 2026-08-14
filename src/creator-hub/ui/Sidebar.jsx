@@ -52,7 +52,7 @@ export default function Sidebar({ onSelectPost, selectedPostId, currentView, onV
         <div className="creatorHubLeft">
             <div className="chPanel">
                 <div className="chPanelHeader">Creator Hub</div>
-                <div className="chButtonGroup">
+                <div className="chButtonGroup chButtonGroup--sidebar">
                     <button
                         type="button"
                         className={`chButton ${currentView === 'dashboard' ? 'chButtonPrimary' : ''}`}

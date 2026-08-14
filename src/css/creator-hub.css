@@ -305,6 +305,19 @@
     flex-shrink: 0;
 }
 
+/* Sidebar nav buttons: uniform size */
+.chButtonGroup--sidebar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(0.4rem, 0.8vw, 0.8rem);
+}
+
+.chButtonGroup--sidebar>* {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+}
+
 .chButtonFull {
     width: 100%;
 }

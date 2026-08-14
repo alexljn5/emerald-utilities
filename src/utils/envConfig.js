@@ -35,14 +35,14 @@ const VARIABLE_SCHEMA = [
 
     // ── Bluesky ──────────────────────────────────────────────────
     { key: 'BLUESKY_USERNAME', label: 'Bluesky Handle', provider: 'Bluesky', type: 'public', required: false },
-    { key: 'BLUESKY_APP_PASSWORD', label: 'Bluesky App Password', provider: 'Bluesky', type: 'secret', required: true },
+    { key: 'BLUESKY_APP_SECRET', label: 'Bluesky App Password', provider: 'Bluesky', type: 'secret', required: true },
 
     // ── Database ─────────────────────────────────────────────────
     { key: 'DB_HOST', label: 'Database Host', provider: 'Database', type: 'public', required: false },
     { key: 'DB_PORT', label: 'Database Port', provider: 'Database', type: 'public', required: false },
     { key: 'DB_USER', label: 'Database User', provider: 'Database', type: 'public', required: false },
     { key: 'DB_PASSWORD', label: 'Database Password', provider: 'Database', type: 'secret', required: false },
-    { key: 'DB_DATABASE', label: 'Database Name', provider: 'Database', type: 'public', required: false },
+    { key: 'DB_NAME', label: 'Database Name', provider: 'Database', type: 'public', required: false },
 
     // ── X / Twitter ──────────────────────────────────────────────
     { key: 'X_API_KEY', label: 'X API Key', provider: 'X/Twitter', type: 'secret', required: false },

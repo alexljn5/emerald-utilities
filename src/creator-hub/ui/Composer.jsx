@@ -97,7 +97,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
         setTargets(prev => {
             const existing = prev.find(t => t.accountId === accountId);
             if (existing) {
-                return prev.map(t => t.accountId === accountId ? { ...t, enabled: !t.enabled } : t);
+                return prev.filter(t => t.accountId !== accountId);
             } else {
                 const account = accounts.find(a => a.id === accountId);
                 return [...prev, {
@@ -108,10 +108,6 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                 }];
             }
         });
-    }
-
-    function handleTargetRemove(accountId) {
-        setTargets(prev => prev.filter(t => t.accountId !== accountId));
         setOverrides(prev => {
             const next = { ...prev };
             delete next[accountId];
@@ -411,7 +407,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                         <div className="chTargetList">
                             {accounts.map(account => {
                                 const target = targets.find(t => t.accountId === account.id);
-                                const isEnabled = target?.enabled !== false;
+                                const isSelected = !!target;
                                 const caps = getPlatform(account.platform)?.capabilities || {};
 
                                 return (
@@ -429,20 +425,11 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                                             <label className="chToggle">
                                                 <input
                                                     type="checkbox"
-                                                    checked={isEnabled}
+                                                    checked={isSelected}
                                                     onChange={() => handleTargetToggle(account.id)}
                                                 />
                                                 <span className="chToggleSlider"></span>
                                             </label>
-                                            {target && (
-                                                <button
-                                                    type="button"
-                                                    className="chButton chButtonSmall chButtonDanger"
-                                                    onClick={() => handleTargetRemove(account.id)}
-                                                >
-                                                    Remove
-                                                </button>
-                                            )}
                                         </div>
                                     </div>
                                 );

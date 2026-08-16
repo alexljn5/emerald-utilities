@@ -1813,7 +1813,7 @@ app.whenReady().then(async () => {
     // Auto-start infbot if enabled in config
     try {
         if (getAutoStartEnabled()) {
-            autoStartBot();
+            await autoStartBot();
             console.log('[Emerald] INFBOT auto-start initiated');
         } else {
             console.log('[Emerald] INFBOT auto-start disabled in config');

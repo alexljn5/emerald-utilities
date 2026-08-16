@@ -108,7 +108,7 @@ const SSH_HOST = SSH_CONFIG.host;
 const SSH_USER = SSH_CONFIG.user;
 const SSH_PORT = SSH_CONFIG.port;
 const SSH_KEY = SSH_CONFIG.key;
-const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null'];
+const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'BatchMode=yes'];
 
 function isRemote() {
     return Boolean(SSH_HOST);
@@ -928,50 +928,47 @@ function checkDockerContainerStatus() {
 
 function getScriptStatus() {
     try {
+        let screenExists = false;
+        let dockerRunning = false;
+
         if (scriptRemote) {
             // For remote script mode, check via screen session (since we use screen for remote)
-            const exists = screenSessionExists();
-            return {
-                status: exists ? 'running' : 'stopped',
-                isRunning: exists,
-                error: botError,
-                logCount: botLogs.length,
-                screenSession: SCREEN_SESSION,
-                remote: true,
-                sshHost: SSH_HOST
-            };
-        }
-
-        const isAlive = scriptProcess && !scriptProcess.killed;
-        // Also check via PID if we have one
-        let pidAlive = false;
-        if (scriptPid) {
-            try {
-                process.kill(scriptPid, 0);
-                pidAlive = true;
-            } catch {
-                pidAlive = false;
+            screenExists = screenSessionExists();
+        } else {
+            const isAlive = scriptProcess && !scriptProcess.killed;
+            // Also check via PID if we have one
+            let pidAlive = false;
+            if (scriptPid) {
+                try {
+                    process.kill(scriptPid, 0);
+                    pidAlive = true;
+                } catch {
+                    pidAlive = false;
+                }
+            }
+            if (!isAlive && !pidAlive) {
+                // If script process is not running, check if Docker container is running as fallback
+                const dockerStatus = checkDockerContainerStatus();
+                dockerRunning = dockerStatus.isRunning;
             }
         }
-        const isRunning = isAlive || pidAlive;
 
-        // If script process is not running, check if Docker container is running as fallback
-        let dockerRunning = false;
-        if (!isRunning) {
+        // Always check Docker as a fallback regardless of remote/local mode
+        if (!dockerRunning) {
             const dockerStatus = checkDockerContainerStatus();
             dockerRunning = dockerStatus.isRunning;
         }
 
-        const finalRunning = isRunning || dockerRunning;
+        const finalRunning = scriptRemote ? (screenExists || dockerRunning) : (dockerRunning);
 
         return {
             status: finalRunning ? 'running' : 'stopped',
             isRunning: finalRunning,
             error: botError,
             logCount: botLogs.length,
-            scriptPid: scriptPid || null,
-            entryPoint: SCRIPT_ENTRY,
-            availableScripts: detectBotScripts(),
+            screenSession: SCREEN_SESSION,
+            remote: scriptRemote,
+            sshHost: SSH_HOST,
             dockerFallback: dockerRunning
         };
     } catch (err) {
@@ -990,13 +987,13 @@ export function getBotLogs(limit = 100) {
     } else if (BOT_MODE === 'screen') {
         return getScreenLogs(limit);
     } else if (BOT_MODE === 'script') {
-        if (scriptRemote) {
-            return getScreenLogs(limit); // remote script uses screen for logs
-        }
-        // Check if Docker container is running as fallback
+        // Check if Docker container is running as fallback (works for both local and remote)
         const dockerStatus = checkDockerContainerStatus();
         if (dockerStatus.isRunning) {
             return getDockerLogs(limit);
+        }
+        if (scriptRemote) {
+            return getScreenLogs(limit); // remote script uses screen for logs
         }
         return getScriptLogs(limit);
     }

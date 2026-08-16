@@ -10,6 +10,12 @@ const BOT_STATUS_CONFIG = {
     error: { label: 'ERROR', className: 'botStatusError' }
 };
 
+const CONTAINER_STATUS_CONFIG = {
+    running: { label: 'CONNECTED', className: 'botStatusRunning' },
+    stopped: { label: 'DISCONNECTED', className: 'botStatusStopped' },
+    error: { label: 'ERROR', className: 'botStatusError' }
+};
+
 export default function Bots({ route, setRoute }) {
     const [status, setStatus] = useState({ status: 'stopped', isRunning: false, error: null });
     const [logs, setLogs] = useState([]);
@@ -308,6 +314,9 @@ export default function Bots({ route, setRoute }) {
                         )}
                         {botMode === 'script' && status.dockerFallback && (
                             <span className="botsStatusCount">Docker: {status.dockerStatus || 'running'}</span>
+                        )}
+                        {botMode === 'script' && !status.dockerFallback && !status.scriptPid && (
+                            <span className="botsStatusCount botsStatusCount--muted">No local process</span>
                         )}
                         <span className="botsStatusCount">{totalLogs} log entries</span>
                     </div>

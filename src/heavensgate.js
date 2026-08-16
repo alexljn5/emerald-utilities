@@ -15,7 +15,7 @@ import { registerCreatorHubIpc } from './creator-hub/ipc.js';
 import { registerEnvIpc } from './utils/envIpc.js';
 import { resolvePath, resolveInternalScriptsPath } from './utils/pathResolver.js';
 import { registerBotIpcHandlers } from './bots/bot-ipc.js';
-import { autoStartBot, cleanup as cleanupBot } from './bots/bot-manager.js';
+import { autoStartBot, cleanup as cleanupBot, getAutoStartEnabled } from './bots/bot-manager.js';
 import { default as databaseService } from './database/wrath.js';
 import { recover as recoverNetworkPersistence } from './database/network-persistence.js';
 import { ENABLE_DEVTOOLS, ENABLE_INAPP_NOTIFICATIONS, AI_MODE, DATABASE_MODE, LOCAL_AI_ENABLED } from './globals.js';
@@ -1810,10 +1810,14 @@ app.whenReady().then(async () => {
     // Register Bot IPC handlers
     registerBotIpcHandlers(ipcMain, broadcast);
 
-    // Auto-start infbot if enabled
+    // Auto-start infbot if enabled in config
     try {
-        autoStartBot();
-        console.log('[Emerald] INFBOT auto-start initiated');
+        if (getAutoStartEnabled()) {
+            autoStartBot();
+            console.log('[Emerald] INFBOT auto-start initiated');
+        } else {
+            console.log('[Emerald] INFBOT auto-start disabled in config');
+        }
     } catch (err) {
         console.error('[Emerald] INFBOT auto-start failed:', err.message);
     }

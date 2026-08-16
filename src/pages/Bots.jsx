@@ -15,13 +15,14 @@ export default function Bots({ route, setRoute }) {
     const [logs, setLogs] = useState([]);
     const [totalLogs, setTotalLogs] = useState(0);
     const [botInfo, setBotInfo] = useState(null);
-    const [botMode, setBotMode] = useState('docker');
+    const [botMode, setBotMode] = useState('script');
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [showInstructions, setShowInstructions] = useState(false);
-    const logRef = useRef(null);
-    const logsEndRef = useRef(null);
+    const [autoStart, setAutoStart] = useState(true);
+    const [availableScripts, setAvailableScripts] = useState([]);
+    const logContainerRef = useRef(null);
 
     // Load initial data
     useEffect(() => {
@@ -32,11 +33,13 @@ export default function Bots({ route, setRoute }) {
             setMessage('');
 
             try {
-                const [statusResult, logsResult, infoResult, modeResult] = await Promise.all([
+                const [statusResult, logsResult, infoResult, modeResult, autoStartResult, scriptsResult] = await Promise.all([
                     invoke('bot:status'),
                     invoke('bot:logs', 100),
                     invoke('bot:info'),
-                    invoke('bot:mode')
+                    invoke('bot:mode'),
+                    invoke('bot:getAutoStart'),
+                    invoke('bot:detectScripts')
                 ]);
 
                 if (!cancelled) {
@@ -47,6 +50,12 @@ export default function Bots({ route, setRoute }) {
                     }
                     if (infoResult) setBotInfo(infoResult);
                     if (modeResult?.mode) setBotMode(modeResult.mode);
+                    if (autoStartResult?.enabled !== undefined) {
+                        setAutoStart(autoStartResult.enabled);
+                    }
+                    if (scriptsResult?.ok) {
+                        setAvailableScripts(scriptsResult.scripts || []);
+                    }
                 }
             } catch (err) {
                 if (!cancelled) {
@@ -74,10 +83,17 @@ export default function Bots({ route, setRoute }) {
         };
     }, []);
 
-    // Auto-scroll logs
+    // Save auto-start preference
     useEffect(() => {
-        if (logsEndRef.current) {
-            logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        invoke('bot:setAutoStart', autoStart).catch(() => {
+            // ignore save errors
+        });
+    }, [autoStart]);
+
+    // Auto-scroll logs within the log container only (not the whole page)
+    useEffect(() => {
+        if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
         }
     }, [logs]);
 
@@ -102,7 +118,7 @@ export default function Bots({ route, setRoute }) {
         try {
             const result = await invoke('bot:start');
             if (result?.ok) {
-                setMessage('Bot container started');
+                setMessage('Bot started');
                 setStatus(result);
             } else {
                 setMessage(result?.error || 'Failed to start bot');
@@ -121,7 +137,7 @@ export default function Bots({ route, setRoute }) {
         try {
             const result = await invoke('bot:stop');
             if (result?.ok) {
-                setMessage('Bot container stopped');
+                setMessage('Bot stopped');
                 setStatus(result);
             } else {
                 setMessage(result?.error || 'Failed to stop bot');
@@ -140,7 +156,7 @@ export default function Bots({ route, setRoute }) {
         try {
             const result = await invoke('bot:restart');
             if (result?.ok) {
-                setMessage('Bot container restarted');
+                setMessage('Bot restarted');
                 setStatus(result);
             } else {
                 setMessage(result?.error || 'Failed to restart bot');
@@ -195,20 +211,70 @@ export default function Bots({ route, setRoute }) {
 
     const statusConfig = BOT_STATUS_CONFIG[status.status] || BOT_STATUS_CONFIG.stopped;
 
+    const handleModeChange = async (newMode) => {
+        setActionLoading(true);
+        setMessage('');
+        try {
+            const result = await invoke('bot:setMode', newMode);
+            if (result?.ok) {
+                setBotMode(newMode);
+                setMessage(result.message || `Mode switched to ${newMode}. Restart app to apply.`);
+            } else {
+                setMessage(result?.error || 'Failed to change mode');
+            }
+        } catch (err) {
+            setMessage(err?.message || 'Failed to change mode');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleAutoStartToggle = async () => {
+        const newValue = !autoStart;
+        setActionLoading(true);
+        setMessage('');
+        try {
+            const result = await invoke('bot:setAutoStart', newValue);
+            if (result?.ok) {
+                setAutoStart(newValue);
+                setMessage(newValue ? 'Auto-start enabled' : 'Auto-start disabled');
+            } else {
+                setMessage(result?.error || 'Failed to update auto-start');
+            }
+        } catch (err) {
+            setMessage(err?.message || 'Failed to update auto-start');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const runtimeLabel = botMode === 'docker' ? 'Docker Container' : botMode === 'screen' ? 'GNU Screen Session' : 'Node.js Process';
+    const modeLabel = botMode === 'docker' ? 'Docker' : botMode === 'screen' ? 'Screen' : 'Script';
+
     return (
         <PageShell title="Bots" route={route} setRoute={setRoute} leftChildren={
             <div className="botsSidebar">
                 <button type="button" onClick={() => setRoute('dashboard')}>Back to Dashboard</button>
                 <div className="botsSidebarInfo">
                     <h3>INFBOT</h3>
-                    <p>{botMode === 'docker' ? 'Docker container' : 'GNU Screen session'}</p>
+                    <p>{runtimeLabel}</p>
                     <p className="botsSidebarStatus">
                         Status: <span className={`botsStatusDot ${statusConfig.className}`}></span>
                         {statusConfig.label}
                     </p>
                     <p className="botsSidebarMode">
-                        Mode: {botMode === 'docker' ? 'Docker' : 'Screen'}
+                        Mode: {modeLabel}
                     </p>
+                    <div className="botsAutoStartRow">
+                        <label className="botsToggleLabel">
+                            <input
+                                type="checkbox"
+                                checked={autoStart}
+                                onChange={handleAutoStartToggle}
+                            />
+                            Auto-start on launch
+                        </label>
+                    </div>
                 </div>
             </div>
         }>
@@ -220,12 +286,25 @@ export default function Bots({ route, setRoute }) {
                         <span className="botsStatusLabel">{statusConfig.label}</span>
                     </div>
                     <div className="botsStatusDetails">
+                        <select
+                            value={botMode}
+                            onChange={(e) => handleModeChange(e.target.value)}
+                            className="botsModeSelect"
+                            disabled={actionLoading}
+                        >
+                            <option value="script">Script (Abstract)</option>
+                            <option value="screen">Screen (Homelab)</option>
+                            <option value="docker">Docker (Local)</option>
+                        </select>
                         {status.error && <span className="botsStatusError">{status.error}</span>}
                         {botMode === 'docker' && status.dockerStatus && (
                             <span className="botsStatusCount">{status.dockerStatus}</span>
                         )}
                         {botMode === 'screen' && status.screenSession && (
                             <span className="botsStatusCount">Session: {status.screenSession}</span>
+                        )}
+                        {botMode === 'script' && status.scriptPid && (
+                            <span className="botsStatusCount">PID: {status.scriptPid}</span>
                         )}
                         <span className="botsStatusCount">{totalLogs} log entries</span>
                     </div>
@@ -235,7 +314,7 @@ export default function Bots({ route, setRoute }) {
                 <div className="botsPanel">
                     <div className="botsPanelHeader">
                         <h3>Bot Control</h3>
-                        <span className="botsModeBadge">{botMode === 'docker' ? 'Docker' : 'Screen'}</span>
+                        <span className="botsModeBadge">{modeLabel}</span>
                     </div>
                     <div className="botsPanelContent">
                         <div className="botsControls">
@@ -274,6 +353,19 @@ export default function Bots({ route, setRoute }) {
                                 </button>
                             )}
                         </div>
+                        <div className="botsAutoStartRow">
+                            <label className="botsToggleLabel">
+                                <input
+                                    type="checkbox"
+                                    checked={autoStart}
+                                    onChange={handleAutoStartToggle}
+                                />
+                                Auto-start bot on app launch
+                            </label>
+                            <span className="botsAutoStartHint">
+                                {autoStart ? 'Bot will start automatically when the app opens' : 'Bot will not start automatically'}
+                            </span>
+                        </div>
 
                         {message && (
                             <div className={`botsMessage ${message.includes('Failed') || message.includes('Error') ? 'botsMessageError' : 'botsMessageSuccess'}`}>
@@ -289,7 +381,7 @@ export default function Bots({ route, setRoute }) {
                 {botInfo && (
                     <div className="botsPanel">
                         <div className="botsPanelHeader">
-                            <h3>{botMode === 'docker' ? 'Docker' : 'Screen'} Management</h3>
+                            <h3>{modeLabel} Management</h3>
                             <button
                                 type="button"
                                 className="botsToggleInstructions"
@@ -304,7 +396,9 @@ export default function Bots({ route, setRoute }) {
                                     <p className="botsInstructionsNote">
                                         {botMode === 'docker'
                                             ? 'The bot runs in a Docker container with --restart unless-stopped, so it survives app and PC restarts. Use these commands for manual management:'
-                                            : `The bot runs in a GNU Screen session (${botInfo.instructions.session}) on the homelab server. It survives restarts via screen. Use these commands for manual management:`}
+                                            : botMode === 'screen'
+                                                ? `The bot runs in a GNU Screen session (${botInfo.instructions.session}) on the homelab server. It survives restarts via screen. Use these commands for manual management:`
+                                                : 'The bot runs as a detached Node.js process. It survives app restarts. Use these commands for manual management:'}
                                     </p>
                                     {botMode === 'docker' ? (
                                         <>
@@ -333,7 +427,7 @@ export default function Bots({ route, setRoute }) {
                                                 <code>{botInfo.instructions.removeCommand}</code>
                                             </div>
                                         </>
-                                    ) : (
+                                    ) : botMode === 'screen' ? (
                                         <>
                                             <div className="botsCommandBlock">
                                                 <span className="botsCommandLabel">Start:</span>
@@ -351,6 +445,27 @@ export default function Bots({ route, setRoute }) {
                                                 <span className="botsCommandLabel">Logs:</span>
                                                 <code>{botInfo.instructions.logsCommand}</code>
                                             </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="botsCommandBlock">
+                                                <span className="botsCommandLabel">Start:</span>
+                                                <code>{botInfo.instructions.startCommand}</code>
+                                            </div>
+                                            <div className="botsCommandBlock">
+                                                <span className="botsCommandLabel">Stop:</span>
+                                                <code>{botInfo.instructions.stopCommand}</code>
+                                            </div>
+                                            <div className="botsCommandBlock">
+                                                <span className="botsCommandLabel">Logs:</span>
+                                                <code>{botInfo.instructions.logsCommand}</code>
+                                            </div>
+                                            {availableScripts.length > 0 && (
+                                                <div className="botsCommandBlock">
+                                                    <span className="botsCommandLabel">Available scripts:</span>
+                                                    <code>{availableScripts.join(', ')}</code>
+                                                </div>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -422,10 +537,10 @@ export default function Bots({ route, setRoute }) {
                             </button>
                         </div>
                     </div>
-                    <div className="botsPanelScroll botsLogContainer" ref={logRef}>
+                    <div className="botsPanelScroll botsLogContainer" ref={logContainerRef}>
                         {logs.length === 0 ? (
                             <div className="botsLogPlaceholder">
-                                No logs yet. Start the bot {botMode === 'docker' ? 'container' : 'session'} to see output.
+                                No logs yet. Start the bot to see output.
                             </div>
                         ) : (
                             logs.map((log, index) => (
@@ -436,7 +551,6 @@ export default function Bots({ route, setRoute }) {
                                 </div>
                             ))
                         )}
-                        <div ref={logsEndRef} />
                     </div>
                 </div>
             </div>

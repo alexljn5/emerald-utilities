@@ -6,8 +6,13 @@
     flex-direction: column;
     gap: var(--space-md);
     padding: var(--space-md);
-    min-height: 100%;
+    height: 100%;
     overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.botsContent>*:not(.botsLogPanel) {
+    flex: 0 0 auto;
 }
 
 /* ==================== STATUS BAR ==================== */
@@ -102,6 +107,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    flex: 0 0 auto;
 }
 
 .botsPanelHeader {
@@ -136,6 +142,27 @@
     letter-spacing: 0.05em;
 }
 
+.botsModeSelect {
+    padding: 0.35rem 0.55rem;
+    font-size: clamp(0.68rem, 0.85vw, 0.9rem);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    font-family: 'pixelSans', sans-serif;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.botsModeSelect:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.botsModeSelect:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+}
+
 .botsPanelActions {
     display: flex;
     gap: var(--space-sm);
@@ -167,6 +194,75 @@
     display: flex;
     gap: var(--space-sm);
     flex-wrap: wrap;
+}
+
+.botsAutoStartRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
+.botsToggleLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #aaa;
+    cursor: pointer;
+    user-select: none;
+}
+
+.botsToggleLabel input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+}
+
+/* ==================== SSH CONFIG ==================== */
+.botsSshSection {
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-border);
+}
+
+.botsSshForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
+.botsFormRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.botsFormRow label {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    min-width: 60px;
+    flex-shrink: 0;
+}
+
+.botsFormRow input {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-family: 'pixelSans', sans-serif;
+}
+
+.botsFormRow input:focus {
+    outline: none;
+    border-color: var(--color-accent);
 }
 
 .botButton {
@@ -488,7 +584,8 @@
 /* ==================== LOGS ==================== */
 .botsLogPanel {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 200px;
+    max-height: 400px;
     display: flex;
     flex-direction: column;
 }
@@ -501,6 +598,10 @@
     line-height: 1.4;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-sm);
 }
 
 .botsLogPlaceholder {
@@ -553,6 +654,14 @@
 .botsLogMessage {
     color: var(--color-terminal-text);
     word-break: break-word;
+}
+
+/* ==================== AUTO-START HINT ==================== */
+.botsAutoStartHint {
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: #666;
+    font-style: italic;
+    margin-left: var(--space-sm);
 }
 
 /* ==================== RESPONSIVE ==================== */

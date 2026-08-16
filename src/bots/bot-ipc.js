@@ -12,7 +12,12 @@ import {
     setLogBroadcast,
     buildBotImage,
     getBuildInstructions,
-    getBotMode
+    getBotMode,
+    getAutoStartEnabled,
+    setAutoStartEnabled,
+    getSshConfig,
+    setSshConfig,
+    detectBotScripts
 } from './bot-manager.js';
 
 export function registerBotIpcHandlers(ipcMain, broadcast) {
@@ -21,6 +26,17 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
         if (broadcast) {
             broadcast('bot-log', logEntry);
         }
+    });
+
+    // ==================== BOT SSH CONFIG ====================
+
+    ipcMain.handle('bot:getSshConfig', async () => {
+        return getSshConfig();
+    });
+
+    ipcMain.handle('bot:setSshConfig', async (_event, config) => {
+        const result = setSshConfig(config.host, config.user, config.port, config.key);
+        return { ok: true, config: result };
     });
 
     // ==================== BOT CONTROL ====================
@@ -65,6 +81,16 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
         return { mode: getBotMode() };
     });
 
+    ipcMain.handle('bot:setMode', async (_event, mode) => {
+        // Note: Mode change requires app restart to take effect
+        // This just updates the environment variable for the current session
+        if (mode === 'docker' || mode === 'screen' || mode === 'script') {
+            process.env.BOT_MODE = mode;
+            return { ok: true, mode, message: `Mode set to ${mode}. Restart the app to apply.` };
+        }
+        return { ok: false, error: `Invalid mode: ${mode}. Use 'docker', 'screen', or 'script'.` };
+    });
+
     // ==================== BOT STATUS ====================
 
     ipcMain.handle('bot:status', async () => {
@@ -93,16 +119,29 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
         }
     });
 
+    // ==================== BOT AUTO-START ====================
+
+    ipcMain.handle('bot:getAutoStart', async () => {
+        return { enabled: getAutoStartEnabled() };
+    });
+
+    ipcMain.handle('bot:setAutoStart', async (_event, enabled) => {
+        setAutoStartEnabled(enabled);
+        return { ok: true, enabled };
+    });
+
     // ==================== BOT INFO ====================
 
     ipcMain.handle('bot:info', async () => {
         const mode = getBotMode();
         const instructions = getBuildInstructions();
+        const runtimeLabel = mode === 'docker' ? 'Docker Container' : mode === 'screen' ? 'GNU Screen Session' : 'Node.js Process';
+        const survivalFeature = mode === 'docker' ? 'Docker container (survives restarts)' : mode === 'screen' ? 'GNU Screen session (survives restarts)' : 'Detached process (survives app restarts)';
         return {
             name: 'INFBOT',
             description: 'Discord bot for the INFHUB Discord server',
             version: '1.0.0',
-            runtime: mode === 'docker' ? 'Docker' : 'GNU Screen',
+            runtime: runtimeLabel,
             mode,
             instructions,
             commands: [
@@ -129,8 +168,19 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
                 'Simple RPG Game System',
                 'Random Popups',
                 'Error Logging',
-                mode === 'docker' ? 'Docker container (survives restarts)' : 'GNU Screen session (survives restarts)'
+                survivalFeature
             ]
         };
+    });
+
+    // ==================== BOT SCRIPTS ====================
+
+    ipcMain.handle('bot:detectScripts', async () => {
+        try {
+            const scripts = detectBotScripts();
+            return { ok: true, scripts };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
     });
 }

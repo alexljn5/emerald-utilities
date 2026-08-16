@@ -24,8 +24,6 @@ export default function Bots({ route, setRoute }) {
     const [availableScripts, setAvailableScripts] = useState([]);
     const [terminalInput, setTerminalInput] = useState('');
     const [terminalHistory, setTerminalHistory] = useState([]);
-    const [sshConfig, setSshConfigState] = useState({ host: '', user: 'alexljn5', port: '22', key: '' });
-    const [detectingHomelab, setDetectingHomelab] = useState(false);
     const logContainerRef = useRef(null);
     const terminalInputRef = useRef(null);
 
@@ -38,14 +36,13 @@ export default function Bots({ route, setRoute }) {
             setMessage('');
 
             try {
-                const [statusResult, logsResult, infoResult, modeResult, autoStartResult, scriptsResult, sshResult] = await Promise.all([
+                const [statusResult, logsResult, infoResult, modeResult, autoStartResult, scriptsResult] = await Promise.all([
                     invoke('bot:status'),
                     invoke('bot:logs', 100),
                     invoke('bot:info'),
                     invoke('bot:mode'),
                     invoke('bot:getAutoStart'),
-                    invoke('bot:detectScripts'),
-                    invoke('bot:getSshConfig')
+                    invoke('bot:detectScripts')
                 ]);
 
                 if (!cancelled) {
@@ -61,14 +58,6 @@ export default function Bots({ route, setRoute }) {
                     }
                     if (scriptsResult?.ok) {
                         setAvailableScripts(scriptsResult.scripts || []);
-                    }
-                    if (sshResult) {
-                        setSshConfigState({
-                            host: sshResult.host || '',
-                            user: sshResult.user || 'alexljn5',
-                            port: sshResult.port || '22',
-                            key: sshResult.key || ''
-                        });
                     }
                 }
             } catch (err) {
@@ -269,33 +258,6 @@ export default function Bots({ route, setRoute }) {
         }
     };
 
-    const handleDetectHomelab = async () => {
-        setDetectingHomelab(true);
-        setMessage('');
-        try {
-            const result = await invoke('bot:autoDetectHomelab');
-            if (result?.ok) {
-                setMessage(`Homelab detected and configured: ${result.host}`);
-                // Reload SSH config
-                const sshResult = await invoke('bot:getSshConfig');
-                if (sshResult) {
-                    setSshConfigState({
-                        host: sshResult.host || '',
-                        user: sshResult.user || 'alexljn5',
-                        port: sshResult.port || '22',
-                        key: sshResult.key || ''
-                    });
-                }
-            } else {
-                setMessage(result?.error || 'Failed to detect homelab');
-            }
-        } catch (err) {
-            setMessage(err?.message || 'Failed to detect homelab');
-        } finally {
-            setDetectingHomelab(false);
-        }
-    };
-
     const handleTerminalCommand = async (e) => {
         e.preventDefault();
         const cmd = terminalInput.trim();
@@ -316,9 +278,8 @@ export default function Bots({ route, setRoute }) {
         }
     };
 
-    const isRemote = sshConfig.host && sshConfig.host.trim() !== '';
-    const runtimeLabel = botMode === 'docker' ? (isRemote ? 'Docker Container (Homelab)' : 'Docker Container (Local)') : botMode === 'screen' ? 'GNU Screen Session' : 'Node.js Process';
-    const modeLabel = botMode === 'docker' ? (isRemote ? 'Docker (Homelab)' : 'Docker (Local)') : botMode === 'screen' ? 'Screen' : 'Script';
+    const runtimeLabel = botMode === 'docker' ? 'Docker Container' : botMode === 'screen' ? 'GNU Screen Session' : 'Node.js Process';
+    const modeLabel = botMode === 'docker' ? 'Docker' : botMode === 'screen' ? 'Screen' : 'Script';
 
     return (
         <PageShell title="Bots" route={route} setRoute={setRoute} leftChildren={
@@ -334,11 +295,6 @@ export default function Bots({ route, setRoute }) {
                     <p className="botsSidebarMode">
                         Mode: {modeLabel}
                     </p>
-                    {isRemote && (
-                        <p className="botsSidebarInfo">
-                            SSH: {sshConfig.user}@{sshConfig.host}:{sshConfig.port}
-                        </p>
-                    )}
                     <div className="botsAutoStartRow">
                         <label className="botsToggleLabel">
                             <input
@@ -349,17 +305,6 @@ export default function Bots({ route, setRoute }) {
                             Auto-start on launch
                         </label>
                     </div>
-                    {!isRemote && (
-                        <button
-                            type="button"
-                            className="botButton botButtonBuild"
-                            onClick={handleDetectHomelab}
-                            disabled={detectingHomelab || actionLoading}
-                            style={{ marginTop: '8px', width: '100%' }}
-                        >
-                            {detectingHomelab ? 'Scanning...' : 'Detect Homelab'}
-                        </button>
-                    )}
                 </div>
             </div>
         }>
@@ -379,7 +324,7 @@ export default function Bots({ route, setRoute }) {
                         >
                             <option value="script">Script (Abstract)</option>
                             <option value="screen">Screen (Homelab)</option>
-                            <option value="docker">{isRemote ? 'Docker (Homelab)' : 'Docker (Local)'}</option>
+                            <option value="docker">Docker (Local)</option>
                         </select>
                         {status.error && <span className="botsStatusError">{status.error}</span>}
                         {botMode === 'docker' && status.dockerStatus && (
@@ -480,9 +425,7 @@ export default function Bots({ route, setRoute }) {
                                 <div className="botsInstructions">
                                     <p className="botsInstructionsNote">
                                         {botMode === 'docker'
-                                            ? isRemote
-                                                ? `The bot runs in a Docker container on the homelab (${sshConfig.host}). It survives restarts via Docker. Use these commands for manual management:`
-                                                : 'The bot runs in a Docker container with --restart unless-stopped, so it survives app and PC restarts. Use these commands for manual management:'
+                                            ? 'The bot runs in a Docker container with --restart unless-stopped, so it survives app and PC restarts. Use these commands for manual management:'
                                             : botMode === 'screen'
                                                 ? `The bot runs in a GNU Screen session (${botInfo.instructions.session}) on the homelab server. It survives restarts via screen. Use these commands for manual management:`
                                                 : 'The bot runs as a detached Node.js process. It survives app restarts. Use these commands for manual management:'}

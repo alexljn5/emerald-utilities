@@ -1,6 +1,6 @@
 {
   "name": "infbot",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "INFBOT best bot xd",
   "main": "bot-entry.js",
   "type": "commonjs",

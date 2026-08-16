@@ -25,6 +25,7 @@ dist-electron/
 src/oauth/certs/*.pem
 src/oauth/certs/*.key
 logs/*
+src/bots/bot-config.json
 
 #Unpushed Scripts
 start_build_emerald_utilities_windows.sh

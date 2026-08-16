@@ -306,6 +306,9 @@ export default function Bots({ route, setRoute }) {
                         {botMode === 'script' && status.scriptPid && (
                             <span className="botsStatusCount">PID: {status.scriptPid}</span>
                         )}
+                        {botMode === 'script' && status.dockerFallback && (
+                            <span className="botsStatusCount">Docker: {status.dockerStatus || 'running'}</span>
+                        )}
                         <span className="botsStatusCount">{totalLogs} log entries</span>
                     </div>
                 </div>

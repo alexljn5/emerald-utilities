@@ -897,6 +897,35 @@ function getScreenStatus() {
     }
 }
 
+function checkDockerContainerStatus() {
+    try {
+        const output = runDockerCommand([
+            'ps', '-a',
+            '--filter', `name=${DOCKER_CONTAINER}`,
+            '--format', '{{.Names}}|{{.Status}}|{{.Image}}'
+        ], { stdio: 'pipe' });
+
+        const lines = output.trim().split('\n').filter(line => line.trim());
+        const containerLine = lines.find(line => line.startsWith(DOCKER_CONTAINER));
+
+        if (!containerLine) {
+            return { isRunning: false, status: 'stopped' };
+        }
+
+        const parts = containerLine.split('|');
+        const statusText = parts[1] || '';
+        const isRunning = statusText.toLowerCase().startsWith('up');
+
+        return {
+            isRunning,
+            status: isRunning ? 'running' : 'stopped',
+            dockerStatus: statusText
+        };
+    } catch {
+        return { isRunning: false, status: 'stopped' };
+    }
+}
+
 function getScriptStatus() {
     try {
         if (scriptRemote) {
@@ -925,14 +954,25 @@ function getScriptStatus() {
             }
         }
         const isRunning = isAlive || pidAlive;
+
+        // If script process is not running, check if Docker container is running as fallback
+        let dockerRunning = false;
+        if (!isRunning) {
+            const dockerStatus = checkDockerContainerStatus();
+            dockerRunning = dockerStatus.isRunning;
+        }
+
+        const finalRunning = isRunning || dockerRunning;
+
         return {
-            status: isRunning ? 'running' : 'stopped',
-            isRunning,
+            status: finalRunning ? 'running' : 'stopped',
+            isRunning: finalRunning,
             error: botError,
             logCount: botLogs.length,
             scriptPid: scriptPid || null,
             entryPoint: SCRIPT_ENTRY,
-            availableScripts: detectBotScripts()
+            availableScripts: detectBotScripts(),
+            dockerFallback: dockerRunning
         };
     } catch (err) {
         return {
@@ -952,6 +992,11 @@ export function getBotLogs(limit = 100) {
     } else if (BOT_MODE === 'script') {
         if (scriptRemote) {
             return getScreenLogs(limit); // remote script uses screen for logs
+        }
+        // Check if Docker container is running as fallback
+        const dockerStatus = checkDockerContainerStatus();
+        if (dockerStatus.isRunning) {
+            return getDockerLogs(limit);
         }
         return getScriptLogs(limit);
     }

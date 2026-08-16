@@ -11,7 +11,8 @@ import {
     clearBotLogs,
     setLogBroadcast,
     buildBotImage,
-    getBuildInstructions
+    getBuildInstructions,
+    getBotMode
 } from './bot-manager.js';
 
 export function registerBotIpcHandlers(ipcMain, broadcast) {
@@ -26,7 +27,7 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
 
     ipcMain.handle('bot:start', async () => {
         try {
-            const result = startBot();
+            const result = await startBot();
             return result;
         } catch (err) {
             return { ok: false, error: err.message };
@@ -44,7 +45,7 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
 
     ipcMain.handle('bot:restart', async () => {
         try {
-            const result = restartBot();
+            const result = await restartBot();
             return result;
         } catch (err) {
             return { ok: false, error: err.message };
@@ -58,6 +59,10 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
         } catch (err) {
             return { ok: false, error: err.message };
         }
+    });
+
+    ipcMain.handle('bot:mode', async () => {
+        return { mode: getBotMode() };
     });
 
     // ==================== BOT STATUS ====================
@@ -91,14 +96,14 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
     // ==================== BOT INFO ====================
 
     ipcMain.handle('bot:info', async () => {
+        const mode = getBotMode();
         const instructions = getBuildInstructions();
         return {
             name: 'INFBOT',
             description: 'Discord bot for the INFHUB Discord server',
             version: '1.0.0',
-            runtime: 'Docker',
-            image: DOCKER_IMAGE,
-            container: DOCKER_CONTAINER,
+            runtime: mode === 'docker' ? 'Docker' : 'GNU Screen',
+            mode,
             instructions,
             commands: [
                 { name: '.help', description: 'Show all available commands' },
@@ -124,7 +129,7 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
                 'Simple RPG Game System',
                 'Random Popups',
                 'Error Logging',
-                'Docker container (survives restarts)'
+                mode === 'docker' ? 'Docker container (survives restarts)' : 'GNU Screen session (survives restarts)'
             ]
         };
     });

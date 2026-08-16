@@ -8,7 +8,12 @@
 
 ## Overview
 
-INFBOT is a Discord bot integrated into Emerald Utilities. It runs as a **Docker container** managed by the app, so it survives Emerald Utilities closing and PC restarts.
+INFBOT is a Discord bot integrated into Emerald Utilities. It supports two runtime modes:
+
+- **Docker** (default on Windows/macOS) — runs in a Docker container managed by the app
+- **Screen** (default on Linux/homelab) — runs in a GNU Screen session on the homelab server
+
+Both modes survive app/PC restarts. The mode is selected automatically based on platform, or explicitly via the `BOT_MODE` environment variable.
 
 ## Architecture
 
@@ -21,14 +26,13 @@ INFBOT is a Discord bot integrated into Emerald Utilities. It runs as a **Docker
 │  └─────────────┘    └─────────────┘    └──────┬──────┘     │
 │                                                │              │
 │                                                │ docker CLI   │
+│                                                │ OR screen    │
 │                                                ▼              │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │              Docker Daemon (Host)                    │    │
+│  │              Host / Homelab Server                    │    │
 │  │  ┌─────────────────────────────────────────────────┐ │    │
-│  │  │  infbot container (node:20-alpine)               │ │    │
-│  │  │  - Runs src/bots/infbot-src/bot-entry.js         │ │    │
-│  │  │  - --restart unless-stopped                      │ │    │
-│  │  │  - Env from src/.env                             │ │    │
+│  │  │  Docker: infbot container (node:20-alpine)       │ │    │
+│  │  │  Screen: screen -S infbot (node src/heavensgate) │ │    │
 │  │  └─────────────────────────────────────────────────┘ │    │
 │  └─────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
@@ -38,10 +42,9 @@ INFBOT is a Discord bot integrated into Emerald Utilities. It runs as a **Docker
 
 ```
 src/bots/
-├── bot-manager.js          # Docker-based bot lifecycle manager
+├── bot-manager.js          # Bot lifecycle manager (Docker + Screen modes)
 ├── bot-ipc.js              # IPC handlers for renderer communication
-├── Dockerfile              # Bot container build definition
-├── start_infbot.sh         # Original startup script (preserved)
+├── bots.css                # Bots page styles
 └── infbot-src/
     ├── bot-entry.js        # Bot entry point (renamed from heavensgate.js)
     ├── commands.js         # Discord commands
@@ -65,43 +68,70 @@ src/bots/
 
 ## How It Works
 
-### 1. Docker Container Lifecycle
+### 1. Runtime Modes
 
-The bot runs in a Docker container named `infbot`. The container is built from `src/bots/Dockerfile` and uses the `node:20-alpine` base image.
+The bot manager (`src/bots/bot-manager.js`) supports two modes:
 
-**Key features:**
-- `--restart unless-stopped` — container auto-restarts on crash or host reboot
-- `--env-file src/.env` — loads `TOKEN` and `HF_TOKEN` from the project's `.env`
-- Volume mount not needed — all code is baked into the image
+| Mode | Default Platform | Process | Survival |
+|------|-----------------|---------|----------|
+| `docker` | Windows, macOS | Docker container | `--restart unless-stopped` |
+| `screen` | Linux, homelab | GNU Screen session | Screen session persists |
 
-### 2. Dashboard Controls
+Mode selection:
+- Auto-detected: `screen` on Linux, `docker` elsewhere
+- Override with `BOT_MODE=screen` or `BOT_MODE=docker` environment variable
+
+### 2. Screen Mode (Homelab)
+
+For existing homelab setups using GNU Screen, the bot manager can control a screen session directly:
+
+**Configuration (environment variables):**
+- `BOT_MODE=screen` — enable screen mode
+- `BOT_SCREEN_SESSION=infbot` — screen session name (default: `infbot`)
+- `BOT_SCREEN_DIR=/path/to/infbot` — path to the infbot directory on the homelab
+- `BOT_SCREEN_ENTRY=src/heavensgate.js` — entry point file
+
+**How it works:**
+- Start: `screen -dmS infbot bash -c "cd /path/to/infbot && node src/heavensgate.js; exec bash"`
+- Stop: `screen -S infbot -X quit`
+- Status: checks if screen session exists via `screen -list`
+- Logs: captures screen scrollback buffer via `screen -X hardcopy`
+
+### 3. Docker Mode (Dev/Windows)
+
+For development or Windows, the bot runs in Docker:
+
+- Built from `src/bots/infbot-src/Dockerfile`
+- Runs with `--restart unless-stopped`
+- Environment loaded from `src/.env`
+
+### 4. Dashboard Controls
 
 The Bots page (`src/pages/Bots.jsx`) provides:
 
-| Control | Action |
-|---------|--------|
-| **START** | `docker start infbot` (or `docker run` if container doesn't exist) |
-| **STOP** | `docker stop infbot` |
-| **RESTART** | `docker restart infbot` |
-| **BUILD IMAGE** | `docker build -t infbot src/bots/` |
-| **Refresh** | Re-fetch logs from Docker |
-| **Clear** | Clear local log buffer |
+| Control | Docker Action | Screen Action |
+|---------|--------------|---------------|
+| **START** | `docker start infbot` | `screen -dmS infbot ...` |
+| **STOP** | `docker stop infbot` | `screen -S infbot -X quit` |
+| **RESTART** | `docker restart infbot` | stop + start |
+| **BUILD IMAGE** | `docker build -t infbot .` | Not available |
 
-### 3. Log Streaming
+### 5. Log Streaming
 
-Logs are streamed in real-time using `docker logs --follow --tail 0 infbot`. The bot-manager captures stdout/stderr and broadcasts them to the renderer via the existing `broadcast` system.
+- **Docker**: `docker logs --follow --tail 0 infbot`
+- **Screen**: `screen -S infbot -X hardcopy /tmp/infbot-screen-hardcopy.txt` (periodic snapshots)
 
-### 4. Auto-Start
+### 6. Auto-Start
 
-When Emerald Utilities launches, `autoStartBot()` in `src/heavensgate.js` checks if the container is already running. If not, it starts it automatically.
+When Emerald Utilities launches, `autoStartBot()` checks if the bot is already running. If not, it starts it automatically in the configured mode.
 
 ## Docker Commands Reference
 
-The dashboard shows these commands for manual management:
+The dashboard shows these commands for manual management (Docker mode only):
 
 ```bash
 # Build the image
-docker build -t infbot src/bots/
+docker build -t infbot src/bots/infbot-src/
 
 # Run the container (first time)
 docker run -d --name infbot --restart unless-stopped --env-file src/.env infbot
@@ -116,6 +146,30 @@ docker logs -f infbot
 
 # Remove container (stops auto-restart)
 docker rm -f infbot
+```
+
+## Screen Commands Reference (Homelab)
+
+For screen-based setups using the recommended `infbot-src/` deployment:
+
+```bash
+# Start the bot
+screen -dmS infbot bash -c "cd /home/alexljn5/INFHUB/infbot && node src/bot-entry.js; exec bash"
+
+# Attach to the session
+screen -r infbot
+
+# Detach from session (Ctrl+A then D)
+
+# Stop the bot
+screen -S infbot -X quit
+
+# Check if running
+screen -list | grep infbot
+
+# Capture logs
+screen -S infbot -X hardcopy /tmp/infbot-screen-hardcopy.txt
+cat /tmp/infbot-screen-hardcopy.txt
 ```
 
 ## Environment Variables
@@ -160,36 +214,42 @@ Added to `package.json`:
 
 ## Homelab Deployment
 
-### Self-Contained Deployment Directory
+### Option A: Screen Mode (Recommended for Homelab)
 
-A production-ready deployment package lives at `infbot-deploy/`:
+If you want to manage your existing homelab infbot via the Emerald Utilities dashboard:
 
+1. Copy the bot source to your homelab:
+   ```bash
+   scp -r src/bots/infbot-src/ user@homelab-host:/home/alexljn5/INFHUB/infbot/
+   ```
+2. Ensure the entry point is `src/bot-entry.js` (renamed from `heavensgate.js`)
+3. Set `BOT_MODE=screen` in the environment where Emerald Utilities runs
+4. The dashboard will detect the existing screen session and control it
+
+**Screen commands:**
+```bash
+# Start the bot
+screen -dmS infbot bash -c "cd /home/alexljn5/INFHUB/infbot && node src/bot-entry.js; exec bash"
+
+# Attach to the session
+screen -r infbot
+
+# Detach from session (Ctrl+A then D)
+
+# Stop the bot
+screen -S infbot -X quit
+
+# Check if running
+screen -list | grep infbot
 ```
-infbot-deploy/
-├── docker-compose.yml
-├── start_infbot.sh
-├── .env.example
-├── .gitignore
-├── Dockerfile
-├── package.json
-└── infbot-src/
-    ├── bot-entry.js
-    ├── commands.js
-    ├── randompopups.js
-    ├── creamai/
-    ├── network/
-    ├── games/
-    ├── logging/
-    ├── database/
-    ├── ascii/
-    └── economy/
-```
 
-### Quick Start on Homelab
+### Option B: Docker Mode
+
+For a fresh Docker deployment on homelab:
 
 ```bash
-# 1. Copy the deployment directory to homelab
-scp -r infbot-deploy/ user@homelab-host:/opt/infbot/
+# 1. Copy the bot source to homelab
+scp -r src/bots/infbot-src/ user@homelab-host:/opt/infbot/
 
 # 2. SSH into homelab
 ssh user@homelab-host
@@ -200,7 +260,7 @@ cp .env.example .env
 # Edit .env with real TOKEN and HF_TOKEN
 
 # 4. Start the bot
-./start_infbot.sh
+docker compose up -d
 ```
 
 ### start_infbot.sh Commands
@@ -263,4 +323,4 @@ The bot is completely independent of Emerald Utilities. Future integration optio
 2. **API proxy** — Run a small HTTP API on the homelab that exposes Docker control endpoints
 3. **Shared monitoring** — Emerald Utilities reads container status via Docker remote API
 
-The current `bot-manager.js` uses local Docker CLI. For homelab control, replace the CLI calls with SSH commands or API calls — the IPC interface (`bot:start`, `bot:stop`, etc.) stays the same.
+The current `bot-manager.js` uses local Docker CLI or screen commands. For homelab control, replace the CLI calls with SSH commands or API calls — the IPC interface (`bot:start`, `bot:stop`, etc.) stays the same.

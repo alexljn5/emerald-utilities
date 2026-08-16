@@ -125,6 +125,17 @@
     text-overflow: ellipsis;
 }
 
+.botsModeBadge {
+    font-size: clamp(0.68rem, 0.85vw, 0.9rem);
+    padding: 0.25rem 0.5rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
 .botsPanelActions {
     display: flex;
     gap: var(--space-sm);
@@ -465,6 +476,13 @@
 .botsSidebarStatus .botsStatusError {
     background: #ff2222;
     box-shadow: 0 0 6px rgba(255, 34, 34, 0.5);
+}
+
+.botsSidebarMode {
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 /* ==================== LOGS ==================== */

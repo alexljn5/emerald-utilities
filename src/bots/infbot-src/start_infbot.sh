@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# infbot-deploy/start_infbot.sh
+# src/bots/infbot-src/start_infbot.sh
 # Idempotent deployment script for INF-BOT on homelab.
 # Usage:
 #   ./start_infbot.sh          # start (default)

@@ -1,4 +1,4 @@
-# infbot-deploy/Dockerfile
+# src/bots/infbot-src/Dockerfile
 FROM node:20-alpine
 
 # Set working directory
@@ -10,7 +10,7 @@ COPY package*.json ./
 RUN npm install --production
 
 # Copy the rest of the code
-COPY infbot-src/ ./
+COPY . ./
 
 # Start the bot with nodemon
-CMD ["npx", "nodemon", "infbot-src/bot-entry.js"]
+CMD ["npx", "nodemon", "bot-entry.js"]

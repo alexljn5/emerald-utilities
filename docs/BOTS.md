@@ -277,6 +277,14 @@ docker compose up -d
 
 The script is **idempotent** — running it multiple times is safe and will not create duplicate containers.
 
+### stop_infbot.sh Commands
+
+```bash
+./stop_infbot.sh  # stop container (default)
+./stop_infbot.sh stop  # stop container
+./stop_infbot.sh down  # stop and remove container
+```
+
 ### Update Workflow
 
 ```bash

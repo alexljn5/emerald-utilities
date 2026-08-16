@@ -82,10 +82,11 @@ function runDockerCommand(args, options = {}) {
     }
 
     const fullArgs = ['docker', ...args];
-    const result = execSync(fullArgs.join(' '), {
+    const result = execSync(fullArgs, {
         encoding: 'utf8',
         stdio: options.stdio || 'pipe',
         cwd: DOCKER_BOT_DIR,
+        shell: false,
         ...options
     });
 
@@ -280,11 +281,21 @@ function startBotDocker() {
             runDockerCommand(['start', DOCKER_CONTAINER]);
             addBotLog('Started existing container', 'system');
         } else {
+            // Check if image exists; if not, build it first
+            const imageExists = runDockerCommand(['images', '--format', '{{.Repository}}:{{.Tag}}', DOCKER_IMAGE]).trim();
+            if (!imageExists) {
+                addBotLog('Image not found, building...', 'system');
+                const buildResult = buildBotImage();
+                if (!buildResult.ok) {
+                    return buildResult;
+                }
+            }
+
             const envFileArg = `--env-file=${ENV_FILE}`;
             runDockerCommand([
                 'run', '-d',
                 '--name', DOCKER_CONTAINER,
-                '--restart', 'unless-stopped',
+                '--restart', 'no',
                 envFileArg,
                 DOCKER_IMAGE
             ]);

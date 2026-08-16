@@ -75,7 +75,7 @@ cmd_start() {
     check_required_vars
 
     log "Starting INF-BOT container..."
-    $COMPOSE up -d --build
+    $COMPOSE up -d
 
     log "Container started. Use 'docker compose logs -f infbot' to follow logs."
 }

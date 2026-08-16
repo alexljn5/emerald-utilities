@@ -1,4 +1,4 @@
-# infbot-deploy/docker-compose.yml
+# src/bots/infbot-src/docker-compose.yml
 # Homelab deployment for INF-BOT
 # Usage: docker compose up -d --build
 
@@ -6,7 +6,7 @@ services:
   infbot:
     build: .
     container_name: infbot
-    restart: unless-stopped
+    restart: no
     env_file:
       - .env
     # No ports exposed — bot connects outbound to Discord only

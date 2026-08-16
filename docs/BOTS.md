@@ -102,7 +102,8 @@ For existing homelab setups using GNU Screen, the bot manager can control a scre
 For development or Windows, the bot runs in Docker:
 
 - Built from `src/bots/infbot-src/Dockerfile`
-- Runs with `--restart unless-stopped`
+- Runs with `restart: no` (does not auto-start on reboot)
+- If the image is missing, the dashboard auto-builds it before starting
 - Environment loaded from `src/.env`
 
 ### 4. Dashboard Controls

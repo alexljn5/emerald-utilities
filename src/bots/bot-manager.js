@@ -9,31 +9,11 @@ import { execSync, spawn, spawnSync, execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { botRegistry } from './bot-registry.js';
+import { readBotConfig, writeBotConfig } from './bot-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// ==================== CONFIG ====================
-const CONFIG_PATH = path.join(__dirname, 'bot-config.json');
-
-function readBotConfig() {
-    try {
-        if (fs.existsSync(CONFIG_PATH)) {
-            return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-        }
-    } catch {
-        // ignore
-    }
-    return { autoStart: true };
-}
-
-function writeBotConfig(config) {
-    try {
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
-    } catch {
-        // ignore
-    }
-}
 
 export function getAutoStartEnabled() {
     return readBotConfig().autoStart !== false;
@@ -67,7 +47,10 @@ export function setSshConfig(host, user, port, key) {
 // ==================== CONFIGURATION ====================
 // Set BOT_MODE via environment variable or fall back to 'script' (most abstract).
 // Available modes: 'docker', 'screen', 'script'
-const BOT_MODE = process.env.BOT_MODE || 'script';
+// Use a function so mode changes take effect immediately without restart.
+export function getBotMode() {
+    return process.env.BOT_MODE || 'script';
+}
 
 // Docker config
 const DOCKER_IMAGE = 'infbot';
@@ -264,10 +247,6 @@ function addBotLog(message, type = 'stdout') {
 
 export function setLogBroadcast(callback) {
     logBroadcast = callback;
-}
-
-export function getBotMode() {
-    return BOT_MODE;
 }
 
 // ==================== DOCKER IMPLEMENTATION ====================
@@ -505,8 +484,9 @@ function streamScreenLogs() {
 
 // ==================== PUBLIC API (MODE-AGNOSTIC) ====================
 export function buildBotImage() {
-    if (BOT_MODE !== 'docker') {
-        return { ok: false, error: `Build is only supported in docker mode (current: ${BOT_MODE})` };
+    const mode = getBotMode();
+    if (mode !== 'docker') {
+        return { ok: false, error: `Build is only supported in docker mode (current: ${mode})` };
     }
 
     try {
@@ -530,14 +510,15 @@ export async function startBot() {
     botStatus = 'starting';
     botError = null;
 
-    if (BOT_MODE === 'docker') {
+    const mode = getBotMode();
+    if (mode === 'docker') {
         return startBotDocker();
-    } else if (BOT_MODE === 'screen') {
+    } else if (mode === 'screen') {
         return await startBotScreen();
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         return await startBotScript();
     } else {
-        const errorMsg = `Unknown bot mode: ${BOT_MODE}`;
+        const errorMsg = `Unknown bot mode: ${mode}`;
         botError = errorMsg;
         botStatus = 'error';
         addBotLog(errorMsg, 'error');
@@ -607,14 +588,9 @@ async function startBotScript() {
             return { ok: true, status: botStatus, alreadyRunning: true };
         }
 
-        const entryPath = path.join(SCRIPT_BOT_DIR, SCRIPT_ENTRY);
-
         if (scriptRemote) {
-            // Remote execution via SSH
-            if (!fs.existsSync(entryPath)) {
-                throw new Error(`Bot entry point not found on remote: ${entryPath}`);
-            }
-            const cmd = `cd ${SCRIPT_BOT_DIR} && ${SCRIPT_START_CMD}`;
+            // Remote execution via SSH - use screen config which is set up for the remote host
+            const cmd = `cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}`;
             runSshCommand(`screen -dmS ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
             await new Promise(resolve => setTimeout(resolve, 1500));
             botStatus = 'running';
@@ -622,6 +598,7 @@ async function startBotScript() {
             streamScreenLogs(); // reuse screen log streaming for remote
             return { ok: true, status: botStatus };
         } else {
+            const entryPath = path.join(SCRIPT_BOT_DIR, SCRIPT_ENTRY);
             // Local execution
             if (!fs.existsSync(entryPath)) {
                 throw new Error(`Bot entry point not found: ${entryPath}`);
@@ -729,9 +706,10 @@ export function stopBot() {
     addBotLog('Stopping bot...', 'system');
 
     try {
-        if (BOT_MODE === 'docker') {
+        const mode = getBotMode();
+        if (mode === 'docker') {
             runDockerCommand(['stop', DOCKER_CONTAINER], { stdio: 'ignore' });
-        } else if (BOT_MODE === 'screen') {
+        } else if (mode === 'screen') {
             if (screenSessionExists()) {
                 if (isRemote()) {
                     runSshCommand(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
@@ -739,7 +717,7 @@ export function stopBot() {
                     execSync(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
                 }
             }
-        } else if (BOT_MODE === 'script') {
+        } else if (mode === 'script') {
             if (scriptRemote) {
                 if (screenSessionExists()) {
                     runSshCommand(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
@@ -765,12 +743,13 @@ export async function restartBot() {
     addBotLog('Restarting bot...', 'system');
 
     try {
-        if (BOT_MODE === 'docker') {
+        const mode = getBotMode();
+        if (mode === 'docker') {
             runDockerCommand(['restart', DOCKER_CONTAINER], { stdio: 'ignore' });
             botStatus = 'running';
             addBotLog('Bot container restarted', 'system');
             streamDockerLogs();
-        } else if (BOT_MODE === 'screen') {
+        } else if (mode === 'screen') {
             // Stop then start
             if (screenSessionExists()) {
                 if (isRemote()) {
@@ -791,7 +770,7 @@ export async function restartBot() {
             botStatus = 'running';
             addBotLog(`Screen session '${SCREEN_SESSION}' restarted`, 'system');
             streamScreenLogs();
-        } else if (BOT_MODE === 'script') {
+        } else if (mode === 'script') {
             // Kill existing process
             if (scriptProcess && !scriptProcess.killed) {
                 scriptProcess.kill('SIGTERM');
@@ -820,18 +799,19 @@ export async function restartBot() {
 }
 
 export function getBotStatus() {
-    if (BOT_MODE === 'docker') {
+    const mode = getBotMode();
+    if (mode === 'docker') {
         return getDockerStatus();
-    } else if (BOT_MODE === 'screen') {
+    } else if (mode === 'screen') {
         return getScreenStatus();
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         return getScriptStatus();
     }
 
     return {
         status: 'error',
         isRunning: false,
-        error: `Unknown bot mode: ${BOT_MODE}`,
+        error: `Unknown bot mode: ${mode}`,
         logCount: botLogs.length
     };
 }
@@ -982,11 +962,12 @@ function getScriptStatus() {
 }
 
 export function getBotLogs(limit = 100) {
-    if (BOT_MODE === 'docker') {
+    const mode = getBotMode();
+    if (mode === 'docker') {
         return getDockerLogs(limit);
-    } else if (BOT_MODE === 'screen') {
+    } else if (mode === 'screen') {
         return getScreenLogs(limit);
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         // Check if Docker container is running as fallback (works for both local and remote)
         const dockerStatus = checkDockerContainerStatus();
         if (dockerStatus.isRunning) {
@@ -998,7 +979,7 @@ export function getBotLogs(limit = 100) {
         return getScriptLogs(limit);
     }
 
-    return { logs: [], total: 0, hasMore: false, error: `Unknown bot mode: ${BOT_MODE}` };
+    return { logs: [], total: 0, hasMore: false, error: `Unknown bot mode: ${getBotMode()}` };
 }
 
 function getDockerLogs(limit = 100) {
@@ -1115,7 +1096,8 @@ export function clearBotLogs() {
 
 // ==================== AUTO-START ====================
 export async function autoStartBot() {
-    if (BOT_MODE === 'docker') {
+    const mode = getBotMode();
+    if (mode === 'docker') {
         if (!dockerAvailable()) {
             console.log('[BotManager] Docker not available, skipping auto-start');
             return { ok: false, error: 'Docker not available' };
@@ -1136,7 +1118,7 @@ export async function autoStartBot() {
         }
         return result;
 
-    } else if (BOT_MODE === 'screen') {
+    } else if (mode === 'screen') {
         if (!screenAvailable()) {
             console.log('[BotManager] Screen not available, skipping auto-start');
             return { ok: false, error: 'Screen not available' };
@@ -1157,7 +1139,7 @@ export async function autoStartBot() {
         }
         return result;
 
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         if (!scriptAvailable()) {
             console.log('[BotManager] Node.js not available, skipping auto-start');
             return { ok: false, error: 'Node.js not available' };
@@ -1183,12 +1165,13 @@ export async function autoStartBot() {
         return result;
     }
 
-    return { ok: false, error: `Unknown bot mode: ${BOT_MODE}` };
+    return { ok: false, error: `Unknown bot mode: ${getBotMode()}` };
 }
 
 // ==================== BUILD HELPER ====================
 export function getBuildInstructions() {
-    if (BOT_MODE === 'docker') {
+    const mode = getBotMode();
+    if (mode === 'docker') {
         return {
             mode: 'docker',
             image: DOCKER_IMAGE,
@@ -1201,7 +1184,7 @@ export function getBuildInstructions() {
             logsCommand: `docker logs -f ${DOCKER_CONTAINER}`,
             removeCommand: `docker rm -f ${DOCKER_CONTAINER}`
         };
-    } else if (BOT_MODE === 'screen') {
+    } else if (mode === 'screen') {
         if (isRemote()) {
             return {
                 mode: 'screen',
@@ -1227,7 +1210,7 @@ export function getBuildInstructions() {
             attachCommand: `screen -r ${SCREEN_SESSION}`,
             logsCommand: `screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt`
         };
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         if (scriptRemote) {
             return {
                 mode: 'script',
@@ -1252,7 +1235,7 @@ export function getBuildInstructions() {
         };
     }
 
-    return { mode: BOT_MODE, error: 'Unknown mode' };
+    return { mode: getBotMode(), error: 'Unknown mode' };
 }
 
 // ==================== CLEANUP ====================
@@ -1280,3 +1263,8 @@ export function cleanup() {
     botLogs = [];
     botError = null;
 }
+
+// ==================== REGISTRY EXPORTS ====================
+export { botRegistry } from './bot-registry.js';
+export { discoverBots, getKnownHosts, addKnownHost, removeKnownHost } from './bot-discovery.js';
+export { BotInstance } from './bot-instance.js';

@@ -1810,16 +1810,16 @@ app.whenReady().then(async () => {
     // Register Bot IPC handlers
     registerBotIpcHandlers(ipcMain, broadcast);
 
-    // Auto-start infbot if enabled in config
+    // Auto-start all bots if enabled in config
     try {
-        if (getAutoStartEnabled()) {
-            await autoStartBot();
-            console.log('[Emerald] INFBOT auto-start initiated');
+        const autoStartResult = await autoStartBot();
+        if (autoStartResult.length > 0) {
+            console.log(`[Emerald] ${autoStartResult.length} bot(s) auto-start initiated`);
         } else {
-            console.log('[Emerald] INFBOT auto-start disabled in config');
+            console.log('[Emerald] Auto-start disabled or no bots to start');
         }
     } catch (err) {
-        console.error('[Emerald] INFBOT auto-start failed:', err.message);
+        console.error('[Emerald] Bot auto-start failed:', err.message);
     }
 
     // DevTools toggle handler

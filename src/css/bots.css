@@ -220,6 +220,40 @@
     cursor: pointer;
 }
 
+/* ==================== REMOTE BOT NOTE ==================== */
+.botsRemoteNote {
+    padding: var(--space-md);
+    background: var(--color-bg);
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+    color: #aaa;
+    font-size: clamp(0.8rem, 1vw, 0.95rem);
+    line-height: 1.5;
+    margin-bottom: var(--space-md);
+}
+
+.botsRemoteNote p {
+    margin: 0 0 var(--space-sm) 0;
+}
+
+.botsRemoteNote p:last-child {
+    margin-bottom: 0;
+}
+
+.botsRemoteNote strong {
+    color: var(--color-text);
+}
+
+.botsRemoteNote--muted {
+    color: #777;
+    font-style: italic;
+}
+
+.botsControls--disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
 /* ==================== SSH CONFIG ==================== */
 .botsSshSection {
     margin-top: var(--space-md);

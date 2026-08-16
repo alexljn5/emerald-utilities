@@ -14,6 +14,8 @@ import { startWorker as startXScraperForwardWorker, getStatus as getXScraperForw
 import { registerCreatorHubIpc } from './creator-hub/ipc.js';
 import { registerEnvIpc } from './utils/envIpc.js';
 import { resolvePath, resolveInternalScriptsPath } from './utils/pathResolver.js';
+import { registerBotIpcHandlers } from './bots/bot-ipc.js';
+import { autoStartBot, cleanup as cleanupBot } from './bots/bot-manager.js';
 import { default as databaseService } from './database/wrath.js';
 import { recover as recoverNetworkPersistence } from './database/network-persistence.js';
 import { ENABLE_DEVTOOLS, ENABLE_INAPP_NOTIFICATIONS, AI_MODE, DATABASE_MODE, LOCAL_AI_ENABLED } from './globals.js';
@@ -1805,6 +1807,17 @@ app.whenReady().then(async () => {
     // Register Environment Configuration IPC handlers
     registerEnvIpc();
 
+    // Register Bot IPC handlers
+    registerBotIpcHandlers(ipcMain, broadcast);
+
+    // Auto-start infbot if enabled
+    try {
+        autoStartBot();
+        console.log('[Emerald] INFBOT auto-start initiated');
+    } catch (err) {
+        console.error('[Emerald] INFBOT auto-start failed:', err.message);
+    }
+
     // DevTools toggle handler
     ipcMain.handle('devtools:toggle', async (_event, show) => {
         if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'No main window' };
@@ -1863,5 +1876,13 @@ app.on('before-quit', async () => {
         console.log("[Emerald] Database stopped");
     } catch (err) {
         console.error("[Emerald] Error stopping database:", err.message);
+    }
+
+    // Cleanup bot process
+    try {
+        cleanupBot();
+        console.log("[Emerald] INFBOT cleaned up");
+    } catch (err) {
+        console.error("[Emerald] Error cleaning up INFBOT:", err.message);
     }
 });

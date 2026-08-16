@@ -16,6 +16,7 @@ export const ENABLE_MOD_UPDATER = true;
 export const ENABLE_PORTFOLIO = true;
 export const ENABLE_INTERNET = true;
 export const ENABLE_INAPP_NOTIFICATIONS = true;
+export const ENABLE_BOTS = true;
 
 // ==================== DEPLOYMENT MODES ====================
 // AI_MODE and DATABASE_MODE are hardcoded here as the single source of truth.

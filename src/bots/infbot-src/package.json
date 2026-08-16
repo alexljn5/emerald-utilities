@@ -1,0 +1,23 @@
+{
+  "name": "infbot",
+  "version": "1.0.0",
+  "description": "INFBOT best bot xd",
+  "main": "infbot-src/bot-entry.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node infbot-src/bot-entry.js",
+    "dev": "nodemon infbot-src/bot-entry.js"
+  },
+  "author": "alexljn5",
+  "license": "MIT",
+  "dependencies": {
+    "@huggingface/inference": "^4.13.15",
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.3.1",
+    "duckduckgo-images-api": "^1.0.5",
+    "openai": "^6.29.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

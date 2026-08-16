@@ -1,0 +1,13 @@
+# INF-BOT Deploy — Git Ignore
+# Keep secrets out of version control.
+
+.env
+.env.*
+!.env.example
+
+# Docker
+docker-compose.override.yml
+
+# Node
+node_modules/
+npm-debug.log

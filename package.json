@@ -116,12 +116,16 @@
     }
   },
   "dependencies": {
+    "@huggingface/inference": "^4.13.15",
     "adm-zip": "^0.5.16",
     "body-parser": "^2.3.0",
     "cors": "^2.8.6",
+    "discord.js": "^14.25.1",
     "dotenv": "^16.4.5",
+    "duckduckgo-images-api": "^1.0.5",
     "express": "^4.22.2",
     "node-notifier": "^10.0.1",
+    "openai": "^6.29.0",
     "pg": "^8.13.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

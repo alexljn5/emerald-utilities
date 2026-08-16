@@ -2,7 +2,7 @@
 // Single source of truth for application-wide flags, constants, and feature toggles.
 
 export const APP_NAME = 'Emerald Utilities';
-export const versionNumber = '0.1.5';
+export const versionNumber = '0.1.6';
 
 // ==================== FEATURE FLAGS ====================
 // Toggle features on/off. Used by both main and renderer processes.

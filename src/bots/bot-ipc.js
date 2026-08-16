@@ -18,7 +18,11 @@ import {
     getSshConfig,
     setSshConfig,
     detectBotScripts,
-    sendBotCommand
+    sendBotCommand,
+    readBotConfig,
+    writeBotConfig,
+    detectHomelab,
+    autoDetectAndConnectHomelab
 } from './bot-manager.js';
 
 export function registerBotIpcHandlers(ipcMain, broadcast) {
@@ -38,6 +42,24 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
     ipcMain.handle('bot:setSshConfig', async (_event, config) => {
         const result = setSshConfig(config.host, config.user, config.port, config.key);
         return { ok: true, config: result };
+    });
+
+    ipcMain.handle('bot:detectHomelab', async () => {
+        try {
+            const result = await detectHomelab();
+            return { ok: true, ...result };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('bot:autoDetectHomelab', async () => {
+        try {
+            const result = await autoDetectAndConnectHomelab();
+            return result;
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
     });
 
     // ==================== BOT CONTROL ====================
@@ -83,9 +105,12 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
     });
 
     ipcMain.handle('bot:setMode', async (_event, mode) => {
-        // Note: Mode change requires app restart to take effect
-        // This just updates the environment variable for the current session
         if (mode === 'docker' || mode === 'screen' || mode === 'script') {
+            // Persist mode to bot-config.json so it survives app restarts
+            const config = readBotConfig();
+            config.mode = mode;
+            writeBotConfig(config);
+            // Also set env var for current session
             process.env.BOT_MODE = mode;
             return { ok: true, mode, message: `Mode set to ${mode}. Restart the app to apply.` };
         }

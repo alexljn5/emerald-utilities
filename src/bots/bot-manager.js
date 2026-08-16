@@ -1,7 +1,7 @@
 // src/bots/bot-manager.js
 // Main-process module that manages Discord bots.
 // Supports multiple modes:
-//   - 'docker'  : bot runs in a Docker container
+//   - 'docker'  : bot runs in a Docker container (local or remote via SSH)
 //   - 'screen'  : bot runs in a GNU Screen session
 //   - 'script'  : bot runs as a detached Node.js process (abstract, auto-detects scripts)
 
@@ -9,14 +9,21 @@ import { execSync, spawn, spawnSync, execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dns from 'dns';
+import { promisify } from 'util';
+import net from 'net';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const resolveMx = promisify(dns.resolveMx);
+const resolve4 = promisify(dns.resolve4);
+
 // ==================== CONFIG ====================
 const CONFIG_PATH = path.join(__dirname, 'bot-config.json');
 
-function readBotConfig() {
+export function readBotConfig() {
     try {
         if (fs.existsSync(CONFIG_PATH)) {
             return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
@@ -27,7 +34,7 @@ function readBotConfig() {
     return { autoStart: true };
 }
 
-function writeBotConfig(config) {
+export function writeBotConfig(config) {
     try {
         fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
     } catch {
@@ -46,11 +53,12 @@ export function setAutoStartEnabled(enabled) {
 }
 
 export function getSshConfig() {
+    const sshConfig = getCurrentSshConfig();
     return {
-        host: SSH_HOST,
-        user: SSH_USER,
-        port: SSH_PORT,
-        key: SSH_KEY
+        host: sshConfig.host,
+        user: sshConfig.user,
+        port: sshConfig.port,
+        key: sshConfig.key
     };
 }
 
@@ -61,13 +69,128 @@ export function setSshConfig(host, user, port, key) {
     config.sshPort = port;
     config.sshKey = key;
     writeBotConfig(config);
+    sshReachable = null; // reset reachability cache when config changes
     return getSshConfig();
 }
 
+// ==================== HOMELAB AUTO-DETECTION ====================
+// Tries to automatically detect the homelab IP by checking common hostnames
+// and local network ranges. Returns the detected host or null.
+
+const HOMELAB_CANDIDATES = [
+    // mDNS / local hostnames
+    'alexljn5.local',
+    'homelab.local',
+    'infhub.local',
+    'emerald.local',
+    // Common local IPs (user's known homelab IP)
+    '192.168.2.27',
+    '192.168.1.100',
+    '192.168.1.50',
+    '192.168.1.10',
+    '192.168.0.100',
+    '10.0.0.100',
+];
+
+async function checkHostReachable(host, port = 22, timeoutMs = 2000) {
+    return new Promise((resolve) => {
+        const socket = new net.Socket();
+        let resolved = false;
+
+        socket.setTimeout(timeoutMs);
+        socket.connect(port, host, () => {
+            if (!resolved) {
+                resolved = true;
+                socket.destroy();
+                resolve(true);
+            }
+        });
+
+        socket.on('error', () => {
+            if (!resolved) {
+                resolved = true;
+                socket.destroy();
+                resolve(false);
+            }
+        });
+
+        socket.on('timeout', () => {
+            if (!resolved) {
+                resolved = true;
+                socket.destroy();
+                resolve(false);
+            }
+        });
+    });
+}
+
+export async function detectHomelab() {
+    // If already configured, return the existing config
+    const existingConfig = getSshConfigFromFile();
+    if (existingConfig.host) {
+        // Verify the existing host is still reachable
+        const reachable = await checkHostReachable(existingConfig.host, parseInt(existingConfig.port) || 22);
+        if (reachable) {
+            return { detected: false, host: existingConfig.host, reason: 'already-configured' };
+        }
+        addBotLog(`Configured homelab ${existingConfig.host} is not reachable, scanning for alternatives...`, 'system');
+    }
+
+    // Try each candidate
+    for (const candidate of HOMELAB_CANDIDATES) {
+        try {
+            addBotLog(`Checking homelab candidate: ${candidate}...`, 'system');
+            const reachable = await checkHostReachable(candidate, 22, 1500);
+            if (reachable) {
+                addBotLog(`Homelab detected at ${candidate}`, 'system');
+                return { detected: true, host: candidate, reason: 'detected' };
+            }
+        } catch {
+            // ignore and try next
+        }
+    }
+
+    // Try mDNS resolution for user's hostname
+    try {
+        const localHostname = os.hostname();
+        const mdnsHost = `${localHostname}.local`;
+        const reachable = await checkHostReachable(mdnsHost, 22, 1500);
+        if (reachable) {
+            addBotLog(`Homelab detected via mDNS: ${mdnsHost}`, 'system');
+            return { detected: true, host: mdnsHost, reason: 'mdns' };
+        }
+    } catch {
+        // ignore
+    }
+
+    addBotLog('No homelab detected on the network', 'system');
+    return { detected: false, host: null, reason: 'not-found' };
+}
+
+export async function autoDetectAndConnectHomelab() {
+    const detection = await detectHomelab();
+    if (detection.host) {
+        const config = readBotConfig();
+        const sshUser = config.sshUser || process.env.BOT_SSH_USER || 'alexljn5';
+        const sshPort = config.sshPort || process.env.BOT_SSH_PORT || '22';
+        const sshKey = config.sshKey || path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519');
+
+        setSshConfig(detection.host, sshUser, sshPort, sshKey);
+        addBotLog(`Auto-configured SSH: ${sshUser}@${detection.host}:${sshPort}`, 'system');
+        return { ok: true, host: detection.host, reason: detection.reason };
+    }
+
+    return { ok: false, error: 'No homelab detected', reason: detection.reason };
+}
+
 // ==================== CONFIGURATION ====================
-// Set BOT_MODE via environment variable or fall back to 'script' (most abstract).
-// Available modes: 'docker', 'screen', 'script'
-const BOT_MODE = process.env.BOT_MODE || 'script';
+// Read mode from bot-config.json first, then env var, then fall back to 'script'.
+// IMPORTANT: BOT_MODE is read dynamically each time via getBotMode() to pick up
+// UI changes without restarting the app.
+export function getBotMode() {
+    const config = readBotConfig();
+    return config.mode || process.env.BOT_MODE || 'script';
+}
 
 // Docker config
 const DOCKER_IMAGE = 'infbot';
@@ -103,20 +226,55 @@ function getSshConfigFromFile() {
     };
 }
 
-const SSH_CONFIG = getSshConfigFromFile();
-const SSH_HOST = SSH_CONFIG.host;
-const SSH_USER = SSH_CONFIG.user;
-const SSH_PORT = SSH_CONFIG.port;
-const SSH_KEY = SSH_CONFIG.key;
-const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null'];
+let sshReachable = null; // null = unknown, true = reachable, false = not reachable
 
 function isRemote() {
-    return Boolean(SSH_HOST);
+    // Read dynamically to pick up config changes from the UI
+    const config = readBotConfig();
+    // Only treat as remote if SSH is configured AND we know it's reachable (or haven't checked yet)
+    if (!config.sshHost) return false;
+    if (sshReachable === false) return false; // known to be unreachable
+    return true; // configured and either reachable or unknown
+}
+
+function setSshReachable(reachable) {
+    sshReachable = reachable;
+}
+
+function getCurrentSshConfig() {
+    const config = readBotConfig();
+    return {
+        host: config.sshHost || process.env.BOT_SSH_HOST || '',
+        user: config.sshUser || process.env.BOT_SSH_USER || 'alexljn5',
+        port: config.sshPort || process.env.BOT_SSH_PORT || '22',
+        key: config.sshKey || process.env.BOT_SSH_KEY || path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519')
+    };
+}
+
+// Use Windows built-in OpenSSH client to avoid Git for Windows ssh.exe popup
+const WINDOWS_SSH = 'C:\\Windows\\System32\\OpenSSH\\ssh.exe';
+
+function getSshBinary() {
+    if (process.platform === 'win32') {
+        // Use full path to Windows OpenSSH to bypass Git for Windows ssh.exe
+        return WINDOWS_SSH;
+    }
+    return 'ssh';
 }
 
 function sshCommand(localCmd) {
     if (!isRemote()) return localCmd;
-    const ssh = ['ssh', ...SSH_OPTS, '-p', SSH_PORT, '-i', SSH_KEY, `${SSH_USER}@${SSH_HOST}`, localCmd];
+    const sshConfig = getCurrentSshConfig();
+    // Use NUL on Windows instead of /dev/null
+    const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
+    const sshOpts = [
+        '-o', 'StrictHostKeyChecking=no',
+        '-o', `UserKnownHostsFile=${nullDevice}`,
+        '-o', 'ConnectTimeout=5',          // fail fast if host is unreachable
+        '-o', 'ServerAliveInterval=5',     // send keepalive every 5s
+        '-o', 'ServerAliveCountMax=2'      // give up after 2 missed keepalives
+    ];
+    const ssh = [getSshBinary(), ...sshOpts, '-p', sshConfig.port, '-i', sshConfig.key, `${sshConfig.user}@${sshConfig.host}`, localCmd];
     return ssh;
 }
 
@@ -126,7 +284,7 @@ function runSshCommand(cmd, options = {}) {
     }
     const sshCmd = sshCommand(cmd);
     // execSync expects a string, not an array. Use execFileSync for array args.
-    return execFileSync('ssh', sshCmd.slice(1), { encoding: 'utf8', stdio: options.stdio || 'pipe', ...options });
+    return execFileSync(getSshBinary(), sshCmd.slice(1), { encoding: 'utf8', stdio: options.stdio || 'pipe', ...options });
 }
 
 function runSshCommandAsync(cmd, onStdout, onStderr) {
@@ -143,7 +301,7 @@ function runSshCommandAsync(cmd, onStdout, onStderr) {
     }
     const sshCmd = sshCommand(cmd);
     return new Promise((resolve, reject) => {
-        const child = spawn('ssh', sshCmd.slice(1), { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+        const child = spawn(getSshBinary(), sshCmd.slice(1), { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
         let stdout = '';
         let stderr = '';
         if (onStdout) child.stdout.on('data', (data) => { const text = data.toString(); stdout += text; onStdout(text); });
@@ -240,6 +398,7 @@ let botError = null;
 let botLogs = [];
 const MAX_BOT_LOGS = 500;
 let logBroadcast = null;
+const BOT_DEBUG = process.env.BOT_DEBUG === 'true';
 
 // ==================== HELPERS ====================
 function addBotLog(message, type = 'stdout') {
@@ -259,15 +418,17 @@ function addBotLog(message, type = 'stdout') {
         logBroadcast(entry);
     }
 
+    // Debug logging
+    if (BOT_DEBUG) {
+        const prefix = type === 'error' ? '[BotDebug:ERROR]' : '[BotDebug]';
+        console.log(`${prefix} ${message}`);
+    }
+
     return entry;
 }
 
 export function setLogBroadcast(callback) {
     logBroadcast = callback;
-}
-
-export function getBotMode() {
-    return BOT_MODE;
 }
 
 // ==================== DOCKER IMPLEMENTATION ====================
@@ -435,14 +596,20 @@ function screenSessionExists() {
     if (isRemote()) {
         try {
             const output = runSshCommand('screen -list');
-            return output.includes(`\t${SCREEN_SESSION}\t`);
+            // screen -list outputs: "PID.sessionname" or "\tPID.sessionname\t"
+            // Be more precise: match the session name as a complete word
+            const regex = new RegExp(`\\b${SCREEN_SESSION}\\b`);
+            return regex.test(output);
         } catch {
             return false;
         }
     }
     try {
         const output = execSync('screen -list', { encoding: 'utf8', stdio: 'pipe' });
-        return output.includes(`\t${SCREEN_SESSION}\t`);
+        // screen -list outputs: "PID.sessionname" or "\tPID.sessionname\t"
+        // Be more precise: match the session name as a complete word
+        const regex = new RegExp(`\\b${SCREEN_SESSION}\\b`);
+        return regex.test(output);
     } catch {
         return false;
     }
@@ -505,8 +672,9 @@ function streamScreenLogs() {
 
 // ==================== PUBLIC API (MODE-AGNOSTIC) ====================
 export function buildBotImage() {
-    if (BOT_MODE !== 'docker') {
-        return { ok: false, error: `Build is only supported in docker mode (current: ${BOT_MODE})` };
+    const mode = getBotMode();
+    if (mode !== 'docker') {
+        return { ok: false, error: `Build is only supported in docker mode (current: ${mode})` };
     }
 
     try {
@@ -529,15 +697,17 @@ export async function startBot() {
 
     botStatus = 'starting';
     botError = null;
+    const mode = getBotMode();
+    addBotLog(`Starting bot in ${mode} mode...`, 'system');
 
-    if (BOT_MODE === 'docker') {
+    if (mode === 'docker') {
         return startBotDocker();
-    } else if (BOT_MODE === 'screen') {
+    } else if (mode === 'screen') {
         return await startBotScreen();
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         return await startBotScript();
     } else {
-        const errorMsg = `Unknown bot mode: ${BOT_MODE}`;
+        const errorMsg = `Unknown bot mode: ${mode}`;
         botError = errorMsg;
         botStatus = 'error';
         addBotLog(errorMsg, 'error');
@@ -617,8 +787,9 @@ async function startBotScript() {
             const cmd = `cd ${SCRIPT_BOT_DIR} && ${SCRIPT_START_CMD}`;
             runSshCommand(`screen -dmS ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
             await new Promise(resolve => setTimeout(resolve, 1500));
+            const sshConfig = getCurrentSshConfig();
             botStatus = 'running';
-            addBotLog(`Remote script started via SSH on ${SSH_HOST}`, 'system');
+            addBotLog(`Remote script started via SSH on ${sshConfig.host}`, 'system');
             streamScreenLogs(); // reuse screen log streaming for remote
             return { ok: true, status: botStatus };
         } else {
@@ -642,7 +813,7 @@ async function startBotScript() {
             scriptProcess.unref();
 
             // Wait a moment for the process to initialize
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Check if process is still alive
             try {
@@ -652,7 +823,9 @@ async function startBotScript() {
                 streamScriptLogs();
                 return { ok: true, status: botStatus };
             } catch {
-                throw new Error('Script process exited immediately');
+                // Process may have already exited - check if it was a crash
+                addBotLog('Script process exited during startup check', 'error');
+                throw new Error('Script process exited during startup. Check bot-entry.js for errors.');
             }
         }
 
@@ -675,12 +848,25 @@ async function startBotScreen() {
             throw new Error('GNU Screen is not installed or not available');
         }
 
+        // If session already exists, just attach to it
         if (screenSessionExists()) {
-            addBotLog('Screen session already exists', 'system');
+            addBotLog('Screen session already exists, attaching', 'system');
             botStatus = 'running';
             streamScreenLogs();
             return { ok: true, status: botStatus, alreadyRunning: true };
         }
+
+        // Kill any stale session that might not be detected
+        try {
+            if (isRemote()) {
+                runSshCommand(`screen -S ${SCREEN_SESSION} -X kill`, { stdio: 'ignore' });
+            } else {
+                execSync(`screen -S ${SCREEN_SESSION} -X kill`, { stdio: 'ignore' });
+            }
+        } catch {
+            // ignore - session might not exist
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         if (isRemote()) {
             const cmd = `cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}`;
@@ -696,16 +882,17 @@ async function startBotScreen() {
             }
 
             const cmd = `cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}`;
-            execSync(`screen -dmS ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
+            execSync(`screen -D -m -S ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
         }
 
         // Wait a moment for the session to initialize
         await new Promise(resolve => setTimeout(resolve, 1500));
 
         if (screenSessionExists()) {
+            const sshConfig = getCurrentSshConfig();
             botStatus = 'running';
             addBotLog(`Screen session '${SCREEN_SESSION}' started`, 'system');
-            addBotLog(isRemote() ? `SSH: ${SSH_USER}@${SSH_HOST}` : `Attach with: screen -r ${SCREEN_SESSION}`, 'system');
+            addBotLog(isRemote() ? `SSH: ${sshConfig.user}@${sshConfig.host}` : `Attach with: screen -r ${SCREEN_SESSION}`, 'system');
             streamScreenLogs();
             return { ok: true, status: botStatus };
         } else {
@@ -726,23 +913,24 @@ export function stopBot() {
         return { ok: true, alreadyStopped: true, status: botStatus };
     }
 
-    addBotLog('Stopping bot...', 'system');
+    const mode = getBotMode();
+    addBotLog(`Stopping bot (mode: ${mode})...`, 'system');
 
     try {
-        if (BOT_MODE === 'docker') {
+        if (mode === 'docker') {
             runDockerCommand(['stop', DOCKER_CONTAINER], { stdio: 'ignore' });
-        } else if (BOT_MODE === 'screen') {
+        } else if (mode === 'screen') {
             if (screenSessionExists()) {
                 if (isRemote()) {
-                    runSshCommand(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
+                    runSshCommand(`screen -S ${SCREEN_SESSION} -X kill`, { stdio: 'ignore' });
                 } else {
-                    execSync(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
+                    execSync(`screen -S ${SCREEN_SESSION} -X kill`, { stdio: 'ignore' });
                 }
             }
-        } else if (BOT_MODE === 'script') {
+        } else if (mode === 'script') {
             if (isRemote()) {
                 if (screenSessionExists()) {
-                    runSshCommand(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
+                    runSshCommand(`screen -S ${SCREEN_SESSION} -X kill`, { stdio: 'ignore' });
                 }
             } else if (scriptProcess && !scriptProcess.killed) {
                 scriptProcess.kill('SIGTERM');
@@ -762,36 +950,44 @@ export function stopBot() {
 }
 
 export async function restartBot() {
-    addBotLog('Restarting bot...', 'system');
+    const mode = getBotMode();
+    addBotLog(`Restarting bot (mode: ${mode})...`, 'system');
 
     try {
-        if (BOT_MODE === 'docker') {
+        if (mode === 'docker') {
             runDockerCommand(['restart', DOCKER_CONTAINER], { stdio: 'ignore' });
             botStatus = 'running';
             addBotLog('Bot container restarted', 'system');
             streamDockerLogs();
-        } else if (BOT_MODE === 'screen') {
-            // Stop then start
-            if (screenSessionExists()) {
+        } else if (mode === 'screen') {
+            // Always try to kill existing session first (ignore errors if none exists)
+            try {
                 if (isRemote()) {
-                    runSshCommand(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
+                    runSshCommand(`screen -S ${SCREEN_SESSION} -X kill`, { stdio: 'ignore' });
                 } else {
-                    execSync(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
+                    execSync(`screen -S ${SCREEN_SESSION} -X kill`, { stdio: 'ignore' });
                 }
+            } catch {
+                // ignore - session might not exist
             }
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (isRemote()) {
                 const cmd = `cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}`;
-                runSshCommand(`screen -dmS ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
+                runSshCommand(`screen -D -m -S ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
             } else {
                 const cmd = `cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}`;
-                execSync(`screen -dmS ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
+                execSync(`screen -D -m -S ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
             }
             await new Promise(resolve => setTimeout(resolve, 1500));
-            botStatus = 'running';
-            addBotLog(`Screen session '${SCREEN_SESSION}' restarted`, 'system');
-            streamScreenLogs();
-        } else if (BOT_MODE === 'script') {
+            // Verify the session actually started
+            if (screenSessionExists()) {
+                botStatus = 'running';
+                addBotLog(`Screen session '${SCREEN_SESSION}' restarted`, 'system');
+                streamScreenLogs();
+            } else {
+                throw new Error('Screen session failed to start after restart');
+            }
+        } else if (mode === 'script') {
             // Kill existing process
             if (scriptProcess && !scriptProcess.killed) {
                 scriptProcess.kill('SIGTERM');
@@ -819,30 +1015,32 @@ export async function restartBot() {
     }
 }
 
-export function getBotStatus() {
-    if (BOT_MODE === 'docker') {
-        return getDockerStatus();
-    } else if (BOT_MODE === 'screen') {
+export async function getBotStatus() {
+    const mode = getBotMode();
+    if (mode === 'docker') {
+        return await getDockerStatus();
+    } else if (mode === 'screen') {
         return getScreenStatus();
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         return getScriptStatus();
     }
 
     return {
         status: 'error',
         isRunning: false,
-        error: `Unknown bot mode: ${BOT_MODE}`,
+        error: `Unknown bot mode: ${mode}`,
         logCount: botLogs.length
     };
 }
 
-function getDockerStatus() {
+async function getDockerStatus() {
     try {
-        const output = runDockerCommand([
+        const result = await runDockerCommandAsync([
             'ps', '-a',
             '--filter', `name=${DOCKER_CONTAINER}`,
             '--format', '{{.Names}}|{{.Status}}|{{.Image}}'
-        ], { stdio: 'pipe' });
+        ]);
+        const output = result.stdout;
 
         const lines = output.trim().split('\n').filter(line => line.trim());
         const containerLine = lines.find(line => line.startsWith(DOCKER_CONTAINER));
@@ -909,7 +1107,7 @@ function getScriptStatus() {
                 logCount: botLogs.length,
                 screenSession: SCREEN_SESSION,
                 remote: true,
-                sshHost: SSH_HOST
+                sshHost: getCurrentSshConfig().host
             };
         }
 
@@ -944,26 +1142,26 @@ function getScriptStatus() {
     }
 }
 
-export function getBotLogs(limit = 100) {
-    if (BOT_MODE === 'docker') {
-        return getDockerLogs(limit);
-    } else if (BOT_MODE === 'screen') {
+export async function getBotLogs(limit = 100) {
+    const mode = getBotMode();
+    if (mode === 'docker') {
+        return await getDockerLogs(limit);
+    } else if (mode === 'screen') {
         return getScreenLogs(limit);
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         if (isRemote()) {
             return getScreenLogs(limit); // remote script uses screen for logs
         }
         return getScriptLogs(limit);
     }
 
-    return { logs: [], total: 0, hasMore: false, error: `Unknown bot mode: ${BOT_MODE}` };
+    return { logs: [], total: 0, hasMore: false, error: `Unknown bot mode: ${mode}` };
 }
 
-function getDockerLogs(limit = 100) {
+async function getDockerLogs(limit = 100) {
     try {
-        const output = runDockerCommand(['logs', '--tail', String(limit), DOCKER_CONTAINER], {
-            stdio: 'pipe'
-        });
+        const result = await runDockerCommandAsync(['logs', '--tail', String(limit), DOCKER_CONTAINER]);
+        const output = result.stdout;
 
         const lines = output.split('\n').filter(line => line.trim());
         const parsedLogs = lines.map((line, index) => {
@@ -1072,102 +1270,205 @@ export function clearBotLogs() {
 }
 
 // ==================== AUTO-START ====================
+function withTimeout(promise, ms, fallback) {
+    let timeoutId;
+    const timeoutPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), ms);
+    });
+    return Promise.race([
+        promise.then((result) => {
+            clearTimeout(timeoutId);
+            return result;
+        }),
+        timeoutPromise
+    ]);
+}
+
 export async function autoStartBot() {
-    if (BOT_MODE === 'docker') {
-        if (!dockerAvailable()) {
-            console.log('[BotManager] Docker not available, skipping auto-start');
-            return { ok: false, error: 'Docker not available' };
-        }
-
-        const status = getBotStatus();
-        if (status.isRunning) {
-            console.log('[BotManager] Bot container already running');
-            streamDockerLogs();
-            return { ok: true, status: 'running', alreadyRunning: true };
-        }
-
-        const result = await startBot();
-        if (result.ok) {
-            console.log('[BotManager] Auto-start initiated');
-        } else {
-            console.log('[BotManager] Auto-start skipped:', result.error);
-        }
-        return result;
-
-    } else if (BOT_MODE === 'screen') {
-        if (!screenAvailable()) {
-            console.log('[BotManager] Screen not available, skipping auto-start');
-            return { ok: false, error: 'Screen not available' };
-        }
-
-        const status = getBotStatus();
-        if (status.isRunning) {
-            console.log('[BotManager] Bot screen session already running');
-            streamScreenLogs();
-            return { ok: true, status: 'running', alreadyRunning: true };
-        }
-
-        const result = await startBot();
-        if (result.ok) {
-            console.log('[BotManager] Auto-start initiated');
-        } else {
-            console.log('[BotManager] Auto-start skipped:', result.error);
-        }
-        return result;
-
-    } else if (BOT_MODE === 'script') {
-        if (!scriptAvailable()) {
-            console.log('[BotManager] Node.js not available, skipping auto-start');
-            return { ok: false, error: 'Node.js not available' };
-        }
-
-        const status = getBotStatus();
-        if (status.isRunning) {
-            console.log('[BotManager] Bot script already running');
-            if (isRemote()) {
-                streamScreenLogs();
-            } else {
-                streamScriptLogs();
-            }
-            return { ok: true, status: 'running', alreadyRunning: true };
-        }
-
-        // If SSH is configured, try to auto-connect to homelab
-        const sshConfig = getSshConfigFromFile();
-        if (sshConfig.host) {
-            console.log(`[BotManager] SSH host configured (${sshConfig.host}), attempting auto-connect...`);
-            try {
-                const testResult = runSshCommand('echo "homelab-reachable"', { stdio: 'pipe' });
-                if (testResult.includes('homelab-reachable')) {
-                    console.log('[BotManager] Homelab is reachable, starting bot remotely');
-                    const remoteResult = await startBot();
-                    if (remoteResult.ok) {
-                        console.log('[BotManager] Auto-connected to homelab');
-                        return remoteResult;
+    try {
+        const mode = getBotMode();
+        if (mode === 'docker') {
+            // If SSH is configured, try to auto-connect to homelab first (with timeout to avoid blocking)
+            const sshConfig = getSshConfigFromFile();
+            if (sshConfig.host) {
+                console.log(`[BotManager] Docker mode with SSH host (${sshConfig.host}), attempting remote start...`);
+                try {
+                    const testResult = await withTimeout(
+                        runSshCommandAsync('echo "homelab-reachable"'),
+                        5000,
+                        { ok: false, error: 'SSH check timed out' }
+                    );
+                    if (testResult?.stdout?.includes('homelab-reachable')) {
+                        console.log('[BotManager] Homelab is reachable, starting Docker bot remotely');
+                        setSshReachable(true);
+                        const remoteResult = await startBot();
+                        if (remoteResult.ok) {
+                            console.log('[BotManager] Auto-connected to homelab Docker');
+                            return remoteResult;
+                        }
+                    } else {
+                        console.log('[BotManager] Homelab SSH check failed, falling back to local Docker');
+                        setSshReachable(false);
                     }
-                } else {
-                    console.log('[BotManager] Homelab SSH check failed, staying in local mode');
+                } catch (err) {
+                    console.log('[BotManager] Homelab not reachable, falling back to local Docker:', err.message);
+                    setSshReachable(false);
+                }
+            }
+
+            console.log('[BotManager] Checking local Docker availability...');
+            try {
+                if (!dockerAvailable()) {
+                    console.log('[BotManager] Docker not available, skipping auto-start');
+                    return { ok: false, error: 'Docker not available. Install Docker Desktop or configure SSH for homelab.' };
+                }
+                console.log('[BotManager] Local Docker is available');
+
+                const status = getBotStatus();
+                console.log('[BotManager] Docker status check complete:', status.status, status.isRunning);
+                if (status.isRunning) {
+                    console.log('[BotManager] Bot container already running');
+                    streamDockerLogs();
+                    return { ok: true, status: 'running', alreadyRunning: true };
+                }
+
+                console.log('[BotManager] Starting bot via local Docker...');
+                try {
+                    const result = await startBot();
+                    if (result.ok) {
+                        console.log('[BotManager] Auto-start initiated');
+                    } else {
+                        console.log('[BotManager] Auto-start skipped:', result.error);
+                    }
+                    return result;
+                } catch (err) {
+                    console.log('[BotManager] Local Docker start failed:', err.message);
+                    return { ok: false, error: `Local Docker start failed: ${err.message}` };
                 }
             } catch (err) {
-                console.log('[BotManager] Homelab not reachable:', err.message);
+                console.error('[BotManager] Local Docker fallback crashed:', err);
+                return { ok: false, error: `Local Docker fallback crashed: ${err.message}` };
             }
+
+        } else if (mode === 'screen') {
+            if (!screenAvailable()) {
+                console.log('[BotManager] Screen not available, skipping auto-start');
+                return { ok: false, error: 'Screen not available' };
+            }
+
+            const status = getBotStatus();
+            if (status.isRunning) {
+                console.log('[BotManager] Bot screen session already running');
+                streamScreenLogs();
+                return { ok: true, status: 'running', alreadyRunning: true };
+            }
+
+            // If SSH is configured, try to auto-connect to homelab
+            const sshConfig = getSshConfigFromFile();
+            if (sshConfig.host) {
+                console.log(`[BotManager] SSH host configured (${sshConfig.host}), attempting auto-connect...`);
+                try {
+                    const testResult = runSshCommand('echo "homelab-reachable"', { stdio: 'pipe' });
+                    if (testResult.includes('homelab-reachable')) {
+                        console.log('[BotManager] Homelab is reachable, starting bot remotely');
+                        const remoteResult = await startBot();
+                        if (remoteResult.ok) {
+                            console.log('[BotManager] Auto-connected to homelab');
+                            return remoteResult;
+                        }
+                    } else {
+                        console.log('[BotManager] Homelab SSH check failed, staying in local mode');
+                    }
+                } catch (err) {
+                    console.log('[BotManager] Homelab not reachable:', err.message);
+                }
+            }
+
+            const result = await startBot();
+            if (result.ok) {
+                console.log('[BotManager] Auto-start initiated');
+            } else {
+                console.log('[BotManager] Auto-start skipped:', result.error);
+            }
+            return result;
+
+        } else if (mode === 'script') {
+            if (!scriptAvailable()) {
+                console.log('[BotManager] Node.js not available, skipping auto-start');
+                return { ok: false, error: 'Node.js not available' };
+            }
+
+            const status = getBotStatus();
+            if (status.isRunning) {
+                console.log('[BotManager] Bot script already running');
+                if (isRemote()) {
+                    streamScreenLogs();
+                } else {
+                    streamScriptLogs();
+                }
+                return { ok: true, status: 'running', alreadyRunning: true };
+            }
+
+            // If SSH is configured, try to auto-connect to homelab
+            const sshConfig = getSshConfigFromFile();
+            if (sshConfig.host) {
+                console.log(`[BotManager] SSH host configured (${sshConfig.host}), attempting auto-connect...`);
+                try {
+                    const testResult = runSshCommand('echo "homelab-reachable"', { stdio: 'pipe' });
+                    if (testResult.includes('homelab-reachable')) {
+                        console.log('[BotManager] Homelab is reachable, starting bot remotely');
+                        const remoteResult = await startBot();
+                        if (remoteResult.ok) {
+                            console.log('[BotManager] Auto-connected to homelab');
+                            return remoteResult;
+                        }
+                    } else {
+                        console.log('[BotManager] Homelab SSH check failed, staying in local mode');
+                    }
+                } catch (err) {
+                    console.log('[BotManager] Homelab not reachable:', err.message);
+                }
+            }
+
+            const result = await startBot();
+            if (result.ok) {
+                console.log('[BotManager] Auto-start initiated');
+            } else {
+                console.log('[BotManager] Auto-start skipped:', result.error);
+            }
+            return result;
         }
 
-        const result = await startBot();
-        if (result.ok) {
-            console.log('[BotManager] Auto-start initiated');
-        } else {
-            console.log('[BotManager] Auto-start skipped:', result.error);
-        }
-        return result;
+        return { ok: false, error: `Unknown bot mode: ${mode}` };
+    } catch (err) {
+        console.error('[BotManager] autoStartBot crashed:', err);
+        return { ok: false, error: `Auto-start crashed: ${err.message}` };
     }
-
-    return { ok: false, error: `Unknown bot mode: ${BOT_MODE}` };
 }
 
 // ==================== BUILD HELPER ====================
 export function getBuildInstructions() {
-    if (BOT_MODE === 'docker') {
+    const mode = getBotMode();
+    if (mode === 'docker') {
+        if (isRemote()) {
+            const sshConfig = getCurrentSshConfig();
+            const sshPrefix = `ssh -p ${sshConfig.port} -i ${sshConfig.key} ${sshConfig.user}@${sshConfig.host}`;
+            return {
+                mode: 'docker',
+                image: DOCKER_IMAGE,
+                container: DOCKER_CONTAINER,
+                dockerfile: path.join(DOCKER_BOT_DIR, 'Dockerfile'),
+                remote: true,
+                sshHost: sshConfig.host,
+                sshUser: sshConfig.user,
+                buildCommand: `${sshPrefix} "cd ${DOCKER_BOT_DIR} && docker build -t ${DOCKER_IMAGE} ."`,
+                runCommand: `${sshPrefix} "docker run -d --name ${DOCKER_CONTAINER} --restart unless-stopped --env-file ${ENV_FILE} ${DOCKER_IMAGE}"`,
+                stopCommand: `${sshPrefix} "docker stop ${DOCKER_CONTAINER}"`,
+                startCommand: `${sshPrefix} "docker start ${DOCKER_CONTAINER}"`,
+                logsCommand: `${sshPrefix} "docker logs -f ${DOCKER_CONTAINER}"`,
+                removeCommand: `${sshPrefix} "docker rm -f ${DOCKER_CONTAINER}"`
+            };
+        }
         return {
             mode: 'docker',
             image: DOCKER_IMAGE,
@@ -1180,20 +1481,21 @@ export function getBuildInstructions() {
             logsCommand: `docker logs -f ${DOCKER_CONTAINER}`,
             removeCommand: `docker rm -f ${DOCKER_CONTAINER}`
         };
-    } else if (BOT_MODE === 'screen') {
+    } else if (mode === 'screen') {
         if (isRemote()) {
+            const sshConfig = getCurrentSshConfig();
             return {
                 mode: 'screen',
                 session: SCREEN_SESSION,
                 botDir: SCREEN_BOT_DIR,
                 entry: SCREEN_ENTRY,
                 remote: true,
-                sshHost: SSH_HOST,
-                sshUser: SSH_USER,
-                startCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}"`,
-                stopCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -S ${SCREEN_SESSION} -X quit"`,
-                attachCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -r ${SCREEN_SESSION}"`,
-                logsCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt"`
+                sshHost: sshConfig.host,
+                sshUser: sshConfig.user,
+                startCommand: `ssh -p ${sshConfig.port} -i ${sshConfig.key} ${sshConfig.user}@${sshConfig.host} "cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}"`,
+                stopCommand: `ssh -p ${sshConfig.port} -i ${sshConfig.key} ${sshConfig.user}@${sshConfig.host} "screen -S ${SCREEN_SESSION} -X quit"`,
+                attachCommand: `ssh -p ${sshConfig.port} -i ${sshConfig.key} ${sshConfig.user}@${sshConfig.host} "screen -r ${SCREEN_SESSION}"`,
+                logsCommand: `ssh -p ${sshConfig.port} -i ${sshConfig.key} ${sshConfig.user}@${sshConfig.host} "screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt"`
             };
         }
         return {
@@ -1206,17 +1508,18 @@ export function getBuildInstructions() {
             attachCommand: `screen -r ${SCREEN_SESSION}`,
             logsCommand: `screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt`
         };
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         if (isRemote()) {
+            const sshConfig = getCurrentSshConfig();
             return {
                 mode: 'script',
                 remote: true,
-                sshHost: SSH_HOST,
-                sshUser: SSH_USER,
+                sshHost: sshConfig.host,
+                sshUser: sshConfig.user,
                 botDir: SCRIPT_BOT_DIR,
                 entry: SCRIPT_ENTRY,
-                startCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "cd ${SCRIPT_BOT_DIR} && ${SCRIPT_START_CMD}"`,
-                stopCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -S ${SCREEN_SESSION} -X quit"`,
+                startCommand: `ssh -p ${sshConfig.port} -i ${sshConfig.key} ${sshConfig.user}@${sshConfig.host} "cd ${SCRIPT_BOT_DIR} && ${SCRIPT_START_CMD}"`,
+                stopCommand: `ssh -p ${sshConfig.port} -i ${sshConfig.key} ${sshConfig.user}@${sshConfig.host} "screen -S ${SCREEN_SESSION} -X quit"`,
                 logsCommand: `Logs streamed in-app via SSH`
             };
         }
@@ -1231,7 +1534,7 @@ export function getBuildInstructions() {
         };
     }
 
-    return { mode: BOT_MODE, error: 'Unknown mode' };
+    return { mode: getBotMode(), error: 'Unknown mode' };
 }
 
 // ==================== COMMAND SENDING ====================
@@ -1240,15 +1543,16 @@ export function sendBotCommand(command) {
         return { ok: false, error: 'Command must be a non-empty string' };
     }
 
-    if (BOT_MODE === 'screen') {
+    const mode = getBotMode();
+    if (mode === 'screen') {
         return sendScreenCommand(command);
-    } else if (BOT_MODE === 'script') {
+    } else if (mode === 'script') {
         return sendScriptCommand(command);
-    } else if (BOT_MODE === 'docker') {
+    } else if (mode === 'docker') {
         return sendDockerCommand(command);
     }
 
-    return { ok: false, error: `Unknown bot mode: ${BOT_MODE}` };
+    return { ok: false, error: `Unknown bot mode: ${mode}` };
 }
 
 function sendScreenCommand(command) {

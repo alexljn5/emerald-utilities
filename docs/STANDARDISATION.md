@@ -1,6 +1,6 @@
 # Emerald Utilities — UI Standardisation
 
-**Version:** 0.1.5
+**Version:** 0.1.6
 **Status:** Active
 **Last Updated:** 22 July 2026
 

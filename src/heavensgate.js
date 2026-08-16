@@ -15,7 +15,7 @@ import { registerCreatorHubIpc } from './creator-hub/ipc.js';
 import { registerEnvIpc } from './utils/envIpc.js';
 import { resolvePath, resolveInternalScriptsPath } from './utils/pathResolver.js';
 import { registerBotIpcHandlers } from './bots/bot-ipc.js';
-import { autoStartBot, cleanup as cleanupBot, getAutoStartEnabled } from './bots/bot-manager.js';
+import { autoStartBot, cleanup as cleanupBot, getAutoStartEnabled, autoDetectAndConnectHomelab, getSshConfig } from './bots/bot-manager.js';
 import { default as databaseService } from './database/wrath.js';
 import { recover as recoverNetworkPersistence } from './database/network-persistence.js';
 import { ENABLE_DEVTOOLS, ENABLE_INAPP_NOTIFICATIONS, AI_MODE, DATABASE_MODE, LOCAL_AI_ENABLED } from './globals.js';
@@ -1501,7 +1501,6 @@ async function checkTaskNotifications() {
             // Policy check
             const policyCheck = shouldNotifyTask(reminder);
             if (!policyCheck.shouldNotify) {
-                console.log(`[TaskNotifications] Reminder skipped for task ${reminder.id}: ${policyCheck.reason}`);
                 continue;
             }
 
@@ -1510,7 +1509,6 @@ async function checkTaskNotifications() {
                 await markReminderHandled(reminder.id);
                 notifiedThisCycle.add(reminder.id);
                 recordNotification(reminder.id);
-                console.log(`[TaskNotifications] Reminder sent for task ${reminder.id}: ${reminder.title}`);
             } else if (result.state === 'duplicate' || result.state === 'cooldown' || result.state === 'policy') {
                 // Already notified, in cooldown, or blocked by policy — skip
             } else {
@@ -1535,7 +1533,6 @@ async function checkTaskNotifications() {
                 // Policy check
                 const policyCheck = shouldNotifyTask(task);
                 if (!policyCheck.shouldNotify) {
-                    console.log(`[TaskNotifications] Due-date skipped for task ${task.id}: ${policyCheck.reason}`);
                     continue;
                 }
 
@@ -1543,7 +1540,6 @@ async function checkTaskNotifications() {
                 if (result.ok) {
                     notifiedThisCycle.add(task.id);
                     recordNotification(task.id);
-                    console.log(`[TaskNotifications] Due-date notification sent for task ${task.id}: ${task.title}`);
                 } else if (result.state !== 'duplicate' && result.state !== 'cooldown' && result.state !== 'policy') {
                     console.warn(`[TaskNotifications] Due-date notification failed for task ${task.id}:`, result.error);
                 }
@@ -1561,7 +1557,6 @@ async function checkTaskNotifications() {
                     // Policy check
                     const policyCheck = shouldNotifyTask(task);
                     if (!policyCheck.shouldNotify) {
-                        console.log(`[TaskNotifications] Priority skipped for task ${task.id}: ${policyCheck.reason}`);
                         continue;
                     }
 
@@ -1569,7 +1564,6 @@ async function checkTaskNotifications() {
                     if (result.ok) {
                         notifiedThisCycle.add(task.id);
                         recordNotification(task.id);
-                        console.log(`[TaskNotifications] Priority notification sent for task ${task.id}: ${task.title}`);
                     } else if (result.state !== 'duplicate' && result.state !== 'cooldown' && result.state !== 'policy') {
                         console.warn(`[TaskNotifications] Priority notification failed for task ${task.id}:`, result.error);
                     }
@@ -1602,7 +1596,6 @@ async function checkTaskNotifications() {
                             if (result.ok) {
                                 notifiedSubtasksThisCycle.add(subtaskKey);
                                 recordNotification(task.id);
-                                console.log(`[TaskNotifications] Subtask reminder sent for task ${task.id}: ${subtask.title}`);
                             }
                         }
                         continue;
@@ -1620,7 +1613,6 @@ async function checkTaskNotifications() {
                             if (result.ok) {
                                 notifiedSubtasksThisCycle.add(subtaskKey);
                                 recordNotification(task.id);
-                                console.log(`[TaskNotifications] Subtask due notification sent for task ${task.id}: ${subtask.title}`);
                             }
                         }
                     } else if (!notifiedThisCycle.has(task.id) && (task.priority === 'red' || task.priority === 'orange')) {
@@ -1633,7 +1625,6 @@ async function checkTaskNotifications() {
                                 if (result.ok) {
                                     notifiedSubtasksThisCycle.add(subtaskKey);
                                     recordNotification(task.id);
-                                    console.log(`[TaskNotifications] Subtask priority notification sent for task ${task.id}: ${subtask.title}`);
                                 }
                             }
                         }
@@ -1810,16 +1801,39 @@ app.whenReady().then(async () => {
     // Register Bot IPC handlers
     registerBotIpcHandlers(ipcMain, broadcast);
 
-    // Auto-start infbot if enabled in config
+    // Auto-detect homelab if no SSH host is configured
     try {
-        if (getAutoStartEnabled()) {
-            autoStartBot();
-            console.log('[Emerald] INFBOT auto-start initiated');
-        } else {
-            console.log('[Emerald] INFBOT auto-start disabled in config');
+        const sshConfig = getSshConfig();
+        if (!sshConfig.host) {
+            console.log('[Emerald] No SSH host configured, attempting homelab auto-detection...');
+            autoDetectAndConnectHomelab().then((result) => {
+                if (result.ok) {
+                    console.log(`[Emerald] Homelab auto-detected: ${result.host}`);
+                } else {
+                    console.log('[Emerald] Homelab auto-detection failed:', result.error);
+                }
+            }).catch((err) => {
+                console.log('[Emerald] Homelab auto-detection error:', err.message);
+            });
         }
     } catch (err) {
-        console.error('[Emerald] INFBOT auto-start failed:', err.message);
+        console.log('[Emerald] Homelab auto-detection skipped:', err.message);
+    }
+
+    // Auto-start infbot if enabled in config
+    if (getAutoStartEnabled()) {
+        autoStartBot().then((result) => {
+            if (result?.ok) {
+                console.log('[Emerald] INFBOT auto-start succeeded');
+            } else {
+                console.log('[Emerald] INFBOT auto-start skipped:', result?.error || 'unknown reason');
+            }
+        }).catch((err) => {
+            console.error('[Emerald] INFBOT auto-start failed:', err.message);
+        });
+        console.log('[Emerald] INFBOT auto-start initiated');
+    } else {
+        console.log('[Emerald] INFBOT auto-start disabled in config');
     }
 
     // DevTools toggle handler

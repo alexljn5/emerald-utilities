@@ -22,10 +22,7 @@ export default function Bots({ route, setRoute }) {
     const [showInstructions, setShowInstructions] = useState(false);
     const [autoStart, setAutoStart] = useState(true);
     const [availableScripts, setAvailableScripts] = useState([]);
-    const [terminalInput, setTerminalInput] = useState('');
-    const [terminalHistory, setTerminalHistory] = useState([]);
     const logContainerRef = useRef(null);
-    const terminalInputRef = useRef(null);
 
     // Load initial data
     useEffect(() => {
@@ -99,13 +96,6 @@ export default function Bots({ route, setRoute }) {
             logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
         }
     }, [logs]);
-
-    // Auto-scroll terminal
-    useEffect(() => {
-        if (terminalInputRef.current) {
-            terminalInputRef.current.scrollTop = terminalInputRef.current.scrollHeight;
-        }
-    }, [terminalHistory]);
 
     // Poll status every 3 seconds
     useEffect(() => {
@@ -255,26 +245,6 @@ export default function Bots({ route, setRoute }) {
             setMessage(err?.message || 'Failed to update auto-start');
         } finally {
             setActionLoading(false);
-        }
-    };
-
-    const handleTerminalCommand = async (e) => {
-        e.preventDefault();
-        const cmd = terminalInput.trim();
-        if (!cmd) return;
-
-        setTerminalInput('');
-        setTerminalHistory(prev => [...prev, { type: 'input', text: cmd }]);
-
-        try {
-            const result = await invoke('bot:sendCommand', cmd);
-            if (result?.ok) {
-                setTerminalHistory(prev => [...prev, { type: 'output', text: `> ${cmd}` }]);
-            } else {
-                setTerminalHistory(prev => [...prev, { type: 'error', text: `Error: ${result?.error || 'Failed to send command'}` }]);
-            }
-        } catch (err) {
-            setTerminalHistory(prev => [...prev, { type: 'error', text: `Error: ${err?.message || 'Failed to send command'}` }]);
         }
     };
 
@@ -582,46 +552,6 @@ export default function Bots({ route, setRoute }) {
                             ))
                         )}
                     </div>
-                </div>
-
-                {/* Terminal Panel */}
-                <div className="botsPanel botsTerminalPanel">
-                    <div className="botsPanelHeader">
-                        <h3>Terminal</h3>
-                        <span className="botsModeBadge">{modeLabel}</span>
-                    </div>
-                    <div className="botsTerminalOutput" ref={terminalInputRef}>
-                        {terminalHistory.length === 0 ? (
-                            <div className="botsTerminalPlaceholder">
-                                Type commands below to interact with the bot. Available in {modeLabel} mode.
-                            </div>
-                        ) : (
-                            terminalHistory.map((entry, index) => (
-                                <div key={index} className={`botsTerminalLine botsTerminalLine--${entry.type}`}>
-                                    <span className="botsTerminalPrompt">{entry.type === 'input' ? '$' : '>'}</span>
-                                    <span className="botsTerminalText">{entry.text}</span>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                    <form className="botsTerminalInputRow" onSubmit={handleTerminalCommand}>
-                        <span className="botsTerminalPrompt">$</span>
-                        <input
-                            type="text"
-                            value={terminalInput}
-                            onChange={(e) => setTerminalInput(e.target.value)}
-                            placeholder="Enter command..."
-                            className="botsTerminalInput"
-                            disabled={actionLoading || !status.isRunning}
-                        />
-                        <button
-                            type="submit"
-                            className="botButton botButtonStart"
-                            disabled={actionLoading || !status.isRunning || !terminalInput.trim()}
-                        >
-                            SEND
-                        </button>
-                    </form>
                 </div>
             </div>
         </PageShell>

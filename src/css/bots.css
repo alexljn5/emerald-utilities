@@ -664,6 +664,108 @@
     margin-left: var(--space-sm);
 }
 
+/* ==================== TERMINAL ==================== */
+.botsTerminalPanel {
+    flex: 1 1 auto;
+    min-height: 200px;
+    max-height: 500px;
+    display: flex;
+    flex-direction: column;
+}
+
+.botsTerminalOutput {
+    background: var(--color-terminal-bg);
+    color: var(--color-terminal-text);
+    font-family: 'pixelSans', monospace;
+    font-size: clamp(0.75rem, 1vw, 1rem);
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--space-sm);
+}
+
+.botsTerminalPlaceholder {
+    color: #666;
+    text-align: center;
+    padding: var(--space-xl);
+    font-style: italic;
+}
+
+.botsTerminalLine {
+    display: flex;
+    gap: var(--space-sm);
+    padding: 0.15rem 0;
+    border-bottom: 1px solid rgba(255, 34, 34, 0.05);
+    align-items: flex-start;
+}
+
+.botsTerminalPrompt {
+    color: #666;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+}
+
+.botsTerminalText {
+    color: var(--color-terminal-text);
+    word-break: break-word;
+}
+
+.botsTerminalLine--input .botsTerminalPrompt {
+    color: #44ff66;
+}
+
+.botsTerminalLine--input .botsTerminalText {
+    color: #fff;
+}
+
+.botsTerminalLine--output .botsTerminalPrompt {
+    color: #888;
+}
+
+.botsTerminalLine--error .botsTerminalPrompt {
+    color: #ff4444;
+}
+
+.botsTerminalLine--error .botsTerminalText {
+    color: #ff8888;
+}
+
+.botsTerminalInputRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg);
+}
+
+.botsTerminalInput {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-terminal-bg);
+    color: var(--color-terminal-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-family: 'pixelSans', monospace;
+    font-size: clamp(0.75rem, 1vw, 1rem);
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.botsTerminalInput:focus {
+    border-color: var(--color-accent);
+}
+
+.botsTerminalInput:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 900px) {
     .botsStatusBar {

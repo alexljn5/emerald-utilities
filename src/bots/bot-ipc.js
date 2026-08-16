@@ -17,7 +17,8 @@ import {
     setAutoStartEnabled,
     getSshConfig,
     setSshConfig,
-    detectBotScripts
+    detectBotScripts,
+    sendBotCommand
 } from './bot-manager.js';
 
 export function registerBotIpcHandlers(ipcMain, broadcast) {
@@ -179,6 +180,17 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
         try {
             const scripts = detectBotScripts();
             return { ok: true, scripts };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    });
+
+    // ==================== BOT TERMINAL ====================
+
+    ipcMain.handle('bot:sendCommand', async (_event, command) => {
+        try {
+            const result = sendBotCommand(command);
+            return result;
         } catch (err) {
             return { ok: false, error: err.message };
         }

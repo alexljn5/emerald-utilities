@@ -89,7 +89,7 @@ const SCRIPT_ENTRY = process.env.BOT_SCRIPT_ENTRY || 'bot-entry.js';
 const SCRIPT_START_CMD = `node ${SCRIPT_ENTRY}`;
 let scriptProcess = null;
 let scriptPid = null;
-let scriptRemote = isRemote(); // script mode can also run remotely via SSH
+// scriptRemote is computed dynamically via isRemote() to pick up config changes
 
 // SSH remote host config (for managing bot on homelab from Windows)
 // Read from bot-config.json with env var fallbacks
@@ -609,7 +609,7 @@ async function startBotScript() {
 
         const entryPath = path.join(SCRIPT_BOT_DIR, SCRIPT_ENTRY);
 
-        if (scriptRemote) {
+        if (isRemote()) {
             // Remote execution via SSH
             if (!fs.existsSync(entryPath)) {
                 throw new Error(`Bot entry point not found on remote: ${entryPath}`);
@@ -740,7 +740,7 @@ export function stopBot() {
                 }
             }
         } else if (BOT_MODE === 'script') {
-            if (scriptRemote) {
+            if (isRemote()) {
                 if (screenSessionExists()) {
                     runSshCommand(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
                 }
@@ -899,7 +899,7 @@ function getScreenStatus() {
 
 function getScriptStatus() {
     try {
-        if (scriptRemote) {
+        if (isRemote()) {
             // For remote script mode, check via screen session (since we use screen for remote)
             const exists = screenSessionExists();
             return {
@@ -950,7 +950,7 @@ export function getBotLogs(limit = 100) {
     } else if (BOT_MODE === 'screen') {
         return getScreenLogs(limit);
     } else if (BOT_MODE === 'script') {
-        if (scriptRemote) {
+        if (isRemote()) {
             return getScreenLogs(limit); // remote script uses screen for logs
         }
         return getScriptLogs(limit);
@@ -1124,12 +1124,33 @@ export async function autoStartBot() {
         const status = getBotStatus();
         if (status.isRunning) {
             console.log('[BotManager] Bot script already running');
-            if (scriptRemote) {
+            if (isRemote()) {
                 streamScreenLogs();
             } else {
                 streamScriptLogs();
             }
             return { ok: true, status: 'running', alreadyRunning: true };
+        }
+
+        // If SSH is configured, try to auto-connect to homelab
+        const sshConfig = getSshConfigFromFile();
+        if (sshConfig.host) {
+            console.log(`[BotManager] SSH host configured (${sshConfig.host}), attempting auto-connect...`);
+            try {
+                const testResult = runSshCommand('echo "homelab-reachable"', { stdio: 'pipe' });
+                if (testResult.includes('homelab-reachable')) {
+                    console.log('[BotManager] Homelab is reachable, starting bot remotely');
+                    const remoteResult = await startBot();
+                    if (remoteResult.ok) {
+                        console.log('[BotManager] Auto-connected to homelab');
+                        return remoteResult;
+                    }
+                } else {
+                    console.log('[BotManager] Homelab SSH check failed, staying in local mode');
+                }
+            } catch (err) {
+                console.log('[BotManager] Homelab not reachable:', err.message);
+            }
         }
 
         const result = await startBot();
@@ -1186,7 +1207,7 @@ export function getBuildInstructions() {
             logsCommand: `screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt`
         };
     } else if (BOT_MODE === 'script') {
-        if (scriptRemote) {
+        if (isRemote()) {
             return {
                 mode: 'script',
                 remote: true,
@@ -1211,6 +1232,78 @@ export function getBuildInstructions() {
     }
 
     return { mode: BOT_MODE, error: 'Unknown mode' };
+}
+
+// ==================== COMMAND SENDING ====================
+export function sendBotCommand(command) {
+    if (!command || typeof command !== 'string') {
+        return { ok: false, error: 'Command must be a non-empty string' };
+    }
+
+    if (BOT_MODE === 'screen') {
+        return sendScreenCommand(command);
+    } else if (BOT_MODE === 'script') {
+        return sendScriptCommand(command);
+    } else if (BOT_MODE === 'docker') {
+        return sendDockerCommand(command);
+    }
+
+    return { ok: false, error: `Unknown bot mode: ${BOT_MODE}` };
+}
+
+function sendScreenCommand(command) {
+    try {
+        if (isRemote()) {
+            // Remote: send command via SSH to screen session
+            const escaped = command.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+            runSshCommand(`screen -S ${SCREEN_SESSION} -X stuff "${escaped}\\n"`, { stdio: 'ignore' });
+        } else {
+            // Local: send command to screen session
+            const escaped = command.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+            execSync(`screen -S ${SCREEN_SESSION} -X stuff "${escaped}\\n"`, { stdio: 'ignore' });
+        }
+        addBotLog(`[CMD] ${command}`, 'system');
+        return { ok: true };
+    } catch (err) {
+        const errorMsg = `Failed to send command: ${err.message}`;
+        addBotLog(errorMsg, 'error');
+        return { ok: false, error: errorMsg };
+    }
+}
+
+function sendScriptCommand(command) {
+    try {
+        if (isRemote()) {
+            // Remote script: use screen session via SSH
+            const escaped = command.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+            runSshCommand(`screen -S ${SCREEN_SESSION} -X stuff "${escaped}\\n"`, { stdio: 'ignore' });
+        } else if (scriptProcess && !scriptProcess.killed && scriptProcess.stdin) {
+            // Local script: write to process stdin
+            scriptProcess.stdin.write(command + '\n');
+        } else {
+            return { ok: false, error: 'Bot process is not running or does not accept input' };
+        }
+        addBotLog(`[CMD] ${command}`, 'system');
+        return { ok: true };
+    } catch (err) {
+        const errorMsg = `Failed to send command: ${err.message}`;
+        addBotLog(errorMsg, 'error');
+        return { ok: false, error: errorMsg };
+    }
+}
+
+function sendDockerCommand(command) {
+    try {
+        // For Docker, we can exec into the container
+        const escaped = command.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+        runDockerCommand(['exec', DOCKER_CONTAINER, 'sh', '-c', command], { stdio: 'ignore' });
+        addBotLog(`[CMD] ${command}`, 'system');
+        return { ok: true };
+    } catch (err) {
+        const errorMsg = `Failed to send command: ${err.message}`;
+        addBotLog(errorMsg, 'error');
+        return { ok: false, error: errorMsg };
+    }
 }
 
 // ==================== CLEANUP ====================

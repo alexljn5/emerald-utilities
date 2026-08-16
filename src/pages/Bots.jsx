@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { invoke } from '../utils/electronApi.js';
 import '../css/bots.css';

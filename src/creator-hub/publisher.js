@@ -99,6 +99,26 @@ export function getTargetTags(post, target) {
     return target.override?.tags || post.tags;
 }
 
+function normalizeHashtag(tag) {
+    const trimmed = String(tag || '').trim();
+    if (!trimmed) return '';
+    return trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+}
+
+export function getPublishText(post, target, account) {
+    const text = getTargetText(post, target);
+    if (account.platform !== 'instagram') {
+        return text;
+    }
+
+    const tags = getTargetTags(post, target).map(normalizeHashtag).filter(Boolean);
+    if (tags.length === 0) {
+        return text;
+    }
+
+    return `${text.trim()}\n\n${tags.join(' ')}`.trim();
+}
+
 /**
  * Publishes a post to all target platforms.
  * Continues even if one platform fails.
@@ -182,7 +202,7 @@ export async function publishPost(post) {
             const service = getPlatformService(account.platform);
 
             // Get per-platform override text, or use base text
-            const text = getTargetText(post, target);
+            const text = getPublishText(post, target, account);
             const media = getTargetMedia(post, target);
             publisherLog.info(`Effective text length: ${text?.length || 0}, media count: ${media?.length || 0}`);
 
@@ -267,7 +287,9 @@ export async function publishPost(post) {
 
             // Publish the post — service.publish() handles the entire upload→embed→post flow
             publisherLog.info(`Calling service.publish for ${target.accountId}@${account.platform} with ${mediaFilePaths.length} media files`);
-            const publishResult = await service.publish({ ...account, credentials: decryptedCredentials }, post, text, mediaFilePaths);
+            const publishResult = await service.publish({ ...account, credentials: decryptedCredentials }, post, text, mediaFilePaths, {
+                instagramOptions: target.override?.instagramOptions || post.instagramOptions || {}
+            });
             publisherLog.info(`Publish result: success=${publishResult.success}, postId=${publishResult.postId || 'none'}, error=${publishResult.error || 'none'}`);
             const finishedAt = new Date().toISOString();
             const durationMs = new Date(finishedAt) - new Date(startedAt);
@@ -403,7 +425,7 @@ export async function retryPublish(historyEntryId) {
         const service = getPlatformService(account.platform);
 
         // Get per-platform override text, or use base text
-        const text = getTargetText(post, target);
+        const text = getPublishText(post, target, account);
 
         // Validate publish request
         const validation = validatePublishRequest(account, post, text);
@@ -435,7 +457,9 @@ export async function retryPublish(historyEntryId) {
         }
 
         // Publish the post
-        const publishResult = await service.publish({ ...account, credentials: decryptedCredentials }, post, text, mediaPaths);
+        const publishResult = await service.publish({ ...account, credentials: decryptedCredentials }, post, text, mediaPaths, {
+            instagramOptions: target.override?.instagramOptions || post.instagramOptions || {}
+        });
 
         // Create a new history entry for the retry
         const startedAt = new Date().toISOString();

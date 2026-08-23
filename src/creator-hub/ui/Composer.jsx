@@ -20,6 +20,10 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
     const [message, setMessage] = useState('');
     const [media, setMedia] = useState([]);
     const [tags, setTags] = useState('');
+    const [instagramOptions, setInstagramOptions] = useState({
+        frame: 'original',
+        coverPath: ''
+    });
 
     // ==================== MULTI-PLATFORM TARGETS ====================
     const [targets, setTargets] = useState([]);
@@ -46,6 +50,10 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
             setMessage(editingPost.message || '');
             setMedia(editingPost.media || []);
             setTags((editingPost.tags || []).join(', '));
+            setInstagramOptions({
+                frame: editingPost.instagramOptions?.frame || 'original',
+                coverPath: editingPost.instagramOptions?.coverPath || ''
+            });
             if (editingPost.targets) {
                 setTargets(editingPost.targets);
             }
@@ -89,6 +97,34 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
 
     function handleMediaRemove(index) {
         setMedia(prev => prev.filter((_, i) => i !== index));
+    }
+
+    async function handleInstagramCoverSelect(accountId = null) {
+        const result = await invoke('creator-hub:open-file-dialog');
+        if (!result.ok || !result.files?.length) return;
+
+        const coverPath = result.files[0];
+        if (accountId) {
+            handleOverrideChange(accountId, 'instagramOptions', {
+                ...(overrides[accountId]?.instagramOptions || {}),
+                coverPath
+            });
+            return;
+        }
+
+        setInstagramOptions(prev => ({ ...prev, coverPath }));
+    }
+
+    function handleInstagramFrameChange(frame, accountId = null) {
+        if (accountId) {
+            handleOverrideChange(accountId, 'instagramOptions', {
+                ...(overrides[accountId]?.instagramOptions || {}),
+                frame
+            });
+            return;
+        }
+
+        setInstagramOptions(prev => ({ ...prev, frame }));
     }
 
     // ==================== TARGET MANAGEMENT (MULTI MODE) ====================
@@ -239,6 +275,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                 message: message.trim(),
                 media: media,
                 tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+                instagramOptions,
                 targets: postTargets,
                 overrides: postOverrides,
                 createdAt: editingPost?.createdAt || new Date().toISOString()
@@ -252,6 +289,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                 setMessage('');
                 setMedia([]);
                 setTags('');
+                setInstagramOptions({ frame: 'original', coverPath: '' });
                 setTargets([]);
                 setOverrides({});
 
@@ -304,6 +342,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
     const platformMeta = selectedAccount ? getPlatform(selectedAccount.platform) : null;
     const capabilities = platformMeta?.capabilities || { text: true, images: false, video: false, maxChars: 0 };
     const mediaRules = platformMeta?.mediaRules || {};
+    const isSingleInstagram = mode === 'single' && selectedAccount?.platform === 'instagram';
 
     return (
         <form className="chPanel" onSubmit={handleSubmit}>
@@ -386,7 +425,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
 
             {/* Tags */}
             <div className="chFormGroup">
-                <label className="chLabel" htmlFor="post-tags">Tags</label>
+                <label className="chLabel" htmlFor="post-tags">Hashtags</label>
                 <input
                     id="post-tags"
                     className="chInput"
@@ -396,6 +435,47 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                     placeholder="#gamedev #indiedev"
                 />
             </div>
+
+            {isSingleInstagram && (
+                <div className="chFormGroup">
+                    <label className="chLabel">Instagram Frame</label>
+                    <div className="chSegmentedControl">
+                        {[
+                            ['original', 'Original'],
+                            ['boxed', 'Boxed'],
+                            ['portrait-9-16', '9:16']
+                        ].map(([value, label]) => (
+                            <button
+                                key={value}
+                                type="button"
+                                className={`chSegment ${instagramOptions.frame === value ? 'chSegment--active' : ''}`}
+                                onClick={() => handleInstagramFrameChange(value)}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="chFormHelper">Saved with the Instagram post for desktop-style media preparation.</div>
+                </div>
+            )}
+
+            {isSingleInstagram && (
+                <div className="chFormGroup">
+                    <label className="chLabel">Cover Photo</label>
+                    <div className="chInlineControl">
+                        <button
+                            type="button"
+                            className="chButton chButtonSecondary"
+                            onClick={() => handleInstagramCoverSelect()}
+                        >
+                            Select Cover
+                        </button>
+                        <span className="chInlineMeta">
+                            {instagramOptions.coverPath ? instagramOptions.coverPath.split(/[\\/]/).pop() : 'No cover selected'}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* ==================== MULTI-PLATFORM TARGETS ==================== */}
             {mode === 'multi' && (
@@ -465,7 +545,7 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                                     />
                                 </div>
                                 <div className="chFormGroup">
-                                    <label className="chLabel" htmlFor={`override-tags-${target.accountId}`}>Tags override</label>
+                                    <label className="chLabel" htmlFor={`override-tags-${target.accountId}`}>Hashtags override</label>
                                     <input
                                         id={`override-tags-${target.accountId}`}
                                         className="chInput"
@@ -494,6 +574,44 @@ export default function Composer({ selectedAccount = null, onPostCreated, editin
                                             })}
                                         </div>
                                     </div>
+                                )}
+                                {target.platform === 'instagram' && (
+                                    <>
+                                        <div className="chFormGroup">
+                                            <label className="chLabel">Instagram frame</label>
+                                            <div className="chSegmentedControl">
+                                                {[
+                                                    ['original', 'Original'],
+                                                    ['boxed', 'Boxed'],
+                                                    ['portrait-9-16', '9:16']
+                                                ].map(([value, label]) => (
+                                                    <button
+                                                        key={value}
+                                                        type="button"
+                                                        className={`chSegment ${(override.instagramOptions?.frame || instagramOptions.frame) === value ? 'chSegment--active' : ''}`}
+                                                        onClick={() => handleInstagramFrameChange(value, target.accountId)}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="chFormGroup">
+                                            <label className="chLabel">Cover photo</label>
+                                            <div className="chInlineControl">
+                                                <button
+                                                    type="button"
+                                                    className="chButton chButtonSecondary"
+                                                    onClick={() => handleInstagramCoverSelect(target.accountId)}
+                                                >
+                                                    Select Cover
+                                                </button>
+                                                <span className="chInlineMeta">
+                                                    {override.instagramOptions?.coverPath ? override.instagramOptions.coverPath.split(/[\\/]/).pop() : 'Using base cover'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         );

@@ -167,7 +167,7 @@ function getMediaPath() {
  * @param {string} filePath - Path to the media file
  * @returns {Promise<{ url: string, port: number, close: () => void }>}
  */
-async function startMediaServer(filePath) {
+async function startMediaServer(filePath, extraFiles = []) {
     const http = await import('http');
     const fs = await import('fs');
     const buffer = await readFileBuffer(filePath);
@@ -175,6 +175,18 @@ async function startMediaServer(filePath) {
     const fileStats = await fs.promises.stat(filePath);
     const fileSize = fileStats.size;
     const mediaPath = getMediaPath();
+    const routes = new Map([
+        [mediaPath, { buffer, mimeType }]
+    ]);
+
+    for (const extraFile of extraFiles) {
+        const extraBuffer = await readFileBuffer(extraFile.filePath);
+        const extraMimeType = await getMimeType(extraFile.filePath);
+        routes.set(extraFile.routePath, {
+            buffer: extraBuffer,
+            mimeType: extraMimeType
+        });
+    }
 
     instagramLog.info(`[MEDIA] Serving file: ${filePath}`);
     instagramLog.info(`[MEDIA] MIME type: ${mimeType}, Size: ${fileSize} bytes`);
@@ -198,16 +210,17 @@ async function startMediaServer(filePath) {
             }
 
             // Media endpoint
-            if (req.url === mediaPath || req.url === mediaPath + '/') {
-                instagramLog.info(`[MEDIA] Serving image: Content-Type=${mimeType}, Content-Length=${buffer.length}`);
+            const route = routes.get(req.url) || routes.get(req.url?.replace(/\/$/, ''));
+            if (route) {
+                instagramLog.info(`[MEDIA] Serving media: Content-Type=${route.mimeType}, Content-Length=${route.buffer.length}`);
                 res.writeHead(200, {
-                    'Content-Type': mimeType,
-                    'Content-Length': String(buffer.length),
+                    'Content-Type': route.mimeType,
+                    'Content-Length': String(route.buffer.length),
                     'Access-Control-Allow-Origin': '*',
                     'Cache-Control': 'no-cache',
                     'Accept-Ranges': 'bytes',
                 });
-                res.end(buffer);
+                res.end(route.buffer);
                 return;
             }
 
@@ -305,9 +318,9 @@ async function validateMediaEndpoint(publicMediaUrl, expectedMimeType) {
     }
 }
 
-async function resolvePublicMediaUrl(localMediaUrl, mediaPort, mimeType) {
+async function resolvePublicMediaUrl(localMediaUrl, mediaPort, mimeType, routePath = getMediaPath()) {
     const envBaseUrl = process.env.INSTAGRAM_MEDIA_BASE_URL;
-    const mediaPath = getMediaPath();
+    const mediaPath = routePath;
 
     // Priority 1: Explicit base URL from .env
     if (envBaseUrl) {
@@ -562,21 +575,28 @@ async function createMediaContainerImage(igAccountId, accessToken, imageUrl, cap
 }
 
 /**
- * Create a media container (video).
+ * Create a media container for video feed publishing.
  * Uses the Instagram Graph API with the Instagram user token.
+ * Meta now requires media_type=REELS for Instagram video publishing.
  */
-async function createMediaContainerVideo(igAccountId, accessToken, videoUrl, caption) {
+async function createMediaContainerVideo(igAccountId, accessToken, videoUrl, caption, coverUrl = '') {
+    const body = {
+        video_url: videoUrl,
+        caption: caption || '',
+        access_token: accessToken,
+        media_type: 'REELS',
+    };
+
+    if (coverUrl) {
+        body.cover_url = coverUrl;
+    }
+
     const response = await fetch(
         `${IG_DISPLAY_API}/${igAccountId}/media`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                video_url: videoUrl,
-                caption: caption || '',
-                access_token: accessToken,
-                media_type: 'VIDEO',
-            }),
+            body: JSON.stringify(body),
         }
     );
 
@@ -727,6 +747,9 @@ function mapInstagramError(errorMessage) {
     if (msg.includes('403') || msg.includes('permission')) {
         return 'Instagram permissions are incomplete. Reconnect with all required permissions.';
     }
+    if (msg.includes('unsupported media type') || msg.includes('media_type') || msg.includes('mediatype')) {
+        return `Instagram rejected the media type. ${errorMessage}`;
+    }
     if (msg.includes('400') && (msg.includes('media') || msg.includes('image') || msg.includes('video'))) {
         return `Invalid media file. ${errorMessage}`;
     }
@@ -745,7 +768,7 @@ function mapInstagramError(errorMessage) {
 
 // ── Service implementation ──────────────────────────────────────────────────
 
-const InstagramService = {
+export const InstagramService = {
     ...PlatformService,
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1072,10 +1095,11 @@ const InstagramService = {
      * @param {string[]} mediaPaths — Paths to media files
      * @returns {{ success: boolean, postId?: string, permalink?: string, error?: string }}
      */
-    async publish(account, post, text, mediaPaths = []) {
+    async publish(account, post, text, mediaPaths = [], options = {}) {
         const credentials = account.credentials || {};
         const accessToken = credentials.accessToken;
         const igAccountId = credentials.instagramAccountId;
+        const publishOptions = options.instagramOptions || post.instagramOptions || {};
 
         instagramLog.debug(`[PUBLISH] Account lookup: id=${account.id}, username=${credentials.username || 'unknown'}, token_exists=${!!accessToken}, token_length=${accessToken ? accessToken.length : 0}, token_prefix=${accessToken ? accessToken.slice(0, 5) : 'n/a'}`);
 
@@ -1100,13 +1124,20 @@ const InstagramService = {
             const ext = path.extname(mediaPath).toLowerCase();
             const isVideo = ['.mp4', '.mov', '.webm'].includes(ext);
             const mimeType = await getMimeType(mediaPath);
+            const instagramFrame = publishOptions.frame || 'original';
+            const coverRoutePath = '/cover';
+            const hasVideoCover = isVideo && publishOptions.coverPath;
 
             instagramLog.info(`[PUBLISH] Publishing ${isVideo ? 'video' : 'image'}: ${mediaPath}`);
             instagramLog.info(`[PUBLISH] Caption length: ${text.length} chars`);
+            instagramLog.info(`[PUBLISH] Instagram frame option: ${instagramFrame}`);
 
             // Start temporary HTTP server to serve the media file
             instagramLog.info('[PUBLISH] Starting temporary media server...');
-            mediaServer = await startMediaServer(mediaPath);
+            mediaServer = await startMediaServer(
+                mediaPath,
+                hasVideoCover ? [{ filePath: publishOptions.coverPath, routePath: coverRoutePath }] : []
+            );
             const localMediaUrl = mediaServer.url;
             instagramLog.info(`[PUBLISH] Media available at: ${localMediaUrl}`);
 
@@ -1116,6 +1147,14 @@ const InstagramService = {
             tunnelStarted = true;
             instagramLog.info(`[PUBLISH] Public media URL: ${publicMediaUrl}`);
 
+            let publicCoverUrl = '';
+            if (hasVideoCover) {
+                instagramLog.info(`[PUBLISH] Preparing cover photo: ${publishOptions.coverPath}`);
+                const coverMimeType = await getMimeType(publishOptions.coverPath);
+                publicCoverUrl = await resolvePublicMediaUrl(localMediaUrl, mediaServer.port, coverMimeType, coverRoutePath);
+                instagramLog.info(`[PUBLISH] Public cover URL: ${publicCoverUrl}`);
+            }
+
             // Create media container
             let container;
             if (isVideo) {
@@ -1123,7 +1162,8 @@ const InstagramService = {
                     igAccountId,
                     accessToken,
                     publicMediaUrl,
-                    text
+                    text,
+                    publicCoverUrl
                 );
                 instagramLog.info(`[PUBLISH] Video container created: id=${container.id}`);
             } else {

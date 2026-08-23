@@ -128,6 +128,7 @@ export function validatePlatformAccount(account) {
  * @property {string} [message]
  * @property {string[]} [tags]
  * @property {string[]} [media]
+ * @property {Object} [instagramOptions]
  */
 
 /**
@@ -145,6 +146,7 @@ export function validatePlatformAccount(account) {
  * @property {string} message
  * @property {string[]} media
  * @property {string[]} tags
+ * @property {Object} [instagramOptions]
  * @property {string|null} project
  * @property {string|null} category
  * @property {PostTarget[]} targets
@@ -171,7 +173,7 @@ export function normalizeTargets(targets, overrides = {}) {
             accountId: t.accountId,
             platform: t.platform || '',
             enabled: t.enabled,
-            override: t.override || {}
+            override: t.override || overrides[t.accountId] || {}
         }));
     }
 
@@ -194,6 +196,7 @@ export function normalizeTargets(targets, overrides = {}) {
  * @param {string} params.message
  * @param {string[]} [params.media=[]]
  * @param {string[]} [params.tags=[]]
+ * @param {Object} [params.instagramOptions={}]
  * @param {string|null} [params.project=null]
  * @param {string|null} [params.category=null]
  * @param {string[]|PostTarget[]} [params.targets=[]]
@@ -207,6 +210,7 @@ export function createPost({
     message,
     media = [],
     tags = [],
+    instagramOptions = {},
     project = null,
     category = null,
     targets = [],
@@ -214,8 +218,8 @@ export function createPost({
     createdAt = new Date().toISOString()
 }) {
     const normalizedTargets = normalizeTargets(targets, overrides);
-    validatePost({ id, title, message, media, tags, project, category, targets: normalizedTargets, overrides, createdAt });
-    return { id, title, message, media, tags, project, category, targets: normalizedTargets, overrides, createdAt };
+    validatePost({ id, title, message, media, tags, instagramOptions, project, category, targets: normalizedTargets, overrides, createdAt });
+    return { id, title, message, media, tags, instagramOptions, project, category, targets: normalizedTargets, overrides, createdAt };
 }
 
 /**
@@ -240,6 +244,9 @@ export function validatePost(post) {
     }
     if (!Array.isArray(post.tags)) {
         throw new Error('Post tags must be an array');
+    }
+    if (post.instagramOptions !== undefined && (typeof post.instagramOptions !== 'object' || post.instagramOptions === null)) {
+        throw new Error('Post instagramOptions must be an object');
     }
     if (!Array.isArray(post.targets)) {
         throw new Error('Post targets must be an array');

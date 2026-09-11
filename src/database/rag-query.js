@@ -107,7 +107,7 @@ function getAIConfig() {
             };
         case 'ollama': {
             // ENV overrides config.json overrides hardcoded default.
-            const ollamaHost = process.env.OLLAMA_HOST || providerConfig.host || 'http://192.168.2.27:11434';
+            const ollamaHost = process.env.OLLAMA_HOST || providerConfig.host || 'http://localhost:11434';
             ollamaLog.info(
                 `host resolved to ${ollamaHost} ` +
                 `(env OLLAMA_HOST=${process.env.OLLAMA_HOST ?? '<unset>'}, ` +

@@ -740,10 +740,10 @@ export function registerIpcHandlers(context) {
         try {
             if (!databaseService) {
                 return {
-                    host: 'localhost',
+                    host: '127.0.0.1',
                     port: 5432,
                     database: 'emerald_utilities',
-                    user: 'emerald',
+                    user: 'alexljn5',
                     connected: false
                 };
             }
@@ -751,10 +751,10 @@ export function registerIpcHandlers(context) {
         } catch (err) {
             console.error('[Database] get-connection-info error:', err);
             return {
-                host: 'localhost',
+                host: '127.0.0.1',
                 port: 5432,
                 database: 'emerald_utilities',
-                user: 'emerald',
+                user: 'alexljn5',
                 connected: false
             };
         }
@@ -775,6 +775,57 @@ export function registerIpcHandlers(context) {
         } catch (err) {
             console.error('[Database] query error:', err);
             throw err;
+        }
+    });
+
+    // Database configuration management
+    ipcMain.handle('database:get-config', async () => {
+        try {
+            const configPath = path.join(process.cwd(), 'src', 'database', 'config.json');
+            const raw = await fs.promises.readFile(configPath, 'utf8');
+            const config = JSON.parse(raw);
+            return {
+                ok: true,
+                config: config.database || {}
+            };
+        } catch (err) {
+            console.error('[Database] get-config error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('database:set-config', async (_event, { database }) => {
+        try {
+            const configPath = path.join(process.cwd(), 'src', 'database', 'config.json');
+            const raw = await fs.promises.readFile(configPath, 'utf8');
+            const config = JSON.parse(raw);
+            config.database = { ...config.database, ...database };
+            await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+            return { ok: true };
+        } catch (err) {
+            console.error('[Database] set-config error:', err);
+            return { ok: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('database:test-connection', async (_event, { host, port, database, user, password }) => {
+        try {
+            const { Pool } = await import('pg');
+            const pool = new Pool({
+                host: host || 'localhost',
+                port: parseInt(port || '5432', 10),
+                database: database || 'emerald_utilities',
+                user: user || 'emerald',
+                password: password || '',
+                connectionTimeoutMillis: 5000,
+            });
+            const client = await pool.connect();
+            await client.query('SELECT 1');
+            client.release();
+            await pool.end();
+            return { ok: true };
+        } catch (err) {
+            return { ok: false, error: err.message };
         }
     });
 

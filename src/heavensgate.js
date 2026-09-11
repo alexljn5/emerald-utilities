@@ -27,6 +27,7 @@ import {
     getTasks,
     getSubtasks,
 } from './database/tasks/tasks-service.js';
+import { refreshConnectionState } from './database/tasks/tasks-db.js';
 import {
     sendTaskNotification,
     sendDebugNotification,
@@ -1475,6 +1476,41 @@ function startTaskNotificationScheduler() {
     console.log('[Emerald] Task notification scheduler started (60s interval)');
 }
 
+// ==================== DATABASE CONNECTION HEALTH CHECK ====================
+// Background scheduler that periodically checks if the database is back online
+// after a fallback to JSON. This ensures the app automatically reconnects
+// without requiring user interaction.
+
+let dbHealthCheckInterval = null;
+
+function startDbHealthCheck() {
+    if (dbHealthCheckInterval) return;
+
+    // Check immediately on startup
+    refreshConnectionState().catch(() => { });
+
+    // Then check every 30 seconds
+    dbHealthCheckInterval = setInterval(async () => {
+        try {
+            const mode = await refreshConnectionState();
+            if (mode === 'database') {
+                console.log('[Emerald] Database connection restored');
+            }
+        } catch (err) {
+            console.error('[Emerald] Database health check failed:', err.message);
+        }
+    }, 30000);
+    console.log('[Emerald] Database health check scheduler started (30s interval)');
+}
+
+function stopDbHealthCheck() {
+    if (dbHealthCheckInterval) {
+        clearInterval(dbHealthCheckInterval);
+        dbHealthCheckInterval = null;
+        console.log('[Emerald] Database health check scheduler stopped');
+    }
+}
+
 function stopTaskNotificationScheduler() {
     if (taskNotificationSchedulerInterval) {
         clearInterval(taskNotificationSchedulerInterval);
@@ -1664,7 +1700,7 @@ app.whenReady().then(async () => {
 
     if (DATABASE_MODE === 'remote') {
         console.log('[Emerald] Remote database mode: skipping local PostgreSQL bootstrap.');
-        console.log('[Emerald] Remote database target: 192.168.2.27:5432/emerald_utilities');
+        console.log('[Emerald] Remote database target: ' + (process.env.DB_HOST || 'localhost') + ':' + (process.env.DB_PORT || '5432') + '/' + (process.env.DB_NAME || 'emerald_utilities'));
     } else {
         console.log('[Emerald] Local database mode: starting local PostgreSQL via db-start.sh');
     }
@@ -1776,6 +1812,9 @@ app.whenReady().then(async () => {
 
     // Start task notification scheduler (main-process, works in tray/background)
     startTaskNotificationScheduler();
+
+    // Start database health check scheduler (auto-reconnect after fallback)
+    startDbHealthCheck();
 
     registerXScraperIpcHandlers({
         ipcMain,

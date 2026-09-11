@@ -201,8 +201,9 @@ function classifyDbError(err) {
 
 /**
  * Lightweight health check for graceful degradation.
- * Returns { ok, host, port, database, user, kind?, reason? } and NEVER throws,
- * so callers can show "database unavailable" without crashing unrelated features.
+ * Returns { ok, host, port, database, user, pgVersion?, pgvector?, kind?, reason? }
+ * and NEVER throws, so callers can show "database unavailable" without crashing
+ * unrelated features.
  * Never logs the password.
  */
 export async function checkDbHealth() {
@@ -216,7 +217,34 @@ export async function checkDbHealth() {
     try {
         client = await pool.connect();
         await client.query('SELECT 1');
-        return { ok: true, ...info, kind: 'ok', reason: 'Connected' };
+
+        // Gather PostgreSQL version and pgvector availability in the same
+        // round-trip so preflight/diagnostics can report them without an
+        // extra connection. Failures here are non-fatal — the basic ping
+        // already proved connectivity.
+        let pgVersion = null;
+        let pgvector = false;
+        try {
+            const [verRes, extRes] = await Promise.all([
+                client.query('SELECT version() AS v'),
+                client.query(
+                    "SELECT COUNT(*)::int AS c FROM pg_extension WHERE extname = 'vector'"
+                ),
+            ]);
+            pgVersion = verRes.rows[0]?.v || null;
+            pgvector = Number(extRes.rows[0]?.c || 0) > 0;
+        } catch (metaErr) {
+            log.warn('health-check-meta', metaErr?.message || metaErr, 'Could not query PG version / pgvector');
+        }
+
+        return {
+            ok: true,
+            ...info,
+            kind: 'ok',
+            reason: 'Connected',
+            pgVersion,
+            pgvector,
+        };
     } catch (err) {
         const { kind, reason } = classifyDbError(err);
         log.error(

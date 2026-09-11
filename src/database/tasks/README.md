@@ -11,7 +11,7 @@ The Tasks feature prefers the **remote homelab database** and falls back to a **
 Set `TASKS_DATABASE_URL` in `.env`:
 
 ```
-TASKS_DATABASE_URL=postgres://user@192.168.2.27:5432/emerald_utilities
+TASKS_DATABASE_URL=postgres://user@localhost:5432/emerald_utilities
 ```
 
 When the remote is reachable, the UI shows:

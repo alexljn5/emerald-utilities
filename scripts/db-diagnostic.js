@@ -16,7 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const DB_CONFIG = {
-    host: '192.168.2.27',
+    host: 'localhost',
     port: 5432,
     database: 'emerald_utilities',
     user: 'alexljn5',

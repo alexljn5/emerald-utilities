@@ -1,251 +1,428 @@
-Bluesky Image Attachment Implementation
-Step 1 — Authenticate
+# Emerald Utilities — Development Database Bridge via Tailscale
 
-Create a session:
+## Objective
 
-POST /xrpc/com.atproto.server.createSession
+Safely connect the current Emerald Utilities development environment to the PostgreSQL/pgvector database on `INFHUB-Server` using Tailscale.
 
-Receive:
+This is a **development/self-hosted infrastructure solution only**.
 
-accessJwt
-did
-handle
-Step 2 — Upload Image
+Tailscale must NOT become a runtime dependency of Emerald Utilities itself.
 
-Upload the raw binary:
+The long-term architecture should allow Emerald to eventually use its own backend/API or another user-facing data layer without requiring end users to install Tailscale or access PostgreSQL directly.
 
-POST /xrpc/com.atproto.repo.uploadBlob
-Authorization: Bearer ACCESS_JWT
-Content-Type: image/png
+---
 
-(or jpg/webp/etc.)
+## Current development architecture
 
-The response looks similar to:
+```text
+┌──────────────────────────────┐
+│ Development machine          │
+│                              │
+│ Emerald Utilities            │
+│ AI / RAG                     │
+│ PostgreSQL client            │
+│                              │
+│ Tailscale daemon             │
+└──────────────┬───────────────┘
+               │
+               │ Private Tailscale network
+               │
+               ▼
+┌──────────────────────────────┐
+│ INFHUB-Server                │
+│                              │
+│ Tailscale daemon             │
+│ PostgreSQL                   │
+│ pgvector                     │
+│ Ollama / AI infrastructure   │
+└──────────────────────────────┘
+```
 
-{
-  "blob": {
-    "$type": "blob",
-    "ref": {
-      "$link": "bafkreibabalobzn6cd366ukcsjycp4yymjymgfxcv6xczmlgpemzkz3cfa"
-    },
-    "mimeType": "image/png",
-    "size": 13208
-  }
+`INFHUB-Server` currently has Tailscale address:
+
+```text
+100.125.191.76
+```
+
+The Tailscale installation and authentication on `INFHUB-Server` are already complete.
+
+---
+
+## IMPORTANT ARCHITECTURAL RULE
+
+Do NOT implement Tailscale inside Emerald Utilities.
+
+Emerald must not:
+
+- start Tailscale
+- stop Tailscale
+- authenticate Tailscale
+- manage Tailscale credentials
+- contain Tailscale-specific networking code
+- require elevated privileges for Tailscale
+- assume the user has Tailscale installed
+
+Tailscale exists outside the application as an operating-system networking layer.
+
+From Emerald's perspective, PostgreSQL should simply be another configurable database endpoint.
+
+For example:
+
+```env
+DB_HOST=infhub-server
+DB_PORT=5432
+```
+
+Emerald should not care whether `infhub-server` is reachable through Tailscale, LAN, localhost, or another network.
+
+---
+
+## 1. Inspect the existing database architecture
+
+Before modifying anything:
+
+- [ ] Find the existing PostgreSQL connection code.
+- [ ] Find database configuration/environment variables.
+- [ ] Find migrations/schema initialization.
+- [ ] Find pgvector initialization.
+- [ ] Find connection pooling.
+- [ ] Determine whether the database layer currently assumes localhost.
+- [ ] Determine whether database access is already abstracted behind a service/repository layer.
+
+Do not rewrite the database layer unnecessarily.
+
+Preserve existing functionality.
+
+---
+
+## 2. Make database connectivity environment-configurable
+
+If necessary, introduce a clean configuration layer such as:
+
+```env
+DB_HOST=
+DB_PORT=5432
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+```
+
+Do not hardcode:
+
+```text
+localhost
+127.0.0.1
+100.125.191.76
+```
+
+inside application logic.
+
+Do not commit credentials.
+
+Use `.env.example` for documentation:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=emerald
+DB_USER=emerald
+DB_PASSWORD=
+```
+
+---
+
+## 3. Development environment configuration
+
+For the current development setup, configure:
+
+```env
+DB_HOST=infhub-server
+DB_PORT=5432
+```
+
+or the appropriate MagicDNS hostname once verified.
+
+The development machine should have Tailscale installed separately.
+
+Emerald itself should only make a normal PostgreSQL connection.
+
+---
+
+## 4. Secure INFHUB PostgreSQL
+
+On `INFHUB-Server`:
+
+- [ ] Verify PostgreSQL is running.
+- [ ] Determine whether PostgreSQL runs directly on the host or inside Docker.
+- [ ] Verify pgvector is installed.
+- [ ] Verify the Emerald database exists.
+- [ ] Check PostgreSQL listening addresses.
+- [ ] Configure PostgreSQL so it is reachable from the Tailscale interface.
+- [ ] Do NOT expose PostgreSQL publicly.
+
+Do NOT:
+
+```text
+create router port forwarding for 5432
+```
+
+Do NOT allow:
+
+```text
+0.0.0.0/0
+```
+
+in PostgreSQL access rules.
+
+Use the narrowest practical `pg_hba.conf` rule.
+
+If a host firewall is present, allow PostgreSQL only where required.
+
+---
+
+## 5. Test the Tailscale bridge
+
+From the development machine:
+
+```bash
+tailscale status
+```
+
+Verify that `INFHUB-Server` is visible.
+
+Then test PostgreSQL connectivity through the Tailscale network.
+
+Initially, the Tailscale address can be used:
+
+```text
+100.125.191.76
+```
+
+Example:
+
+```env
+DB_HOST=100.125.191.76
+DB_PORT=5432
+```
+
+Once connectivity is confirmed, switch to MagicDNS if available:
+
+```env
+DB_HOST=infhub-server
+```
+
+Do not permanently hardcode the Tailscale IP if MagicDNS provides a stable hostname.
+
+---
+
+## 6. Add a database preflight/health check
+
+Add or improve a small database connectivity check.
+
+It should report things such as:
+
+```text
+Database host
+Database port
+Database name
+Connection status
+PostgreSQL version
+pgvector availability
+```
+
+Never print:
+
+```text
+DB_PASSWORD
+```
+
+or any other secret.
+
+The application should produce a useful error if the database cannot be reached.
+
+---
+
+## 7. Preserve local development
+
+Do not make Tailscale mandatory for Emerald.
+
+The application must still support:
+
+```env
+DB_HOST=localhost
+```
+
+for a completely local database.
+
+The same Emerald code should therefore support:
+
+```text
+Local development:
+Emerald → localhost PostgreSQL
+
+Current homelab development:
+Emerald → Tailscale → INFHUB PostgreSQL
+
+Future production:
+Emerald → proper backend/data layer
+```
+
+---
+
+## 8. Create a clean database abstraction boundary
+
+If the current architecture does not already have one, establish a clear boundary between:
+
+```text
+Emerald application logic
+        │
+        ▼
+Database/data-access layer
+        │
+        ▼
+PostgreSQL
+```
+
+The application should depend on the database abstraction, not on Tailscale or a specific network topology.
+
+Avoid code such as:
+
+```javascript
+if (tailscale) {
+    ...
 }
-
-Do not discard this object.
-
-Store the entire blob object.
-
-Step 3 — Create the Post
-
-The uploaded blob is not automatically attached.
-
-Instead, build the post like this:
-
-{
-  "repo": "did:plc:xxxxxxxx",
-  "collection": "app.bsky.feed.post",
-  "record": {
-    "$type": "app.bsky.feed.post",
-
-    "text": "Hello World",
-
-    "createdAt": "2026-07-23T08:20:00.000Z",
-
-    "embed": {
-      "$type": "app.bsky.embed.images",
-
-      "images": [
-        {
-          "alt": "Screenshot",
-
-          "image": {
-            "$type": "blob",
-
-            "ref": {
-              "$link": "bafk..."
-            },
-
-            "mimeType": "image/png",
-
-            "size": 123456
-          }
-        }
-      ]
-    }
-  }
-}
-Step 4 — Important
-
-The important discovery from that forum thread:
-
-Do NOT invent the blob.
-
-Instead:
-
-uploadBlob()
-
-↓
-
-response.blob
-
-↓
-
-embed.images[].image = response.blob
-
-Literally reuse the object Bluesky returns.
-
-Step 5 — Multiple Images
-
-Just append more images:
-
-"images": [
-
-{
-  "alt":"Image 1",
-  "image": blob1
-},
-
-{
-  "alt":"Image 2",
-  "image": blob2
-}
-
-]
-
-Bluesky supports multiple images.
-
-Step 6 — Emerald Utilities Pipeline
-
-Your publish flow should become:
-
-Media selected
-
-↓
-
-Read file
-
-↓
-
-uploadBlob()
-
-↓
-
-blob object returned
-
-↓
-
-Store blob
-
-↓
-
-Create embed.images[]
-
-↓
-
-Create record
-
-↓
-
-createRecord()
-
-↓
-
-History log
-Step 7 — Debug Logging
-
-Log something like:
-
-[BLUESKY]
-
-Uploading image...
-
-↓
-
-Blob uploaded
-
-mime=image/png
-
-size=183452
-
-cid=bafk...
-
-↓
-
-Creating embed
-
-images=1
-
-↓
-
-Publishing post...
-
-↓
-
-Published successfully
-
-Avoid dumping the JWT or full binary data.
-
-Step 8 — Failure Cases
-
-Detect separately:
-
-Image upload failed
-
-↓
-
-Blob creation failed
-
-↓
-
-Embed creation failed
-
-↓
-
-Post creation failed
-
-Don't collapse everything into "Publish failed."
-
-Step 9 — Alt Text
-
-Never hardcode:
-
-alt: ""
-
-If the user doesn't provide one, something like:
-
-"Uploaded image"
-
-is preferable.
-
-Long-term, Emerald Utilities could allow optional alt text per image in the composer.
-
-Step 10 — The Likely Bug in Your Logs
-
-Earlier your log showed:
-
-Media upload results:
-{
- success:false,
- error:"Missing credentials"
-}
-
-That means you're not even reaching uploadBlob successfully.
-
-The forum solution fixes the JSON structure after upload, but your current blocker is one step earlier:
-
-✅ Login works.
-❌ uploadBlob fails (Missing credentials).
-Therefore mediaPaths=[].
-Therefore no embed is created.
-Text posts still work.
-
-So I'd fix them in this order:
-
-Make uploadBlob authenticate using the same valid accessJwt created during createSession.
-Verify it returns a proper blob object.
-Reuse that blob inside the embed.images JSON exactly as shown above.
-Finally test with a PNG.
-
-Once uploadBlob succeeds, you're very close. The text publishing pipeline is already working, and image support is mostly a matter of correctly threading the returned blob object into createRecord. I have a strong suspicion your remaining bug is localized to the upload/authentication path rather than the post creation itself.
+```
+
+or:
+
+```javascript
+connectToTailscaleDatabase()
+```
+
+Instead use generic concepts such as:
+
+```text
+database.connect()
+database.query()
+database.healthCheck()
+```
+
+with the actual endpoint supplied through configuration.
+
+---
+
+## 9. SECURITY VERIFICATION
+
+Before marking this task complete, verify:
+
+- [ ] Tailscale is installed only as system infrastructure
+- [ ] Emerald does not contain Tailscale-specific code
+- [ ] Emerald does not manage Tailscale
+- [ ] PostgreSQL is not exposed to the public internet
+- [ ] No router port-forward exists for PostgreSQL
+- [ ] PostgreSQL does not allow `0.0.0.0/0`
+- [ ] PostgreSQL credentials are not committed
+- [ ] Emerald can connect through Tailscale
+- [ ] Local PostgreSQL configuration still works
+- [ ] pgvector still works
+- [ ] PostgreSQL survives/restarts correctly
+- [ ] Emerald reconnects after PostgreSQL restart
+
+---
+
+## 10. FUTURE TODO — Emerald's own networking/data layer
+
+Create a clearly documented future TODO for replacing the development-only direct PostgreSQL connection with a proper application-facing layer.
+
+This is NOT part of the current implementation.
+
+Do not implement it yet unless the existing architecture requires minimal preparation.
+
+### Future architecture
+
+Eventually Emerald should be able to operate for a normal user without requiring:
+
+- Tailscale
+- VPN configuration
+- direct PostgreSQL access
+- PostgreSQL credentials in the client
+- access to the developer's homelab
+
+Potential future architecture:
+
+```text
+┌──────────────────────────────┐
+│ Emerald desktop application  │
+│                              │
+│ UI                           │
+│ Local functionality          │
+│ AI orchestration             │
+└──────────────┬───────────────┘
+               │
+               │ HTTPS / application protocol
+               ▼
+┌──────────────────────────────┐
+│ Emerald backend/API          │
+│                              │
+│ Authentication               │
+│ Authorization                │
+│ Business logic               │
+│ RAG orchestration            │
+│ Sync                         │
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│ PostgreSQL + pgvector        │
+└──────────────────────────────┘
+```
+
+Investigate later:
+
+- REST API vs GraphQL vs another appropriate protocol
+- authentication
+- authorization
+- per-user data isolation
+- API tokens/session handling
+- synchronization
+- offline/local-first operation
+- conflict resolution
+- rate limiting
+- database migrations
+- backend deployment
+- production PostgreSQL
+- backup/recovery strategy
+- encryption in transit
+- secrets management
+
+The eventual application should communicate with the backend rather than directly exposing PostgreSQL to end users.
+
+---
+
+## Deliverables
+
+At the end of the current task, report:
+
+1. Which Emerald files were changed.
+2. Which environment variables were introduced.
+3. How Emerald connects to PostgreSQL.
+4. How Tailscale provides the private development route.
+5. PostgreSQL listening/access-control changes.
+6. Exact commands used to verify connectivity.
+7. Confirmation that PostgreSQL is not publicly exposed.
+8. Confirmation that Emerald itself has no Tailscale dependency.
+9. The location of the documented future backend/data-layer TODO.
+
+Do not implement the future public backend during this task.
+
+The goal for this task is:
+
+```text
+SAFE DEVELOPMENT BRIDGE NOW
++
+CLEAN ARCHITECTURAL SEPARATION
++
+NO TAILSCALE DEPENDENCY IN EMERALD
++
+CLEAR PATH TO A PROPER USER-FACING LAYER LATER
+```

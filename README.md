@@ -89,7 +89,7 @@ Key variables (see [`.env.example`](src/database/.env.example) for the full list
 |---|---|
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | PostgreSQL connection |
 | `AI_PROVIDER` | `ollama` \| `grok` \| `openai` \| `lmstudio` |
-| `OLLAMA_HOST` | Ollama endpoint (e.g. `http://192.168.2.27:11434`) |
+| `OLLAMA_HOST` | Ollama endpoint (e.g. `http://localhost:11434`) |
 | `OLLAMA_EMBED_MODEL` / `OLLAMA_EMBED_DIM` | embedding model + dimension (default `nomic-embed-text` / `768`) |
 | `OLLAMA_CHAT_MODEL` | chat model (default `llama2-uncensored`) |
 | `RAG_EMBED_BATCH` / `RAG_MAX_EMBED` | embedding batch size / optional per-run cap |

@@ -48,9 +48,9 @@ test('redact scrubs nested sensitive keys', () => {
 
 test('redact scrubs inline password in a connection string', () => {
     const { redact } = createLogger('DB');
-    const out = redact('postgres://alexljn5:[REDACTED]@192.168.2.27:5432/emerald_utilities');
+    const out = redact('postgres://alexljn5:[REDACTED]@localhost:5432/emerald_utilities');
     assert.ok(!out.includes('[REDACTED]'), `secret leaked: ${out}`);
-    assert.ok(out.includes('192.168.2.27'), 'host should be preserved');
+    assert.ok(out.includes('localhost'), 'host should be preserved');
 });
 
 test('redact scrubs inline key=value secrets in free text', () => {

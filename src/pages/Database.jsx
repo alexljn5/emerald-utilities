@@ -40,6 +40,9 @@ export default function Database({ route, setRoute }) {
     const [scheduledTasks, setScheduledTasks] = useState([]);
     const [scheduleStatus, setScheduleStatus] = useState('');
     const [toasts, setToasts] = useState([]);
+    const [dbConfig, setDbConfig] = useState({ host: '', port: 5432, database: 'emerald_utilities', user: 'emerald' });
+    const [dbConfigStatus, setDbConfigStatus] = useState('');
+    const [testingConnection, setTestingConnection] = useState(false);
 
     useEffect(() => {
         loadStats();
@@ -48,6 +51,7 @@ export default function Database({ route, setRoute }) {
         loadTables();
         loadBackups();
         loadScheduledTasks();
+        loadDbConfig();
     }, []);
 
     useEffect(() => {
@@ -121,6 +125,66 @@ export default function Database({ route, setRoute }) {
             }
         } catch (err) {
             setScheduleStatus(`Schedule load failed: ${err.message}`);
+        }
+    }
+
+    async function loadDbConfig() {
+        try {
+            const result = await invoke('database:get-config');
+            if (result.ok && result.config) {
+                setDbConfig({
+                    host: result.config.host || 'localhost',
+                    port: result.config.port || 5432,
+                    database: result.config.database || 'emerald_utilities',
+                    user: result.config.user || 'emerald'
+                });
+            }
+        } catch (err) {
+            console.error('Failed to load DB config:', err);
+        }
+    }
+
+    async function saveDbConfig() {
+        try {
+            setDbConfigStatus('Saving...');
+            const result = await invoke('database:set-config', {
+                database: {
+                    host: dbConfig.host,
+                    port: parseInt(dbConfig.port, 10),
+                    database: dbConfig.database,
+                    user: dbConfig.user
+                }
+            });
+            if (result.ok) {
+                setDbConfigStatus('Saved! Restart the app for changes to take effect.');
+            } else {
+                setDbConfigStatus(`Save failed: ${result.error}`);
+            }
+        } catch (err) {
+            setDbConfigStatus(`Save failed: ${err.message}`);
+        }
+    }
+
+    async function testDbConnection() {
+        try {
+            setTestingConnection(true);
+            setDbConfigStatus('Testing connection...');
+            const result = await invoke('database:test-connection', {
+                host: dbConfig.host,
+                port: dbConfig.port,
+                database: dbConfig.database,
+                user: dbConfig.user,
+                password: '' // Password not stored in config.json
+            });
+            if (result.ok) {
+                setDbConfigStatus('Connection successful!');
+            } else {
+                setDbConfigStatus(`Connection failed: ${result.error}`);
+            }
+        } catch (err) {
+            setDbConfigStatus(`Connection failed: ${err.message}`);
+        } finally {
+            setTestingConnection(false);
         }
     }
 
@@ -398,6 +462,57 @@ export default function Database({ route, setRoute }) {
                     ) : (
                         <p>Loading connection info...</p>
                     )}
+                </section>
+
+                {/* Database Configuration */}
+                <section className="dbBox">
+                    <h2>Database Configuration</h2>
+                    <p className="dbConfigHint">Configure the database connection. Changes are saved to config.json and require an app restart to take effect.</p>
+                    <form className="dbConfigForm" onSubmit={(e) => { e.preventDefault(); saveDbConfig(); }}>
+                        <div className="dbConfigGrid">
+                            <label>
+                                Host
+                                <input
+                                    className="dbInput"
+                                    value={dbConfig.host}
+                                    onChange={(e) => setDbConfig(prev => ({ ...prev, host: e.target.value }))}
+                                    placeholder="localhost or IP address"
+                                />
+                            </label>
+                            <label>
+                                Port
+                                <input
+                                    className="dbInput"
+                                    type="number"
+                                    value={dbConfig.port}
+                                    onChange={(e) => setDbConfig(prev => ({ ...prev, port: e.target.value }))}
+                                />
+                            </label>
+                            <label>
+                                Database
+                                <input
+                                    className="dbInput"
+                                    value={dbConfig.database}
+                                    onChange={(e) => setDbConfig(prev => ({ ...prev, database: e.target.value }))}
+                                />
+                            </label>
+                            <label>
+                                User
+                                <input
+                                    className="dbInput"
+                                    value={dbConfig.user}
+                                    onChange={(e) => setDbConfig(prev => ({ ...prev, user: e.target.value }))}
+                                />
+                            </label>
+                        </div>
+                        <div className="dbConfigActions">
+                            <button type="button" onClick={testDbConnection} disabled={testingConnection}>
+                                {testingConnection ? 'Testing...' : 'Test Connection'}
+                            </button>
+                            <button type="submit">Save Configuration</button>
+                        </div>
+                        {dbConfigStatus && <div className="dbConfigStatus">{dbConfigStatus}</div>}
+                    </form>
                 </section>
 
                 {/* Statistics */}

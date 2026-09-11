@@ -39,10 +39,20 @@ const HEALTH_CACHE_TTL_MS = 5000; // Cache health for 5s max
 /**
  * Check if we are currently operating in JSON fallback mode.
  * This is a snapshot, not a persistent state.
+ *
+ * If the health cache is stale, triggers a background health check
+ * so we can detect when the database comes back online.
  */
 export function isUsingJsonFallback() {
     const health = lastHealthCheck;
     if (!health) return false;
+
+    // If cache is stale, trigger async re-check (don't block)
+    const now = Date.now();
+    if ((now - lastHealthCheckTime) > HEALTH_CACHE_TTL_MS) {
+        refreshConnectionState().catch(() => { });
+    }
+
     return !health.ok;
 }
 

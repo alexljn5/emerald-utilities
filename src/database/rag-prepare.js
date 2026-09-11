@@ -45,7 +45,7 @@ function getAIConfig() {
         case 'ollama':
             return {
                 apiKey: null, // No API key needed for Ollama
-                embeddingEndpoint: `${process.env.OLLAMA_HOST || 'http://192.168.2.27:11434'}/api/embed`,
+                embeddingEndpoint: `${process.env.OLLAMA_HOST || 'http://localhost:11434'}/api/embed`,
                 // Accept both OLLAMA_EMBED_MODEL (new) and OLLAMA_EMBEDDING_MODEL (legacy)
                 embeddingModel: process.env.OLLAMA_EMBED_MODEL || process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text',
             };

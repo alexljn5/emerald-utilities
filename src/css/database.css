@@ -492,3 +492,62 @@ button:disabled {
         min-width: auto;
     }
 }
+
+/* Database Configuration Form */
+.dbConfigHint {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0 0 var(--space-md) 0;
+}
+
+.dbConfigForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.dbConfigGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    gap: var(--space-md);
+}
+
+.dbConfigGrid label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    min-width: 0;
+}
+
+.dbConfigActions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.dbConfigActions button {
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.8rem, 1.2vw, 1.2rem);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dbConfigActions button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.dbConfigStatus {
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.6rem, 1vw, 0.9rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    overflow-wrap: anywhere;
+}

@@ -1,6 +1,6 @@
 {
     "database": {
-        "host": "192.168.2.27",
+        "host": "127.0.0.1",
         "port": 5432,
         "database": "emerald_utilities",
         "user": "alexljn5"
@@ -19,13 +19,13 @@
         },
         "openai": {
             "apiKey": "encrypted:REPLACE_WITH_ENCRYPTED_VALUE",
-            "embeddingEndpoint": "https://api.openai.com/v1/embeddings",
+            "embeddingEndpoint": "https://api.openai/v1/embeddings",
             "embeddingModel": "text-embedding-3-small",
-            "chatEndpoint": "https://api.openai.com/v1/chat/completions",
+            "chatEndpoint": "https://api.openai/v1/chat/completions",
             "chatModel": "gpt-4o-mini"
         },
         "ollama": {
-            "host": "http://192.168.2.27:11434",
+            "host": "http://127.0.0.1:11434",
             "embeddingModel": "nomic-embed-text",
             "chatModel": "llama2-uncensored",
             "contextWindow": 8192

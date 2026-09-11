@@ -1,7 +1,7 @@
 # Emerald Utilities — Configuration Guide
 
-**Version:** 0.1.5
-**Last Updated:** 23 July 2026
+**Version:** 0.1.6
+**Last Updated:** 11 September 2026
 
 ---
 
@@ -246,112 +246,78 @@ The database runs in a Docker container defined in `src/database/docker-compose.
 ./src/internal-scripts/db-stop.sh
 ```
 
-### Custom Database
+### Tailscale Bridge (Development / Homelab)
 
-To use a different database instance, set the environment variables:
+For development against the homelab PostgreSQL server on `INFHUB-Server`,
+Emerald connects through the private Tailscale mesh network.
+
+**Tailscale is OS-level infrastructure only.** Emerald never starts,
+stops, or authenticates Tailscale — it just opens a normal PostgreSQL
+connection to whatever `DB_HOST` is configured.
+
+Configure the host using the INFHUB-Server MagicDNS hostname (preferred)
+or the direct Tailscale IP (fallback):
 
 ```env
-DB_HOST=192.168.1.100
+# MagicDNS (preferred)
+DB_HOST=infhub-server
 DB_PORT=5432
-DB_USER=custom_user
-DB_PASSWORD=custom_password
-DB_DATABASE=custom_db
+
+# Direct Tailscale IP (fallback)
+DB_HOST=100.125.191.76
+DB_PORT=5432
 ```
 
-### Connection Verification
+For pure local development, keep `DB_HOST=localhost` (or `127.0.0.1`).
 
-The Settings → Environment page shows the database connection status. You can also use the Database page to test the connection and view schema information.
+Full details: [`docs/TAILSCALE_BRIDGE.md`](./TAILSCALE_BRIDGE.md).
+
+#### Preflight Check
+
+Before starting the app, verify database connectivity:
+
+```bash
+node src/database/scripts/db-preflight.js
+```
+
+This reports host, port, database name, connection status, PostgreSQL
+version, and pgvector availability — without ever printing the password.
 
 ---
 
 ## 7. Importing .env After Packaging
 
-### Step-by-Step
+When you build the app for production (`npm run build` or `npm run package`), the `.env` file is **not** included in the output. This is intentional — API keys must never be bundled.
 
-1. **Create a .env file** with your configuration (see [Production Setup](#3-production-setup))
-2. **Open Emerald Utilities**
-3. **Navigate to Settings** → **Environment Configuration**
-4. **Click "Import .env"**
-5. **Select your .env file** using the file picker
-6. **Verify** the configuration status shows all required variables as configured
+To use the app with your credentials:
 
-### What Happens
+1. Copy your `.env` file to a safe location outside the project folder
+2. Run the packaged app
+3. Go to **Settings → Environment**
+4. Click **Import .env** and select your file
+5. Click **Validate** to confirm all variables are loaded
 
-- The file is **copied** to the app data directory (`%APPDATA%/Emerald Utilities/config/imported.env`)
-- The original file is **not modified**
-- Configuration persists across app restarts
-- To update, simply import a new .env file
-
-### Clearing Imported Configuration
-
-Click **"Clear Imported"** in Settings → Environment to remove the imported configuration. The app will fall back to development or system environment variables.
+The imported file is stored in the app data directory (e.g., `%APPDATA%/Emerald Utilities/.env` on Windows).
 
 ---
 
 ## 8. Troubleshooting
 
-### "No environment configuration loaded"
+### Database Connection Failed
 
-**Cause:** No `.env` file found in any source.
+1. Check that Docker is running: `docker ps`
+2. Check that the PostgreSQL container is up: `docker logs emerald-postgres`
+3. Verify `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` in `.env`
+4. Run the database diagnostic from Settings → Database
 
-**Fix:** 
-- Development: Create `src/.env` from `.env.example`
-- Production: Import a `.env` file via Settings → Environment
+### OAuth Redirect URI Mismatch
 
-### "Missing required variables: INSTAGRAM_APP_ID"
+- Instagram/Threads require HTTPS for OAuth in production
+- Use `emerald://` deep-link protocol or `https://localhost:3541/` with mkcert certificates
+- Ensure the redirect URI in your Meta App Dashboard matches exactly
 
-**Cause:** The Instagram App ID is not set.
+### API Key Invalid
 
-**Fix:** Add `INSTAGRAM_APP_ID=your_value` to your `.env` file and reload.
-
-### "Instagram integration unavailable: missing INSTAGRAM_APP_ID"
-
-**Cause:** Instagram is not configured, but other services may still work.
-
-**Fix:** This is expected if you don't use Instagram. The app continues to function with other configured services.
-
-### Imported configuration not persisting
-
-**Cause:** The app data directory may not be writable.
-
-**Fix:** 
-- Windows: Check `%APPDATA%/Emerald Utilities/config/` exists and is writable
-- Linux: Check `~/.config/Emerald Utilities/config/` exists and is writable
-- macOS: Check `~/Library/Application Support/Emerald Utilities/config/` exists and is writable
-
-### "Failed to read imported env"
-
-**Cause:** The imported file may be corrupted or unreadable.
-
-**Fix:** Re-import the `.env` file. Ensure the file is a valid text file with `KEY=VALUE` format.
-
-### Configuration not updating after import
-
-**Cause:** The environment was not reloaded.
-
-**Fix:** Click "Reload" in Settings → Environment after importing.
-
----
-
-## Quick Reference
-
-### File Locations
-
-| File | Purpose | Location |
-|------|---------|----------|
-| `.env.example` | Template with all variables | Project root |
-| `src/.env` | Development configuration | `src/.env` (git-ignored) |
-| `imported.env` | Production configuration | App data directory |
-| `config.json` | Application settings | `scripts/config.json` |
-
-### Commands
-
-```bash
-# Development: create env file
-cp .env.example src/.env
-
-# Edit configuration
-nano src/.env
-
-# Verify configuration (in-app)
-# Settings → Environment → Validate
+- Verify the key in the developer portal
+- Check for extra whitespace in `.env` values
+- Some keys require specific permissions — review the developer portal docs

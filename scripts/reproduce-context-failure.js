@@ -22,7 +22,7 @@ const __dirname = dirname(__filename);
 loadDotenv({ path: join(__dirname, '..', 'src', '.env'), override: true });
 
 const DB_CONFIG = {
-    host: process.env.DB_HOST || '192.168.2.27',
+    host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432', 10),
     database: process.env.DB_NAME || 'emerald_utilities',
     user: process.env.DB_USER || 'alexljn5',

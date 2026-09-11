@@ -1,8 +1,8 @@
 # Emerald Utilities — Master Documentation
 
-**Version:** 0.1.5
-**Status:** Hardening Phase
-**Last Updated:** 22 July 2026
+**Version:** 0.1.6
+**Status:** Active
+**Last Updated:** 11 September 2026
 
 ---
 
@@ -21,6 +21,19 @@
 11. [Database & Storage](#database--storage)
 12. [Testing](#testing)
 13. [Release Checklist](#release-checklist)
+14. [External Documentation](#external-documentation)
+
+---
+
+## External Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [`TAILSCALE_BRIDGE.md`](./TAILSCALE_BRIDGE.md) | Tailscale bridge setup for INFHUB-Server PostgreSQL |
+| [`FUTURE_BACKEND_DATA_LAYER.md`](./FUTURE_BACKEND_DATA_LAYER.md) | Future backend/API design TODO (not implemented) |
+| [`DATABASE_ARCHITECTURE.md`](./DATABASE_ARCHITECTURE.md) | PostgreSQL schema, migrations, pgvector, backups |
+| [`CHANGELOG.md`](./CHANGELOG.md) | Version history |
+| [`CONFIGURATION.md`](./CONFIGURATION.md) | Environment variables and setup guide |
 
 ---
 

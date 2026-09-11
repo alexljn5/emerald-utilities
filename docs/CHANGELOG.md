@@ -1,8 +1,40 @@
 # Emerald Utilities — Changelog
 
-**Version:** 0.1.5
-**Status:** Active  
-**Last Updated:** 22 July 2026
+**Version:** 0.1.6
+**Status:** Active
+**Last Updated:** 11 September 2026
+
+---
+
+## [0.1.6] — 2026-09-11
+
+### Added
+- Tailscale bridge for safe development access to INFHUB-Server PostgreSQL
+  (`docs/TAILSCALE_BRIDGE.md`)
+- Clean database abstraction boundary (`src/database/database.js`):
+  `connect()`, `query()`, `healthCheck()`, `getConnectionInfo()`, `ping()`
+- Standalone database preflight/health check CLI
+  (`src/database/scripts/db-preflight.js`)
+- Enhanced `checkDbHealth()` reports PostgreSQL version + pgvector
+  availability (never logs passwords)
+- Future backend/data-layer design doc
+  (`docs/FUTURE_BACKEND_DATA_LAYER.md`)
+
+### Changed
+- `config.json` no longer hardcodes the public IP `213.197.11.201`;
+  safe `127.0.0.1` default now
+- `src/.env` and `src/database/.env.example` now use MagicDNS
+  `DB_HOST=infhub-server` (Tailscale-bridged)
+- `OLLAMA_HOST` now points at `http://infhub-server:11434`
+- `docs/DATABASE_ARCHITECTURE.md` rewritten to reflect the actual
+  schema (envy.sql + 8 migrations) and the Tailscale bridge
+- `docs/CONFIGURATION.md` bumped to 0.1.6 with a Tailscale Bridge section
+
+### Security
+- PostgreSQL reachable only through the private Tailscale network
+- No router port-forward for 5432; no `0.0.0.0/0` in `pg_hba.conf`
+- Credentials remain in git-ignored `src/.env` only
+- Zero Tailscale-specific code in Emerald application logic
 
 ---
 

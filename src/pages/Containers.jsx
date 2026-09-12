@@ -29,8 +29,8 @@ const SSH_SETUP = {
             'Open a terminal in your project directory',
             'Generate an Ed25519 key with no passphrase:',
             'ssh-keygen -t ed25519 -C "alexljn5@infhub" -f ~/.ssh/id_ed25519 -N ""',
-            'Add the public key to the server:',
-            'cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"',
+            'Add the public key to the server (use /bin/ paths — server PATH may be broken):',
+            'cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "/bin/mkdir -p ~/.ssh && /bin/cat >> ~/.ssh/authorized_keys"',
             'Verify the connection:',
             'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i ~/.ssh/id_ed25519 alexljn5@infhub-server "echo ok"'
         ]
@@ -42,8 +42,8 @@ const SSH_SETUP = {
             'Open Terminal in your project directory',
             'Generate an Ed25519 key with no passphrase:',
             'ssh-keygen -t ed25519 -C "alexljn5@infhub" -f ~/.ssh/id_ed25519 -N ""',
-            'Add the public key to the server:',
-            'cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"',
+            'Add the public key to the server (use /bin/ paths — server PATH may be broken):',
+            'cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "/bin/mkdir -p ~/.ssh && /bin/cat >> ~/.ssh/authorized_keys"',
             'Verify the connection:',
             'ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i ~/.ssh/id_ed25519 alexljn5@infhub-server "echo ok"'
         ]

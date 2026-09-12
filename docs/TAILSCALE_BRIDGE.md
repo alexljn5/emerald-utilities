@@ -254,8 +254,14 @@ database bridge — it uses SSH, not PostgreSQL.
 
 If you don't already have a key for this machine:
 
+**Windows (PowerShell):**
 ```bash
-ssh-keygen -t ed25519 -C "alexljn5@infhub" -f C:/Users/alexl/.ssh/id_ed25519 -N ""
+ssh-keygen -t ed25519 -C "alexljn5@infhub" -f $env:USERPROFILE\.ssh\id_ed25519 -N ""
+```
+
+**Linux / macOS (Bash):**
+```bash
+ssh-keygen -t ed25519 -C "alexljn5@infhub" -f ~/.ssh/id_ed25519 -N ""
 ```
 
 This creates a key with **no passphrase** (the `-N ""` flag), which is
@@ -264,30 +270,58 @@ interactively.
 
 ### 9.2 Add the public key to the server
 
+Use absolute paths for `mkdir` and `cat` — the remote server's default
+`PATH` may be broken.
+
+**Windows (PowerShell):**
 ```bash
-cat C:/Users/alexl/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "/usr/bin/mkdir -p ~/.ssh && /usr/bin/cat >> ~/.ssh/authorized_keys"
+cat $env:USERPROFILE\.ssh\id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+**Linux / macOS (Bash):**
+```bash
+cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "/bin/mkdir -p ~/.ssh && /bin/cat >> ~/.ssh/authorized_keys"
 ```
 
 Type your server password when prompted.
 
 ### 9.3 Verify
 
+**Windows (PowerShell):**
 ```bash
-ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i C:/Users/alexl/.ssh/id_ed25519 alexljn5@infhub-server "echo ok"
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i $env:USERPROFILE\.ssh\id_ed25519 alexljn5@infhub-server "echo ok"
+```
+
+**Linux / macOS (Bash):**
+```bash
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i ~/.ssh/id_ed25519 alexljn5@infhub-server "echo ok"
 ```
 
 If this prints `ok`, the key works.
 
 ### 9.4 Configure the app
 
-Edit `src/containers/bot-config.json`:
+Edit `src/containers/bot-config.json`. The app automatically resolves the
+correct key path for your platform, so you can use a platform-relative path:
 
+**Windows:**
 ```json
 {
     "sshHost": "infhub-server",
     "sshUser": "alexljn5",
     "sshPort": "22",
     "sshKey": "C:\\Users\\alexl\\.ssh\\id_ed25519",
+    "autoStart": true
+}
+```
+
+**Linux / macOS:**
+```json
+{
+    "sshHost": "infhub-server",
+    "sshUser": "alexljn5",
+    "sshPort": "22",
+    "sshKey": "~/.ssh/id_ed25519",
     "autoStart": true
 }
 ```

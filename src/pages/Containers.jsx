@@ -11,6 +11,7 @@ const TABS = {
 const SSH_SETUP = {
     Windows: {
         label: 'Windows (PowerShell)',
+        keyPath: '$env:USERPROFILE\\.ssh\\id_ed25519',
         steps: [
             'Open PowerShell in your project directory',
             'Generate an Ed25519 key with no passphrase:',
@@ -23,6 +24,7 @@ const SSH_SETUP = {
     },
     Linux: {
         label: 'Linux (Bash)',
+        keyPath: '~/.ssh/id_ed25519',
         steps: [
             'Open a terminal in your project directory',
             'Generate an Ed25519 key with no passphrase:',
@@ -35,6 +37,7 @@ const SSH_SETUP = {
     },
     Mac: {
         label: 'macOS (Bash)',
+        keyPath: '~/.ssh/id_ed25519',
         steps: [
             'Open Terminal in your project directory',
             'Generate an Ed25519 key with no passphrase:',
@@ -289,7 +292,7 @@ export default function Containers({ route, setRoute }) {
   "sshHost": "infhub-server",
   "sshUser": "alexljn5",
   "sshPort": "22",
-  "sshKey": "<your-key-path>",
+  "sshKey": "${SSH_SETUP[infoPlatform].keyPath}",
   "autoStart": true
 }`}</code>
 

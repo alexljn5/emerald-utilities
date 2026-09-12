@@ -20,6 +20,20 @@ const SSH_OPTS = [
     '-o', 'IdentitiesOnly=yes'
 ];
 
+// Resolve an SSH key path for the current platform.
+// If the configured key is a Windows path (C:\...) on Linux/macOS,
+// or a Unix path (~/.ssh/...) on Windows, fall back to the platform default.
+function resolveSshKey(configuredKey) {
+    const platformDefault = path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519');
+    const isWindows = process.platform === 'win32';
+    const keyLooksWindows = /^[A-Za-z]:[\\/]/.test(configuredKey);
+    const keyLooksUnix = configuredKey.startsWith('/');
+
+    if (isWindows && keyLooksUnix) return platformDefault;
+    if (!isWindows && keyLooksWindows) return platformDefault;
+    return configuredKey || platformDefault;
+}
+
 export class BotInstance {
     constructor(config) {
         this.id = config.id || `bot-${Date.now()}`;
@@ -55,7 +69,7 @@ export class BotInstance {
             host: config.sshHost,
             user: config.sshUser || 'alexljn5',
             port: config.sshPort || '22',
-            key: config.sshKey || ''
+            key: resolveSshKey(config.sshKey || '')
         } : null);
     }
 

@@ -29,11 +29,32 @@ export function getSshConfig() {
     // Always read fresh from config file so runtime changes via setSshConfig()
     // take effect immediately without a module reload.
     const config = readBotConfig();
+
+    // Resolve the SSH key path for the current platform.
+    // If the configured key is a Windows path (C:\...) on Linux/macOS,
+    // or a Unix path (~/.ssh/...) on Windows, fall back to the platform default.
+    const configuredKey = config.sshKey || process.env.BOT_SSH_KEY || '';
+    const platformDefault = path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519');
+    const isWindows = process.platform === 'win32';
+    const keyLooksWindows = /^[A-Za-z]:[\\/]/.test(configuredKey);
+    const keyLooksUnix = configuredKey.startsWith('/');
+
+    let key;
+    if (isWindows && keyLooksUnix) {
+        // Unix path on Windows — fall back to Windows default
+        key = platformDefault;
+    } else if (!isWindows && keyLooksWindows) {
+        // Windows path on Linux/macOS — fall back to Unix default
+        key = platformDefault;
+    } else {
+        key = configuredKey || platformDefault;
+    }
+
     return {
         host: config.sshHost || process.env.BOT_SSH_HOST || '',
         user: config.sshUser || process.env.BOT_SSH_USER || 'alexljn5',
         port: config.sshPort || process.env.BOT_SSH_PORT || '22',
-        key: config.sshKey || process.env.BOT_SSH_KEY || path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519')
+        key
     };
 }
 

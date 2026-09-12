@@ -64,13 +64,26 @@ const SSH_OPTS = [
     '-o', 'IdentitiesOnly=yes'
 ];
 
+function resolveSshKey(configuredKey) {
+    // If the configured key is a Windows path (C:\...) on Linux/macOS,
+    // or a Unix path (~/.ssh/...) on Windows, fall back to the platform default.
+    const platformDefault = path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519');
+    const isWindows = process.platform === 'win32';
+    const keyLooksWindows = /^[A-Za-z]:[\\/]/.test(configuredKey);
+    const keyLooksUnix = configuredKey.startsWith('/');
+
+    if (isWindows && keyLooksUnix) return platformDefault;
+    if (!isWindows && keyLooksWindows) return platformDefault;
+    return configuredKey || platformDefault;
+}
+
 function getSshConfig() {
     const config = readBotConfig();
     return {
         host: config.sshHost || '',
         user: config.sshUser || 'alexljn5',
         port: config.sshPort || '22',
-        key: config.sshKey || path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519')
+        key: resolveSshKey(config.sshKey || '')
     };
 }
 

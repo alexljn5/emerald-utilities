@@ -244,7 +244,83 @@ Simply set `DB_HOST=127.0.0.1` for local development.
 
 ---
 
-## 9. Future: Emerald's Own Networking/Data Layer
+## 9. SSH Key Setup (Required for Container Module)
+
+The Containers page (`src/pages/Containers.jsx`) needs SSH access to the
+homelab server to list Docker containers. This is separate from the
+database bridge — it uses SSH, not PostgreSQL.
+
+### 9.1 Generate an SSH key
+
+If you don't already have a key for this machine:
+
+```bash
+ssh-keygen -t ed25519 -C "alexljn5@infhub" -f C:/Users/alexl/.ssh/id_ed25519 -N ""
+```
+
+This creates a key with **no passphrase** (the `-N ""` flag), which is
+required because the app uses `BatchMode=yes` and cannot type a passphrase
+interactively.
+
+### 9.2 Add the public key to the server
+
+```bash
+cat C:/Users/alexl/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no alexljn5@infhub-server "/usr/bin/mkdir -p ~/.ssh && /usr/bin/cat >> ~/.ssh/authorized_keys"
+```
+
+Type your server password when prompted.
+
+### 9.3 Verify
+
+```bash
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes -i C:/Users/alexl/.ssh/id_ed25519 alexljn5@infhub-server "echo ok"
+```
+
+If this prints `ok`, the key works.
+
+### 9.4 Configure the app
+
+Edit `src/containers/bot-config.json`:
+
+```json
+{
+    "sshHost": "infhub-server",
+    "sshUser": "alexljn5",
+    "sshPort": "22",
+    "sshKey": "C:\\Users\\alexl\\.ssh\\id_ed25519",
+    "autoStart": true
+}
+```
+
+### 9.5 Per-machine note
+
+This setup must be done on **every machine** you connect to the homelab
+from. The SSH key is machine-specific — you need to generate a new key on
+each machine and add the public key to the server's `authorized_keys`.
+
+The server accumulates keys, so you can add multiple machine keys over time.
+
+---
+
+## 10. Remote Server PATH
+
+The homelab server's default `PATH` may be broken (e.g. only
+`/usr/share/archcraft/scripts`), causing `docker`, `screen`, and other
+commands to fail with "command not found".
+
+The app handles this automatically by prepending a full `PATH` export to
+every SSH command:
+
+```bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/usr/lib/docker:/bin:/sbin && <command>
+```
+
+No configuration needed — this is built into `src/containers/bot-discovery.js`,
+`bot-manager.js`, and `bot-instance.js`.
+
+---
+
+## 11. Future: Emerald's Own Networking/Data Layer
 
 This is NOT part of the current implementation.
 

@@ -102,7 +102,11 @@ function isRemote() {
 function sshCommand(localCmd) {
     if (!isRemote()) return localCmd;
     const { host, user, port, key } = getSshConfig();
-    const ssh = ['ssh', ...SSH_OPTS, '-p', port, '-i', key, `${user}@${host}`, localCmd];
+    // Prepend a full PATH export — the remote server's default PATH may be
+    // broken (e.g. only /usr/share/archcraft/scripts), causing "command not
+    // found" for docker, screen, etc.
+    const remoteCmd = `export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/usr/lib/docker:/bin:/sbin && ${localCmd}`;
+    const ssh = ['ssh', ...SSH_OPTS, '-p', port, '-i', key, `${user}@${host}`, remoteCmd];
     return ssh;
 }
 

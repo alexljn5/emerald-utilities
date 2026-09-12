@@ -1,0 +1,7 @@
+{
+    "sshHost": "infhub-server",
+    "sshUser": "alexljn5",
+    "sshPort": "22",
+    "sshKey": "C:\\Users\\alexl\\.ssh\\id_ed25519",
+    "autoStart": true
+}

@@ -1,4 +1,4 @@
-# src/bots/infbot-src/docker-compose.yml
+# src/containers/infbot-src/docker-compose.yml
 # Homelab deployment for INF-BOT
 # Usage: docker compose up -d --build
 

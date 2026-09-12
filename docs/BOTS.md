@@ -15,13 +15,86 @@ INFBOT is a Discord bot integrated into Emerald Utilities. It supports two runti
 
 Both modes survive app/PC restarts. The mode is selected automatically based on platform, or explicitly via the `BOT_MODE` environment variable.
 
+## Tailscale Integration
+
+The containers module uses Tailscale as an OS-level networking layer — exactly like the
+rest of Emerald Utilities (see [`docs/TAILSCALE_BRIDGE.md`](./TAILSCALE_BRIDGE.md)).
+
+**Architectural rule:** Emerald Utilities does NOT start, stop, authenticate, or manage
+Tailscale. It simply uses hostnames that the operating system resolves. Whether
+`infhub-server` is reachable through Tailscale, LAN, localhost, or another network is
+irrelevant to the application.
+
+### How It Works
+
+The SSH host configured in `src/containers/bot-config.json` points at the Tailscale
+MagicDNS hostname:
+
+```json
+{
+    "sshHost": "infhub-server",
+    "sshUser": "alexljn5",
+    "sshPort": "22",
+    "sshKey": "C:\\Users\\alexl\\.ssh\\id_ed25519",
+    "autoStart": true
+}
+```
+
+When the bot manager connects to the homelab, it uses:
+
+```bash
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes \
+    -p 22 -i C:\Users\alexl\.ssh\id_ed25519 alexljn5@infhub-server "docker ps -a"
+```
+
+The `infhub-server` hostname is resolved by the OS — Tailscale's MagicDNS handles the
+translation. No Tailscale-specific code exists in the containers module.
+
+### Configuration
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `BOT_SSH_HOST` | SSH host (Tailscale MagicDNS or IP) | `infhub-server` (from `bot-config.json`) |
+| `BOT_SSH_USER` | SSH username | `alexljn5` |
+| `BOT_SSH_PORT` | SSH port | `22` |
+| `BOT_SSH_KEY` | Path to SSH private key | `~/.ssh/id_ed25519` |
+| `BOT_TAILSCALE_HOST` | Override Tailscale MagicDNS hostname | `infhub-server` |
+| `BOT_TAILSCALE_HOST_ONLY` | Set to `true` to disable LAN IP fallbacks | `false` |
+
+The SSH host can be changed at runtime via the dashboard (Settings → Bot SSH Config),
+which calls `bot:setSshConfig`. The config is read dynamically — no restart required.
+
+### LAN Fallback
+
+By default, `bot-discovery.js` tries the Tailscale MagicDNS hostname first, then falls
+back to a list of known LAN IPs. This is for environments where Tailscale may not be
+active. To disable LAN fallback entirely (Tailscale-only mode), set:
+
+```env
+BOT_TAILSCALE_HOST_ONLY=true
+```
+
+### Verification
+
+```bash
+# Confirm Tailscale sees the homelab server
+tailscale status
+
+# Test SSH connectivity through Tailscale
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+    -i ~/.ssh/id_ed25519 alexljn5@infhub-server "echo ok"
+
+# Run the bot preflight check
+node src/database/scripts/db-preflight.js
+```
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Emerald Utilities                         │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│  │   Bots.jsx  │───▶│  bot-ipc.js │───▶│ bot-manager │     │
+│  │ Containers.jsx │───▶│  bot-ipc.js │───▶│ bot-manager │     │
 │  │  (Renderer) │    │  (IPC)      │    │  (Main)     │     │
 │  └─────────────┘    └─────────────┘    └──────┬──────┘     │
 │                                                │              │
@@ -41,10 +114,10 @@ Both modes survive app/PC restarts. The mode is selected automatically based on 
 ## File Structure
 
 ```
-src/bots/
-├── bot-manager.js          # Bot lifecycle manager (Docker + Screen modes)
+src/containers/
+├── bot-manager.js          # Container lifecycle manager (Docker + Screen modes)
 ├── bot-ipc.js              # IPC handlers for renderer communication
-├── bots.css                # Bots page styles
+├── containers.css          # Containers page styles
 └── infbot-src/
     ├── bot-entry.js        # Bot entry point (renamed from heavensgate.js)
     ├── commands.js         # Discord commands
@@ -70,7 +143,7 @@ src/bots/
 
 ### 1. Runtime Modes
 
-The bot manager (`src/bots/bot-manager.js`) supports two modes:
+The container manager (`src/containers/bot-manager.js`) supports two modes:
 
 | Mode | Default Platform | Process | Survival |
 |------|-----------------|---------|----------|
@@ -101,14 +174,14 @@ For existing homelab setups using GNU Screen, the bot manager can control a scre
 
 For development or Windows, the bot runs in Docker:
 
-- Built from `src/bots/infbot-src/Dockerfile`
+- Built from `src/containers/infbot-src/Dockerfile`
 - Runs with `restart: no` (does not auto-start on reboot)
 - If the image is missing, the dashboard auto-builds it before starting
 - Environment loaded from `src/.env`
 
 ### 4. Dashboard Controls
 
-The Bots page (`src/pages/Bots.jsx`) provides:
+The Containers page (`src/pages/Containers.jsx`) provides:
 
 | Control | Docker Action | Screen Action |
 |---------|--------------|---------------|
@@ -132,7 +205,7 @@ The dashboard shows these commands for manual management (Docker mode only):
 
 ```bash
 # Build the image
-docker build -t infbot src/bots/infbot-src/
+docker build -t infbot src/containers/infbot-src/
 
 # Run the container (first time)
 docker run -d --name infbot --restart unless-stopped --env-file src/.env infbot
@@ -221,7 +294,7 @@ If you want to manage your existing homelab infbot via the Emerald Utilities das
 
 1. Copy the bot source to your homelab:
    ```bash
-   scp -r src/bots/infbot-src/ user@homelab-host:/home/alexljn5/INFHUB/infbot/
+   scp -r src/containers/infbot-src/ user@homelab-host:/home/alexljn5/INFHUB/infbot/
    ```
 2. Ensure the entry point is `src/bot-entry.js` (renamed from `heavensgate.js`)
 3. Set `BOT_MODE=screen` in the environment where Emerald Utilities runs
@@ -250,7 +323,7 @@ For a fresh Docker deployment on homelab:
 
 ```bash
 # 1. Copy the bot source to homelab
-scp -r src/bots/infbot-src/ user@homelab-host:/opt/infbot/
+scp -r src/containers/infbot-src/ user@homelab-host:/opt/infbot/
 
 # 2. SSH into homelab
 ssh user@homelab-host

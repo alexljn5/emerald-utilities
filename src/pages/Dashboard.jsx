@@ -343,7 +343,7 @@ export default function Dashboard({ route, setRoute }) {
                     <button className="nav-btn full" type="button" onClick={() => setRoute('modUpdater')}>Mod Updater</button>
                     <button className="nav-btn full" type="button" onClick={() => setRoute('ai')}>AI</button>
                     <button className="nav-btn full" type="button" onClick={() => setRoute('creatorHub')}>Creator Hub</button>
-                    <button className="nav-btn full" type="button" onClick={() => setRoute('bots')}>Bots</button>
+                    <button className="nav-btn full" type="button" onClick={() => setRoute('containers')}>Containers</button>
                     <button className="nav-btn full" type="button" onClick={() => setRoute('about')}>About</button>
                 </div>
             </div>

@@ -14,8 +14,8 @@ import { startWorker as startXScraperForwardWorker, getStatus as getXScraperForw
 import { registerCreatorHubIpc } from './creator-hub/ipc.js';
 import { registerEnvIpc } from './utils/envIpc.js';
 import { resolvePath, resolveInternalScriptsPath } from './utils/pathResolver.js';
-import { registerBotIpcHandlers } from './bots/bot-ipc.js';
-import { autoStartBot, cleanup as cleanupBot, getAutoStartEnabled } from './bots/bot-manager.js';
+import { registerBotIpcHandlers } from './containers/bot-ipc.js';
+import { autoStartBot, cleanup as cleanupBot, getAutoStartEnabled } from './containers/bot-manager.js';
 import { default as databaseService } from './database/wrath.js';
 import { recover as recoverNetworkPersistence } from './database/network-persistence.js';
 import { ENABLE_DEVTOOLS, ENABLE_INAPP_NOTIFICATIONS, AI_MODE, DATABASE_MODE, LOCAL_AI_ENABLED } from './globals.js';

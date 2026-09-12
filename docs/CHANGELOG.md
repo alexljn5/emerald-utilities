@@ -13,6 +13,9 @@
   `formatDate`, `formatTime`, and `formatDateTime` helpers pinned to the
   `en-GB` locale (day/month/year order)
 - Unit tests for the date utility (`tests/unit/dateUtils.test.js`)
+- Container viewing bridge on the Containers page — lists all active Docker
+  containers (local + remote via Tailscale/SSH) with auto-refresh every 10s
+  (`container:list-active` and `container:list-all` IPC handlers)
 
 ### Changed
 - All user-facing date and time displays now use `en-GB` locale (dd/mm/yy)
@@ -23,9 +26,23 @@
   `pages/js/database.js`, `bot-entry.js`, and all Creator Hub UI components
   (`Sidebar.jsx`, `Queue.jsx`, `PostLogs.jsx`, `History.jsx`,
   `AccountPanel.jsx`, `LogViewer.jsx`)
+- Renamed `src/bots/` module to `src/containers/` to reflect its purpose as a
+  container management module; updated all imports in `heavensgate.js`,
+  `main.jsx`, `Dashboard.jsx`, and internal file references
+- Renamed `src/pages/Bots.jsx` → `src/pages/Containers.jsx`
+- Renamed `src/css/bots.css` → `src/css/containers.css`
 - `docs/STANDARDISATION.md` bumped to 0.1.7
 - `docs/TODO.md` archived to
   `docs/archive/todo/TODO-12-09-2026-11-13.md`
+
+### Fixed
+- Database connection status now shows "Connected" on first load instead of
+  "Disconnected" — `getConnectionInfo()` in `wrath.js` now performs a fresh
+  health check before returning status
+- `wrath.js` `getConnectionInfo()` no longer references undefined `resolved`
+  variable; uses `connectionInfo` from `db-pool.js`
+- Database host is configurable via the Database Configuration section in the
+  Database page (writes to `config.json`, requires app restart)
 
 ### Security
 - No security changes in this release

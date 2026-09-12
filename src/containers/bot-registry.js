@@ -1,4 +1,4 @@
-// src/bots/bot-registry.js
+// src/containers/bot-registry.js
 // Registry that manages multiple bot instances.
 // Provides a unified interface for bot operations across all registered bots.
 

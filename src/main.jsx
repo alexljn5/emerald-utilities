@@ -12,11 +12,11 @@ import Database from './pages/Database.jsx';
 import PortfolioMonitor from './pages/PortfolioMonitor.jsx';
 import CreatorHub from './creator-hub/ui/CreatorHubPage.jsx';
 import Tasks from './pages/Tasks.jsx';
-import Bots from './pages/Bots.jsx';
+import Containers from './pages/Containers.jsx';
 import './css/globals.css';
 import './css/creator-hub.css';
 import './css/tasks.css';
-import './css/bots.css';
+import './css/containers.css';
 
 const pages = {
     dashboard: Dashboard,
@@ -31,7 +31,7 @@ const pages = {
     portfolio: PortfolioMonitor,
     creatorHub: CreatorHub,
     tasks: Tasks,
-    bots: Bots
+    containers: Containers
 };
 
 function App() {

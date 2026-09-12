@@ -1,4 +1,4 @@
-// src/bots/bot-discovery.js
+// src/containers/bot-discovery.js
 // Discovers bots on the local network and remote hosts using internal tools.
 // Supports Docker containers, GNU Screen sessions, and Node.js processes.
 
@@ -25,14 +25,26 @@ function readBotConfig() {
     return {};
 }
 
-// Known homelab hosts to scan
-const KNOWN_HOSTS = [
-    '192.168.2.27',
-    '192.168.1.100',
-    '192.168.1.50',
-    '192.168.1.10',
-    '192.168.0.100'
-];
+// Primary homelab host via Tailscale MagicDNS.
+// This replaces the old IP-based KNOWN_HOSTS scanning that caused lag.
+// Tailscale is an OS-level networking layer — we simply use the MagicDNS
+// hostname and let the operating system resolve it however it is reachable.
+const TAILSCALE_HOST = process.env.BOT_TAILSCALE_HOST || 'infhub-server';
+
+// Known homelab hosts to scan. The Tailscale MagicDNS hostname is always
+// tried first; LAN IPs are kept only as a fallback for environments where
+// Tailscale is not active. To disable LAN fallback entirely, set
+// BOT_TAILSCALE_HOST_ONLY=true.
+const KNOWN_HOSTS = process.env.BOT_TAILSCALE_HOST_ONLY === 'true'
+    ? [TAILSCALE_HOST]
+    : [
+        TAILSCALE_HOST,
+        '192.168.2.27',
+        '192.168.1.100',
+        '192.168.1.50',
+        '192.168.1.10',
+        '192.168.0.100'
+    ];
 
 // Common bot container/session names to look for
 const BOT_NAMES = ['infbot', 'emerald-bot', 'discord-bot', 'bot'];
@@ -73,7 +85,7 @@ function runSshCommand(host, user, port, key, cmd, options = {}) {
 }
 
 function canSsh(host, user, port, key) {
-    const result = runSshCommand(host, user, port, key, 'echo ok', { timeout: 5000 });
+    const result = runSshCommand(host, user, port, key, 'echo ok', { timeout: 3000 });
     return result.status === 0 && result.stdout.trim() === 'ok';
 }
 
@@ -82,7 +94,7 @@ function discoverDockerContainers(host, user, port, key) {
     const bots = [];
     try {
         // List all containers (running and stopped)
-        const result = runSshCommand(host, user, port, key, 'docker ps -a --format "{{.Names}}|{{.Status}}|{{.Image}}"', { timeout: 15000 });
+        const result = runSshCommand(host, user, port, key, 'docker ps -a --format "{{.Names}}|{{.Status}}|{{.Image}}"', { timeout: 8000 });
         if (result.status !== 0) return bots;
 
         const lines = result.stdout.trim().split('\n').filter(line => line.trim());
@@ -121,7 +133,7 @@ function discoverDockerContainers(host, user, port, key) {
 function discoverScreenSessions(host, user, port, key) {
     const bots = [];
     try {
-        const result = runSshCommand(host, user, port, key, 'screen -list', { timeout: 10000 });
+        const result = runSshCommand(host, user, port, key, 'screen -list', { timeout: 5000 });
         if (result.status !== 0) return bots;
 
         const output = result.stdout;
@@ -151,7 +163,7 @@ function discoverBotProcesses(host, user, port, key) {
     const bots = [];
     try {
         // Check for Node.js processes that might be bots
-        const result = runSshCommand(host, user, port, key, 'ps aux | grep -E "node.*bot|node.*infbot|node.*discord" | grep -v grep', { timeout: 10000 });
+        const result = runSshCommand(host, user, port, key, 'ps aux | grep -E "node.*bot|node.*infbot|node.*discord" | grep -v grep', { timeout: 5000 });
         if (result.status !== 0) return bots;
 
         const lines = result.stdout.trim().split('\n').filter(line => line.trim());
@@ -197,11 +209,16 @@ async function scanHost(host, user, port, key) {
 }
 
 // ==================== PUBLIC API ====================
+
+/**
+ * Discover bots from remote hosts. Uses Tailscale (infhub-server) first with short timeouts to prevent lag.
+ * @returns {Promise<DiscoveredBot[]>}
+ */
 export async function discoverBots() {
     const sshConfig = getSshConfig();
     const allBots = [];
 
-    // Scan known hosts in parallel
+    // Scan known hosts in parallel with short timeouts to prevent lag
     const hostPromises = KNOWN_HOSTS.map(async (host) => {
         try {
             return await scanHost(host, sshConfig.user, sshConfig.port, sshConfig.key);
@@ -210,9 +227,11 @@ export async function discoverBots() {
         }
     });
 
-    const hostResults = await Promise.all(hostPromises);
-    for (const hostBots of hostResults) {
-        allBots.push(...hostBots);
+    const hostResults = await Promise.allSettled(hostPromises);
+    for (const result of hostResults) {
+        if (result.status === 'fulfilled') {
+            allBots.push(...result.value);
+        }
     }
 
     // Also check local Docker if available
@@ -224,6 +243,61 @@ export async function discoverBots() {
     }
 
     return allBots;
+}
+
+/**
+ * Discover ALL Docker containers from the homelab server via Tailscale.
+ * Connects to infhub-server (Tailscale MagicDNS) and lists all containers.
+ * This is the primary method for the Container Viewer - it does NOT create containers,
+ * it only reads the Docker state from the remote server.
+ * @returns {Promise<RemoteContainer[]>}
+ */
+export async function discoverRemoteContainers() {
+    const sshConfig = getSshConfig();
+
+    // Try Tailscale MagicDNS first, then fall back to LAN IP
+    const hostsToTry = [TAILSCALE_HOST, '192.168.2.27'];
+    if (process.env.BOT_TAILSCALE_HOST_ONLY === 'true') {
+        hostsToTry.pop(); // remove LAN fallback
+    }
+
+    for (const host of hostsToTry) {
+        try {
+            const result = runSshCommand(
+                host,
+                sshConfig.user,
+                sshConfig.port,
+                sshConfig.key,
+                'docker ps -a --format "{{.ID}}|{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}|{{.CreatedAt}}"',
+                { timeout: 8000 }
+            );
+
+            if (result.status === 0 && result.stdout.trim()) {
+                const containers = result.stdout.trim().split('\n').map(line => {
+                    const parts = line.split('|');
+                    const status = parts[2] || '';
+                    const isRunning = status.toLowerCase().startsWith('up') && !status.toLowerCase().includes('exited');
+                    return {
+                        id: parts[0] || '',
+                        name: parts[1] || '',
+                        status: isRunning ? 'running' : (status.toLowerCase().includes('exited') ? 'exited' : 'unknown'),
+                        image: parts[3] || '',
+                        ports: parts[4] || '',
+                        createdAt: parts[5] || '',
+                        host: host,
+                    };
+                }).filter(c => c.name);
+
+                if (containers.length > 0) {
+                    return containers;
+                }
+            }
+        } catch {
+            // Try next host
+        }
+    }
+
+    return [];
 }
 
 function discoverLocalDocker() {

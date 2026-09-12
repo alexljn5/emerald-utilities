@@ -1,4 +1,4 @@
-// src/bots/bot-ipc.js
+// src/containers/bot-ipc.js
 // IPC handlers for bot control from the renderer process.
 // Supports both single-bot (legacy) and multi-bot operations.
 
@@ -20,6 +20,7 @@ import {
     detectBotScripts,
     botRegistry,
     discoverBots,
+    discoverRemoteContainers,
     getKnownHosts,
     addKnownHost,
     removeKnownHost
@@ -297,6 +298,30 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
             return { ok: true, scripts };
         } catch (err) {
             return { ok: false, error: err.message };
+        }
+    });
+
+    // ==================== CONTAINER VIEWING BRIDGE ====================
+    // Lists all Docker containers from the homelab server via Tailscale.
+    // Connects to infhub-server (Tailscale MagicDNS) and runs `docker ps -a`
+    // to show ALL containers (running and stopped). Does NOT create containers.
+
+    ipcMain.handle('container:list-active', async () => {
+        try {
+            const containers = await discoverRemoteContainers();
+            const activeContainers = containers.filter(c => c.status === 'running');
+            return { ok: true, containers: activeContainers, total: activeContainers.length };
+        } catch (err) {
+            return { ok: false, error: err.message, containers: [], total: 0 };
+        }
+    });
+
+    ipcMain.handle('container:list-all', async () => {
+        try {
+            const containers = await discoverRemoteContainers();
+            return { ok: true, containers, total: containers.length };
+        } catch (err) {
+            return { ok: false, error: err.message, containers: [], total: 0 };
         }
     });
 }

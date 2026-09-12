@@ -1,4 +1,4 @@
-# src/bots/infbot-src/Dockerfile
+# src/containers/infbot-src/Dockerfile
 FROM node:20-alpine
 
 # Set working directory

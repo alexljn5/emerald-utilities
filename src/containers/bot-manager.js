@@ -1,4 +1,4 @@
-// src/bots/bot-manager.js
+// src/containers/bot-manager.js
 // Main-process module that manages Discord bots.
 // Supports multiple modes:
 //   - 'docker'  : bot runs in a Docker container
@@ -26,11 +26,14 @@ export function setAutoStartEnabled(enabled) {
 }
 
 export function getSshConfig() {
+    // Always read fresh from config file so runtime changes via setSshConfig()
+    // take effect immediately without a module reload.
+    const config = readBotConfig();
     return {
-        host: SSH_HOST,
-        user: SSH_USER,
-        port: SSH_PORT,
-        key: SSH_KEY
+        host: config.sshHost || process.env.BOT_SSH_HOST || '',
+        user: config.sshUser || process.env.BOT_SSH_USER || 'alexljn5',
+        port: config.sshPort || process.env.BOT_SSH_PORT || '22',
+        key: config.sshKey || process.env.BOT_SSH_KEY || path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519')
     };
 }
 
@@ -55,7 +58,7 @@ export function getBotMode() {
 // Docker config
 const DOCKER_IMAGE = 'infbot';
 const DOCKER_CONTAINER = 'infbot';
-const DOCKER_BOT_DIR = __dirname; // src/bots/infbot-src/
+const DOCKER_BOT_DIR = __dirname; // src/containers/infbot-src/
 const ENV_FILE = path.join(__dirname, '..', '..', 'src', '.env'); // src/.env
 
 // Screen config (homelab)
@@ -67,39 +70,30 @@ const SCREEN_START_CMD = `node ${SCREEN_ENTRY}`;
 
 // Script config (abstract mode - auto-detects and runs bot scripts)
 // Use process.cwd() so it works both in dev and in the built Electron app
-const SCRIPT_BOT_DIR = process.env.BOT_SCRIPT_DIR || path.join(process.cwd(), 'src', 'bots', 'infbot-src');
+const SCRIPT_BOT_DIR = process.env.BOT_SCRIPT_DIR || path.join(process.cwd(), 'src', 'containers', 'infbot-src');
 const SCRIPT_ENTRY = process.env.BOT_SCRIPT_ENTRY || 'bot-entry.js';
 const SCRIPT_START_CMD = `node ${SCRIPT_ENTRY}`;
 let scriptProcess = null;
 let scriptPid = null;
-let scriptRemote = isRemote(); // script mode can also run remotely via SSH
+// script mode can also run remotely via SSH — checked dynamically so
+// runtime config changes via setSshConfig() take effect immediately.
+function scriptRemote() { return isRemote(); }
 
 // SSH remote host config (for managing bot on homelab from Windows)
-// Read from bot-config.json with env var fallbacks
-function getSshConfigFromFile() {
-    const config = readBotConfig();
-    return {
-        host: config.sshHost || process.env.BOT_SSH_HOST || '',
-        user: config.sshUser || process.env.BOT_SSH_USER || 'alexljn5',
-        port: config.sshPort || process.env.BOT_SSH_PORT || '22',
-        key: config.sshKey || process.env.BOT_SSH_KEY || path.join(process.env.USERPROFILE || process.env.HOME, '.ssh', 'id_ed25519')
-    };
-}
-
-const SSH_CONFIG = getSshConfigFromFile();
-const SSH_HOST = SSH_CONFIG.host;
-const SSH_USER = SSH_CONFIG.user;
-const SSH_PORT = SSH_CONFIG.port;
-const SSH_KEY = SSH_CONFIG.key;
+// Configuration is read dynamically from bot-config.json so that runtime
+// changes via setSshConfig() take effect immediately without a module reload.
+// Tailscale MagicDNS hostnames (e.g. 'infhub-server') are resolved by the
+// operating system — no Tailscale-specific code is needed here.
 const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'BatchMode=yes'];
 
 function isRemote() {
-    return Boolean(SSH_HOST);
+    return Boolean(getSshConfig().host);
 }
 
 function sshCommand(localCmd) {
     if (!isRemote()) return localCmd;
-    const ssh = ['ssh', ...SSH_OPTS, '-p', SSH_PORT, '-i', SSH_KEY, `${SSH_USER}@${SSH_HOST}`, localCmd];
+    const { host, user, port, key } = getSshConfig();
+    const ssh = ['ssh', ...SSH_OPTS, '-p', port, '-i', key, `${user}@${host}`, localCmd];
     return ssh;
 }
 
@@ -588,13 +582,13 @@ async function startBotScript() {
             return { ok: true, status: botStatus, alreadyRunning: true };
         }
 
-        if (scriptRemote) {
+        if (scriptRemote()) {
             // Remote execution via SSH - use screen config which is set up for the remote host
             const cmd = `cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}`;
             runSshCommand(`screen -dmS ${SCREEN_SESSION} bash -c "${cmd}; exec bash"`, { stdio: 'ignore' });
             await new Promise(resolve => setTimeout(resolve, 1500));
             botStatus = 'running';
-            addBotLog(`Remote script started via SSH on ${SSH_HOST}`, 'system');
+            addBotLog(`Remote script started via SSH on ${getSshConfig().host}`, 'system');
             streamScreenLogs(); // reuse screen log streaming for remote
             return { ok: true, status: botStatus };
         } else {
@@ -682,7 +676,7 @@ async function startBotScreen() {
         if (screenSessionExists()) {
             botStatus = 'running';
             addBotLog(`Screen session '${SCREEN_SESSION}' started`, 'system');
-            addBotLog(isRemote() ? `SSH: ${SSH_USER}@${SSH_HOST}` : `Attach with: screen -r ${SCREEN_SESSION}`, 'system');
+            addBotLog(isRemote() ? `SSH: ${getSshConfig().user}@${getSshConfig().host}` : `Attach with: screen -r ${SCREEN_SESSION}`, 'system');
             streamScreenLogs();
             return { ok: true, status: botStatus };
         } else {
@@ -718,7 +712,7 @@ export function stopBot() {
                 }
             }
         } else if (mode === 'script') {
-            if (scriptRemote) {
+            if (scriptRemote()) {
                 if (screenSessionExists()) {
                     runSshCommand(`screen -S ${SCREEN_SESSION} -X quit`, { stdio: 'ignore' });
                 }
@@ -911,7 +905,7 @@ function getScriptStatus() {
         let screenExists = false;
         let dockerRunning = false;
 
-        if (scriptRemote) {
+        if (scriptRemote()) {
             // For remote script mode, check via screen session (since we use screen for remote)
             screenExists = screenSessionExists();
         } else {
@@ -947,8 +941,8 @@ function getScriptStatus() {
             error: botError,
             logCount: botLogs.length,
             screenSession: SCREEN_SESSION,
-            remote: scriptRemote,
-            sshHost: SSH_HOST,
+            remote: scriptRemote(),
+            sshHost: getSshConfig().host,
             dockerFallback: dockerRunning
         };
     } catch (err) {
@@ -973,7 +967,7 @@ export function getBotLogs(limit = 100) {
         if (dockerStatus.isRunning) {
             return getDockerLogs(limit);
         }
-        if (scriptRemote) {
+        if (scriptRemote()) {
             return getScreenLogs(limit); // remote script uses screen for logs
         }
         return getScriptLogs(limit);
@@ -1148,7 +1142,7 @@ export async function autoStartBot() {
         const status = getBotStatus();
         if (status.isRunning) {
             console.log('[BotManager] Bot script already running');
-            if (scriptRemote) {
+            if (scriptRemote()) {
                 streamScreenLogs();
             } else {
                 streamScriptLogs();
@@ -1186,18 +1180,19 @@ export function getBuildInstructions() {
         };
     } else if (mode === 'screen') {
         if (isRemote()) {
+            const ssh = getSshConfig();
             return {
                 mode: 'screen',
                 session: SCREEN_SESSION,
                 botDir: SCREEN_BOT_DIR,
                 entry: SCREEN_ENTRY,
                 remote: true,
-                sshHost: SSH_HOST,
-                sshUser: SSH_USER,
-                startCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}"`,
-                stopCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -S ${SCREEN_SESSION} -X quit"`,
-                attachCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -r ${SCREEN_SESSION}"`,
-                logsCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt"`
+                sshHost: ssh.host,
+                sshUser: ssh.user,
+                startCommand: `ssh -p ${ssh.port} -i ${ssh.key} ${ssh.user}@${ssh.host} "cd ${SCREEN_BOT_DIR} && ${SCREEN_START_CMD}"`,
+                stopCommand: `ssh -p ${ssh.port} -i ${ssh.key} ${ssh.user}@${ssh.host} "screen -S ${SCREEN_SESSION} -X quit"`,
+                attachCommand: `ssh -p ${ssh.port} -i ${ssh.key} ${ssh.user}@${ssh.host} "screen -r ${SCREEN_SESSION}"`,
+                logsCommand: `ssh -p ${ssh.port} -i ${ssh.key} ${ssh.user}@${ssh.host} "screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt"`
             };
         }
         return {
@@ -1211,16 +1206,17 @@ export function getBuildInstructions() {
             logsCommand: `screen -S ${SCREEN_SESSION} -X hardcopy /tmp/infbot-screen-hardcopy.txt && cat /tmp/infbot-screen-hardcopy.txt`
         };
     } else if (mode === 'script') {
-        if (scriptRemote) {
+        if (scriptRemote()) {
+            const ssh = getSshConfig();
             return {
                 mode: 'script',
                 remote: true,
-                sshHost: SSH_HOST,
-                sshUser: SSH_USER,
+                sshHost: ssh.host,
+                sshUser: ssh.user,
                 botDir: SCRIPT_BOT_DIR,
                 entry: SCRIPT_ENTRY,
-                startCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "cd ${SCRIPT_BOT_DIR} && ${SCRIPT_START_CMD}"`,
-                stopCommand: `ssh -p ${SSH_PORT} -i ${SSH_KEY} ${SSH_USER}@${SSH_HOST} "screen -S ${SCREEN_SESSION} -X quit"`,
+                startCommand: `ssh -p ${ssh.port} -i ${ssh.key} ${ssh.user}@${ssh.host} "cd ${SCRIPT_BOT_DIR} && ${SCRIPT_START_CMD}"`,
+                stopCommand: `ssh -p ${ssh.port} -i ${ssh.key} ${ssh.user}@${ssh.host} "screen -S ${SCREEN_SESSION} -X quit"`,
                 logsCommand: `Logs streamed in-app via SSH`
             };
         }
@@ -1266,5 +1262,5 @@ export function cleanup() {
 
 // ==================== REGISTRY EXPORTS ====================
 export { botRegistry } from './bot-registry.js';
-export { discoverBots, getKnownHosts, addKnownHost, removeKnownHost } from './bot-discovery.js';
+export { discoverBots, discoverRemoteContainers, getKnownHosts, addKnownHost, removeKnownHost } from './bot-discovery.js';
 export { BotInstance } from './bot-instance.js';

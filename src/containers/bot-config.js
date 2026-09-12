@@ -1,4 +1,4 @@
-// src/bots/bot-config.js
+// src/containers/bot-config.js
 // Shared bot configuration read/write functions.
 // Used by bot-manager.js and bot-registry.js to avoid circular dependencies.
 

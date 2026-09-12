@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# src/bots/infbot-src/stop_infbot.sh
+# src/containers/infbot-src/stop_infbot.sh
 # Stop the infbot Docker container.
 # Usage:
 #   ./stop_infbot.sh        # stop container

@@ -11,6 +11,63 @@
     overflow-x: hidden;
 }
 
+/* ==================== TAB BAR ==================== */
+.botsTabBar {
+    display: flex;
+    gap: var(--space-xs);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: var(--space-xs);
+}
+
+.botsTab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+    color: #aaa;
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.botsTab:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.botsTab--active {
+    color: var(--color-text);
+    border-bottom-color: var(--color-accent);
+}
+
+.botsTab--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.botsTabBadge {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: rgba(255, 170, 0, 0.15);
+    color: #ffaa00;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.botsTabContent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
 .botsContent--placeholder {
     display: flex;
     align-items: center;
@@ -31,6 +88,11 @@
 .botsPlaceholder p {
     margin: 0;
     font-size: clamp(0.8rem, 1vw, 0.95rem);
+}
+
+.botsPlaceholderHint {
+    color: #666 !important;
+    font-size: clamp(0.7rem, 0.9vw, 0.85rem) !important;
 }
 
 /* ==================== SIDEBAR ==================== */
@@ -152,4 +214,83 @@
 .botsSidebarError {
     color: #ff6666;
     font-size: clamp(0.7rem, 0.8vw, 0.8rem);
+}
+
+/* ==================== CONTAINER VIEWING BRIDGE ==================== */
+
+.containerBridgeSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.containerBridgeSection h2 {
+    margin: 0;
+    font-size: clamp(0.9rem, 1.2vw, 1.1rem);
+    color: var(--color-text);
+}
+
+.containerList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.containerCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    transition: border-color 0.15s ease;
+}
+
+.containerCard:hover {
+    border-color: var(--color-accent);
+}
+
+.containerCardHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.containerName {
+    font-size: clamp(0.8rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+.containerStatus {
+    font-size: clamp(0.7rem, 0.8vw, 0.8rem);
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.containerStatus.statusRunning {
+    background: rgba(68, 255, 102, 0.15);
+    color: #44ff66;
+}
+
+.containerStatus.statusStopped {
+    background: rgba(102, 102, 102, 0.15);
+    color: #666;
+}
+
+.containerDetails {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    font-size: clamp(0.7rem, 0.8vw, 0.8rem);
+    color: #aaa;
+}
+
+.containerDetails span {
+    display: inline-flex;
+    align-items: center;
 }

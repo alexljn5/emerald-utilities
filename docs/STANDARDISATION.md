@@ -359,3 +359,21 @@ When a TODO document is completed, archive it following this system:
 5. Never delete archived TODOs — they serve as historical records
 
 **Current archive:** `docs/archive/todo/TODO-12-09-2026-11-13.md`
+
+---
+
+## Containers Module
+
+The `src/containers/` module manages Docker containers and bot instances (INFBOT, etc.). It was renamed from `src/bots/` to better reflect its purpose as a container management module.
+
+**Key files:**
+- `src/containers/bot-manager.js` — Container lifecycle manager (Docker + Screen modes)
+- `src/containers/bot-ipc.js` — IPC handlers for renderer communication
+- `src/containers/bot-discovery.js` — Discovers containers on local and remote hosts
+- `src/containers/bot-registry.js` — Registry for multiple container instances
+- `src/containers/bot-instance.js` — Represents a single container instance
+- `src/containers/bot-config.js` — Shared configuration read/write
+- `src/containers/infbot-src/` — INFBOT Discord bot source code
+
+**Container Viewing Bridge:**
+The Containers page (`src/pages/Containers.jsx`) includes a "Container Viewing Bridge" that lists all active Docker containers (local + remote via Tailscale/SSH). It uses the `container:list-active` and `container:list-all` IPC handlers to discover and display containers with their status, type, host, and image information. The list auto-refreshes every 10 seconds.

@@ -1,4 +1,4 @@
-// src/bots/bot-instance.js
+// src/containers/bot-instance.js
 // Represents a single bot instance with its own state, config, and management methods.
 
 import { execSync, spawn, spawnSync, execFileSync } from 'child_process';
@@ -31,7 +31,7 @@ export class BotInstance {
         this.screenSession = config.screenSession || 'infbot';
         this.screenBotDir = config.screenBotDir || '/home/alexljn5/INFHUB/infbot';
         this.screenEntry = config.screenEntry || 'src/bot-entry.js';
-        this.scriptBotDir = config.scriptBotDir || path.join(process.cwd(), 'src', 'bots', 'infbot-src');
+        this.scriptBotDir = config.scriptBotDir || path.join(process.cwd(), 'src', 'containers', 'infbot-src');
         this.scriptEntry = config.scriptEntry || 'bot-entry.js';
 
         // Runtime state

@@ -1,0 +1,591 @@
+.settingsPage {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    min-height: min-content;
+    height: auto;
+    overflow: visible;
+    padding: clamp(0.65rem, 1.1vw, 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.6rem, 1vw, 0.9rem);
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.settingsIntro {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: clamp(0.6rem, 1vw, 0.85rem);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.settingsIntro>div {
+    min-width: 0;
+}
+
+.settingsIntro h2 {
+    margin: 0 0 0.25rem;
+    color: var(--color-accent);
+    font-size: clamp(1.1rem, 1.5vw, 1.5rem);
+    overflow-wrap: anywhere;
+}
+
+.settingsIntro p {
+    margin: 0;
+    max-width: min(58ch, 100%);
+    color: #d0d0d0;
+    font-size: clamp(0.75rem, 0.95vw, 0.95rem);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.settingsHint,
+.settingsMessage {
+    color: #bbb;
+    font-size: clamp(0.66rem, 0.78vw, 0.82rem);
+    overflow-wrap: anywhere;
+}
+
+.settingsHint {
+    flex: 0 0 auto;
+}
+
+.settingsMessage {
+    padding: 0.45rem 0.6rem;
+    border: 1px solid rgba(255, 34, 34, 0.45);
+    border-radius: 6px;
+    background: rgba(255, 34, 34, 0.08);
+}
+
+.settingsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    grid-auto-rows: minmax(min-content, auto);
+    gap: clamp(0.55rem, 0.9vw, 0.8rem);
+    min-height: 0;
+    align-content: start;
+}
+
+.settingsCard {
+    min-width: 0;
+    min-height: min-content;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 0.85vw, 0.75rem);
+    padding: clamp(0.6rem, 0.95vw, 0.85rem);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.settingsCard h3 {
+    margin: 0;
+    color: var(--color-accent);
+    font-size: clamp(0.9rem, 1.05vw, 1.05rem);
+    overflow-wrap: anywhere;
+}
+
+.settingToggle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    min-width: 0;
+    padding: clamp(0.5rem, 0.85vw, 0.7rem);
+    border: 1px solid rgba(255, 34, 34, 0.45);
+    border-radius: 6px;
+    background: rgba(255, 34, 34, 0.05);
+    cursor: pointer;
+}
+
+.settingToggleText {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.settingToggleText strong {
+    font-size: clamp(0.76rem, 0.9vw, 0.9rem);
+    overflow-wrap: anywhere;
+}
+
+.settingToggleText span {
+    color: #bbb;
+    font-size: clamp(0.62rem, 0.76vw, 0.74rem);
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+}
+
+.settingToggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.toggleSwitch {
+    position: relative;
+    flex: 0 0 auto;
+    width: clamp(2.55rem, 3.4vw, 3.15rem);
+    height: clamp(1.15rem, 1.7vw, 1.4rem);
+    border: 1px solid rgba(255, 34, 34, 0.65);
+    border-radius: 999px;
+    background: #222;
+    transition: all 0.15s ease;
+}
+
+.toggleSwitch::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0.18rem;
+    width: calc(50% - 0.18rem);
+    height: calc(100% - 0.36rem);
+    transform: translateY(-50%);
+    border-radius: 999px;
+    background: var(--color-accent);
+    transition: all 0.15s ease;
+}
+
+.settingToggle input:checked+.toggleSwitch {
+    background: rgba(255, 34, 34, 0.22);
+}
+
+.settingToggle input:checked+.toggleSwitch::after {
+    left: calc(50% - 0.18rem);
+    background: #fff;
+}
+
+.settingField {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: clamp(0.5rem, 0.85vw, 0.7rem);
+    border: 1px solid rgba(255, 34, 34, 0.45);
+    border-radius: 6px;
+    background: rgba(255, 34, 34, 0.05);
+}
+
+.settingField span {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.settingField strong {
+    font-size: clamp(0.76rem, 0.9vw, 0.9rem);
+    overflow-wrap: anywhere;
+}
+
+.settingField span span {
+    color: #bbb;
+    font-size: clamp(0.62rem, 0.76vw, 0.74rem);
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+}
+
+.settingField input {
+    width: 100%;
+    min-width: 0;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--color-accent);
+    border-radius: 5px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: clamp(0.68rem, 0.82vw, 0.82rem);
+}
+
+.settingsActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.settingsLeftActions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 100%;
+    gap: 0.5rem;
+}
+
+.settingsLeftActions button {
+    width: 100%;
+}
+
+.settingsLeftMessage {
+    margin-top: 0.5rem;
+}
+
+/* ==================== ENVIRONMENT CONFIGURATION (REFACTORED) ==================== */
+
+/* Root wrapper — never absolute, always in flow */
+.settingsEnvironmentPanel {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Layout container — everything stacks vertically */
+.settingsEnvLayout {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.75rem, 1.2vw, 1rem);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* --- Header Card --- */
+.settingsEnvHeader {
+    position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
+    min-width: 0;
+    padding: clamp(0.6rem, 1vw, 0.85rem);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.settingsEnvHeader h2 {
+    margin: 0 0 0.35rem;
+    color: var(--color-accent);
+    font-size: clamp(0.9rem, 1.1vw, 1.15rem);
+}
+
+.settingsEnvHeaderDesc {
+    margin: 0 0 0.5rem;
+    color: #d0d0d0;
+    font-size: clamp(0.72rem, 0.85vw, 0.88rem);
+    line-height: 1.4;
+    max-width: 60ch;
+}
+
+.settingsEnvHeaderMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.4rem;
+    font-size: clamp(0.68rem, 0.78vw, 0.8rem);
+    color: #bbb;
+    line-height: 1.5;
+}
+
+.settingsEnvMetaLabel {
+    color: #888;
+}
+
+.settingsEnvMetaValue {
+    color: var(--color-accent);
+    font-weight: bold;
+}
+
+.settingsEnvMetaSep {
+    color: #555;
+}
+
+.settingsEnvMetaCount {
+    color: #4f4;
+}
+
+.settingsEnvMetaMissing {
+    color: #f88;
+}
+
+/* --- Action Buttons Row --- */
+.settingsEnvActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.4rem, 0.6vw, 0.7rem);
+    min-width: 0;
+}
+
+/* --- Status Message --- */
+.settingsEnvStatusMessage {
+    padding: 0.45rem 0.6rem;
+    border: 1px solid rgba(255, 34, 34, 0.45);
+    border-radius: 6px;
+    background: rgba(255, 34, 34, 0.08);
+    color: #bbb;
+    font-size: clamp(0.66rem, 0.78vw, 0.82rem);
+    overflow-wrap: anywhere;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* --- Provider Cards Grid --- */
+.settingsEnvProviders {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: clamp(0.55rem, 0.9vw, 0.8rem);
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.settingsEnvProviderCard {
+    position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
+    min-width: 0;
+    padding: clamp(0.55rem, 0.85vw, 0.75rem);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.settingsEnvProviderCardHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.settingsEnvProviderCardHeader h4 {
+    margin: 0;
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: var(--color-accent);
+}
+
+.settingsEnvProviderDot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.settingsEnvProviderDot--active {
+    background: #4f4;
+}
+
+.settingsEnvProviderDot--inactive {
+    background: #f44;
+}
+
+.settingsEnvProviderStatus {
+    margin: 0;
+    font-size: 0.85em;
+}
+
+.settingsEnvProviderStatus--ok {
+    color: #4f4;
+}
+
+.settingsEnvProviderStatus--missing {
+    color: #f88;
+    margin-bottom: 0.3rem;
+}
+
+.settingsEnvProviderMissingList {
+    margin: 0;
+    padding-left: 1.2rem;
+    font-size: 0.8em;
+    color: #bbb;
+}
+
+/* --- Variables Card --- */
+.settingsEnvVariablesCard {
+    position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
+    min-width: 0;
+    width: 100%;
+    padding: clamp(0.6rem, 0.95vw, 0.85rem);
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.settingsEnvVariablesCard h3 {
+    margin: 0 0 0.5rem;
+    color: var(--color-accent);
+    font-size: clamp(0.85rem, 1vw, 1rem);
+}
+
+/* Variable List */
+.settingsEnvVariableList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* Variable Row — horizontal with wrapping on small screens */
+.settingsEnvVariableRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 0.35rem 0.4rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.85em;
+}
+
+/* Variable info — left side, flex to fill */
+.settingsEnvVariableInfo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.settingsEnvVarDot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.settingsEnvVarDot--present {
+    background: #4f4;
+}
+
+.settingsEnvVarDot--missing {
+    background: #444;
+}
+
+/* Groups the key name + provider name vertically */
+.settingsEnvVarDetails {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.settingsEnvVarKey {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.3;
+}
+
+.settingsEnvVarKey--present {
+    color: #fff;
+}
+
+.settingsEnvVarKey--missing {
+    color: #666;
+}
+
+.settingsEnvVarProviderName {
+    color: #888;
+    font-size: 0.85em;
+}
+
+/* Variable actions — right side, never shrinks */
+.settingsEnvVariableActions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+/* Reveal / Hide button */
+.settingsEnvRevealBtn {
+    background: none;
+    border: 1px solid #555;
+    border-radius: 3px;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 0.75em;
+    padding: 0.1rem 0.4rem;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.settingsEnvRevealBtn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+/* Status badge */
+.settingsEnvVarStatus {
+    font-size: 0.8em;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.settingsEnvVarStatus--present {
+    color: #4f4;
+}
+
+.settingsEnvVarStatus--missing {
+    color: #666;
+}
+
+/* ==================== RESPONSIVE BREAKPOINTS ==================== */
+
+@media (max-width: 1100px) {
+    .settingsGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .settingsIntro {
+        flex-direction: column;
+    }
+
+    .settingsGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .settingsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .settingsIntro {
+        padding: 0.75rem;
+    }
+
+    .settingsCard {
+        padding: 0.75rem;
+    }
+
+    /* Provider cards become single column */
+    .settingsEnvProviders {
+        grid-template-columns: 1fr;
+    }
+
+    /* Variable rows become vertical stack */
+    .settingsEnvVariableRow {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.4rem;
+    }
+
+    .settingsEnvVariableActions {
+        align-self: flex-end;
+    }
+
+    .settingsIntro {
+        flex-direction: column;
+    }
+}

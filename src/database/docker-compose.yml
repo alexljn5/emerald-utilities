@@ -1,0 +1,39 @@
+﻿services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: emerald-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-emerald-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-[REDACTED]}
+      POSTGRES_DB: ${POSTGRES_DB:-emerald_utilities}
+
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      # Persistent data lives in the EXISTING external named volume.
+      # This is the source of truth and must never be recreated/wiped.
+      - postgres_data:/var/lib/postgresql/data
+      # envy.sql + pride.sql only run on FIRST init of an EMPTY volume (Postgres
+      # docker-entrypoint behaviour). They will NOT run against the existing
+      # populated volume, so existing data is safe.
+      - ./envy.sql:/docker-entrypoint-initdb.d/01-envy.sql:ro
+      - ./tasks/pride.sql:/docker-entrypoint-initdb.d/02-pride.sql:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-emerald-user} -d ${POSTGRES_DB:-emerald_utilities}"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  postgres_data:
+    # Reference the pre-existing named volume created by the original
+    # deployment. `external: true` means docker compose will NEVER create or
+    # destroy it — it must already exist.
+    # Verify with: docker volume ls | grep database_postgres_data
+    external: true
+    name: database_postgres_data

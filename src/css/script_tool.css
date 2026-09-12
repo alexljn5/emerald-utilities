@@ -1,0 +1,352 @@
+/* ==================== PAGE-SPECIFIC: SCRIPT TOOL ==================== */
+
+/* TERMINAL TOGGLE */
+.terminalToggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    padding: 0.4rem 0.8rem;
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    cursor: pointer;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.8rem, 1vw, 0.95rem);
+    border-radius: 4px;
+    transition: all 0.1s ease;
+}
+
+.terminalToggle:hover {
+    background: var(--color-accent);
+    color: #000;
+}
+
+.terminalToggle.terminalHidden {
+    background: #333;
+    border-color: #555;
+    color: #888;
+}
+
+#terminalOutput.terminalHidden {
+    display: none;
+}
+
+/* RIGHT PANEL LAYOUT */
+.rightPanel {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* TERMINAL OUTPUT IN SCRIPT TOOL */
+#terminalOutput {
+    height: 180px;
+    flex-shrink: 0;
+    border-top: 2px solid var(--color-accent);
+    border-radius: 0 0 8px 8px;
+    background: var(--color-terminal-bg);
+    overflow-y: auto;
+}
+
+#terminalOutput.terminalHidden {
+    display: none;
+}
+
+/* DETAIL PANEL */
+.detailPanel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-accent);
+    padding: clamp(0.6rem, 1vw, 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 1vw, 0.75rem);
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.detailPanel.hidden {
+    display: none;
+}
+
+.detailPanel h2 {
+    margin: 0;
+    font-size: clamp(1rem, 1.6vw, 1.6rem);
+    color: var(--color-accent);
+    flex-shrink: 0;
+}
+
+.detailPanelContent {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 1vw, 0.75rem);
+}
+
+.detailPanelActions {
+    flex-shrink: 0;
+    background: var(--color-surface);
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+#saveScriptButton {
+    background: #00ff88;
+    color: #000;
+    border-color: #00ff88;
+    font-weight: bold;
+}
+
+#saveScriptButton:hover {
+    background: #00cc6a;
+    border-color: #00cc6a;
+    color: #000;
+}
+
+.detailActions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.detailRow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.inlineControls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.inlineControls input {
+    flex: 1;
+    min-width: 0;
+}
+
+.detailRow.ahkPathRow {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.detailRow.ahkPathRow input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.detailRow.ahkPathRow button {
+    flex-shrink: 0;
+    padding: 0.3rem 0.6rem;
+    font-size: clamp(0.8rem, 1vw, 0.9rem);
+}
+
+.detailRow label {
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
+    color: #ccc;
+}
+
+.detailRow input[type="text"],
+.detailRow textarea {
+    padding: 0.4rem;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    font-family: inherit;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
+    resize: vertical;
+}
+
+.detailRow textarea {
+    min-height: 120px;
+}
+
+/* SCRIPT LIST */
+#scriptList {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    padding: 0.5rem;
+}
+
+.scriptListItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.scriptListItem:hover {
+    background: #2a2a2a;
+    border-color: var(--color-accent);
+}
+
+.scriptListItem.active {
+    background: #330000;
+    border-color: var(--color-accent);
+}
+
+.scriptListItem .scriptName {
+    flex: 1;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scriptListItem .scriptBadge {
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    padding: 0.1rem 0.4rem;
+    border: 1px solid #555;
+    color: #aaa;
+}
+
+.scriptListItem.active .scriptBadge {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.scriptListItem .scriptBadge.cronBadge {
+    border-color: #00ff88;
+    color: #00ff88;
+    background: rgba(0, 255, 136, 0.1);
+    animation: cronPulse 2s infinite;
+}
+
+@keyframes cronPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* INPUTS */
+#scriptContent {
+    height: 200px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    font-family: inherit;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
+}
+
+#argsInput {
+    padding: 0.4rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    font-family: inherit;
+    font-size: clamp(0.9rem, 1.2vw, 1.2rem);
+}
+
+#cronInput:disabled {
+    opacity: 0.5;
+}
+
+#cronToggleButton {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    cursor: pointer;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.85rem, 1.1vw, 1.1rem);
+    border-radius: 4px;
+    transition: all 0.1s ease;
+}
+
+#cronToggleButton:hover {
+    background: var(--color-accent);
+    color: #000;
+}
+
+#cronToggleButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#cronToggleButton.cronActive {
+    background: #00ff88;
+    color: #000;
+    border-color: #00ff88;
+    animation: cronPulse 2s infinite;
+}
+
+#cronEnabledToggle {
+    accent-color: #00ff88;
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 900px) {
+    #terminalOutput {
+        height: 150px;
+    }
+
+    #scriptContent {
+        height: 150px;
+    }
+
+    .terminalToggle {
+        top: 8px;
+        right: 8px;
+        padding: 0.3rem 0.6rem;
+        font-size: clamp(0.75rem, 0.9vw, 0.85rem);
+    }
+
+    .detailPanel {
+        padding: 0.75rem;
+    }
+
+    .detailRow.ahkPathRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+@media (max-width: 600px) {
+    #terminalOutput {
+        height: 120px;
+    }
+
+    #scriptContent {
+        height: 120px;
+    }
+
+    .detailPanel {
+        padding: 0.5rem;
+    }
+
+    .detailPanelActions {
+        flex-direction: column;
+    }
+
+    .detailActions {
+        flex-direction: column;
+    }
+
+    .scriptListItem {
+        padding: 0.3rem 0.4rem;
+    }
+}

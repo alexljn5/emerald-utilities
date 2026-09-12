@@ -1,0 +1,63 @@
+{
+    "manifest_version": 3,
+    "name": "XScraper",
+    "version": "1.0.0",
+    "description": "Scrape and archive X/Grok conversations to a local database",
+    "permissions": [
+        "storage",
+        "scripting",
+        "activeTab",
+        "tabs",
+        "webRequest"
+    ],
+    "host_permissions": [
+        "https://grok.x.com/*",
+        "https://x.com/*",
+        "https://grok.com/*",
+        "http://localhost:3000/*"
+    ],
+    "background": {
+        "service_worker": "src/background.js"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "XScraper",
+        "default_icon": {
+            "16": "src/icons/icon-16.png",
+            "48": "src/icons/icon-48.png",
+            "128": "src/icons/icon-128.png"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://grok.x.com/*",
+                "https://x.com/*",
+                "https://grok.com/*"
+            ],
+            "js": [
+                "src/heavensgate.js",
+                "src/content.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": false
+        }
+    ],
+    "icons": {
+        "16": "src/icons/icon-16.png",
+        "48": "src/icons/icon-48.png",
+        "128": "src/icons/icon-128.png"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "src/heavensgate.js"
+            ],
+            "matches": [
+                "https://grok.x.com/*",
+                "https://x.com/*",
+                "https://grok.com/*"
+            ]
+        }
+    ]
+}

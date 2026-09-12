@@ -1,0 +1,1364 @@
+/* src/css/creator-hub.css */
+/* Creator Hub styles - uses existing Emerald Utilities tokens */
+
+/* ==================== LAYOUT ==================== */
+.creatorHub {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+    padding: clamp(0.75rem, 1.2vw, 1.25rem);
+    height: 100%;
+    min-height: 0;
+}
+
+.creatorHubLeft {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.6rem, 1vw, 1rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+}
+
+.creatorHubRight {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.6rem, 1vw, 1rem);
+    min-height: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+/* ==================== DASHBOARD ==================== */
+.chDashboardGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: clamp(0.75rem, 1.2vw, 1.25rem);
+}
+
+.chAccountCard {
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: clamp(0.8rem, 1.2vw, 1.2rem);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    min-width: 0;
+}
+
+.chAccountCard:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+}
+
+.chAccountCardHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chAccountCardPlatform {
+    font-size: clamp(1.1rem, 1.4vw, 1.4rem);
+    font-weight: bold;
+    color: var(--color-text);
+    text-transform: capitalize;
+}
+
+.chAccountCardBody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.chAccountCardUsername {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: #888;
+}
+
+.chAccountCardDisplayName {
+    font-size: clamp(1rem, 1.2vw, 1.2rem);
+    color: var(--color-text);
+    font-weight: bold;
+}
+
+.chAccountCardCapabilities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.chCapBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: var(--color-text);
+}
+
+.chCapBadge--limit {
+    color: #888;
+}
+
+.chAccountCardAction {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+/* ==================== TARGET LIST (MULTI MODE) ==================== */
+.chTargetList {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.chTargetItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: clamp(0.6rem, 1vw, 1rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+    flex-wrap: wrap;
+}
+
+.chTargetInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.chTargetUsername {
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: #888;
+}
+
+.chTargetActions {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    flex-shrink: 0;
+}
+
+/* ==================== PANELS ==================== */
+.chPanel {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: clamp(0.8rem, 1.2vw, 1.2rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.6rem, 1vw, 1rem);
+    min-width: 0;
+    min-height: 0;
+    flex-shrink: 0;
+}
+
+.chPanelHeader {
+    font-size: clamp(1rem, 1.3vw, 1.3rem);
+    font-weight: bold;
+    color: var(--color-accent);
+    margin-bottom: clamp(0.5rem, 0.8vw, 0.8rem);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+/* ==================== FORMS ==================== */
+.chFormGroup {
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+}
+
+.chFormGroup:last-child {
+    margin-bottom: 0;
+}
+
+.chLabel {
+    display: block;
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+.chInput,
+.chTextarea,
+.chSelect {
+    width: 100%;
+    padding: clamp(0.5rem, 0.8vw, 0.7rem) clamp(0.6rem, 1vw, 0.9rem);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    transition: border-color 0.15s ease;
+    min-width: 0;
+}
+
+.chInput:focus,
+.chTextarea:focus,
+.chSelect:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.chTextarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+/* ==================== BUTTONS ==================== */
+.chButton {
+    padding: clamp(0.6rem, 1vw, 0.9rem) clamp(0.8rem, 1.4vw, 1.4rem);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.chButton:hover:not(:disabled) {
+    background: var(--color-accent);
+    color: #000;
+}
+
+.chButton:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.chButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.chButtonPrimary {
+    background: var(--color-accent);
+    color: #000;
+    font-weight: bold;
+}
+
+.chButtonPrimary:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+    color: #000;
+}
+
+.chButtonSecondary {
+    background: transparent;
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+.chButtonSecondary:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+    border-color: var(--color-accent);
+}
+
+.chButtonDanger {
+    border-color: #ff4444;
+}
+
+.chButtonDanger:hover:not(:disabled) {
+    background: #ff4444;
+    color: #000;
+}
+
+.chButtonSmall {
+    padding: clamp(0.3rem, 0.5vw, 0.5rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+}
+
+.chButtonGroup {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.4rem, 0.8vw, 0.8rem);
+    align-items: center;
+}
+
+.chButtonGroup>* {
+    flex-shrink: 0;
+}
+
+/* Sidebar nav buttons: uniform size */
+.chButtonGroup--sidebar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(0.4rem, 0.8vw, 0.8rem);
+}
+
+.chButtonGroup--sidebar>* {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+}
+
+.chButtonFull {
+    width: 100%;
+}
+
+/* ==================== SPINNER ==================== */
+@keyframes chSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.chSpinner {
+    display: inline-block;
+    width: clamp(14px, 1.5vw, 18px);
+    height: clamp(14px, 1.5vw, 18px);
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: chSpin 0.6s linear infinite;
+    flex-shrink: 0;
+}
+
+/* ==================== TOGGLE SWITCH ==================== */
+.chToggle {
+    position: relative;
+    display: inline-block;
+    width: clamp(40px, 5vw, 48px);
+    height: clamp(22px, 2.5vw, 26px);
+    flex-shrink: 0;
+}
+
+.chToggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.chToggleSlider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    transition: all 0.15s ease;
+}
+
+.chToggleSlider:before {
+    position: absolute;
+    content: "";
+    height: clamp(16px, 2vw, 20px);
+    width: clamp(16px, 2vw, 20px);
+    left: clamp(2px, 0.3vw, 3px);
+    bottom: clamp(2px, 0.3vw, 3px);
+    background-color: var(--color-text);
+    border-radius: 50%;
+    transition: all 0.15s ease;
+}
+
+.chToggle input:checked+.chToggleSlider {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+}
+
+.chToggle input:checked+.chToggleSlider:before {
+    transform: translateX(clamp(16px, 2vw, 20px));
+    background-color: #000;
+}
+
+/* ==================== CHECKBOXES ==================== */
+.chCheckboxGroup {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chCheckboxItem {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    cursor: pointer;
+}
+
+.chCheckboxItem input[type="checkbox"] {
+    width: clamp(16px, 2vw, 20px);
+    height: clamp(16px, 2vw, 20px);
+    accent-color: var(--color-accent);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.chCheckboxItem label {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    cursor: pointer;
+    color: var(--color-text);
+}
+
+/* ==================== LISTS ==================== */
+.chList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    overflow: hidden;
+}
+
+.chListItem {
+    padding: clamp(0.5rem, 0.8vw, 0.7rem);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+}
+
+.chListItem:hover {
+    background: var(--color-surface-hover);
+}
+
+.chListItem:last-child {
+    border-bottom: none;
+}
+
+.chListItemActive {
+    background: var(--color-surface-hover);
+    border-left: 3px solid var(--color-accent);
+}
+
+.chListItemTitle {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-text);
+    margin-bottom: 0.2rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.chListItemMeta {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+    word-break: break-word;
+}
+
+/* ==================== TAGS ==================== */
+.chTag {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: var(--color-text);
+    margin-right: 0.3rem;
+    margin-bottom: 0.3rem;
+}
+
+/* ==================== STATUS BADGES ==================== */
+.chStatus {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.chStatusSuccess {
+    background: #1a4a1a;
+    color: #4f4;
+    border: 1px solid #4f4;
+}
+
+.chStatusConnected {
+    background: #1a4a1a;
+    color: #4f4;
+    border: 1px solid #4f4;
+}
+
+.chStatusError {
+    background: #4a1a1a;
+    color: #f44;
+    border: 1px solid #f44;
+}
+
+.chStatusPending {
+    background: #4a4a1a;
+    color: #ff4;
+    border: 1px solid #ff4;
+}
+
+/* ==================== EMPTY STATE ==================== */
+.chEmpty {
+    text-align: center;
+    padding: clamp(1rem, 2vw, 2rem);
+    color: #666;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 900px) {
+    .creatorHub {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    .chDashboardGrid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+
+    .chTargetItem {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .chTargetActions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 600px) {
+    .chDashboardGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .chButtonGroup {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .chButtonGroup>* {
+        width: 100%;
+    }
+}
+
+/* ==================== LOG VIEWER ==================== */
+.chLogList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'pixelSans', monospace;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+}
+
+.chLogEntry {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.3rem 0.5rem;
+    background: var(--color-bg);
+    border-radius: 2px;
+    align-items: flex-start;
+}
+
+.chLogTime {
+    color: #888;
+    white-space: nowrap;
+    min-width: 70px;
+    flex-shrink: 0;
+}
+
+.chLogLevel {
+    font-weight: bold;
+    min-width: 45px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.chLogDebug {
+    color: #888;
+}
+
+.chLogInfo {
+    color: #4f4;
+}
+
+.chLogWarn {
+    color: #ff4;
+}
+
+.chLogError {
+    color: #f44;
+}
+
+.chLogMessage {
+    color: var(--color-text);
+    word-break: break-word;
+    flex: 1;
+    min-width: 0;
+}
+
+/* ==================== CHARACTER COUNTERS ==================== */
+.chCharCounter {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+    text-align: right;
+    margin-top: 0.3rem;
+}
+
+.chCharCounter--over {
+    color: #f44;
+    font-weight: bold;
+}
+
+.chCharCounter--near {
+    color: #ff4;
+}
+
+.chCharWarnings {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.chCharWarning {
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    padding: 0.4rem 0.6rem;
+    background: var(--color-surface-hover);
+    border-radius: 3px;
+    border-left: 3px solid var(--color-border);
+}
+
+.chCharWarning--error {
+    color: #f88;
+    background: #2a1a1a;
+    border-left-color: #f44;
+}
+
+.chCharWarning--warn {
+    color: #ff8;
+    background: #2a2a1a;
+    border-left-color: #ff4;
+}
+
+/* ==================== ACCOUNT DASHBOARD ==================== */
+.chAccountStats {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+    padding: 0.15rem 0.4rem;
+    background: var(--color-surface-hover);
+    border-radius: 3px;
+}
+
+.chCapability {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.15rem 0.4rem;
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: var(--color-text);
+    min-width: 24px;
+}
+
+/* ==================== PUBLISH PROGRESS ==================== */
+.chPublishProgress {
+    margin-top: clamp(0.6rem, 1vw, 1rem);
+    padding: clamp(0.8rem, 1.2vw, 1.2rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chPublishProgressHeader {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    font-weight: bold;
+    color: var(--color-accent);
+    margin-bottom: clamp(0.4rem, 0.6vw, 0.6rem);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.chPublishProgressList {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chPublishProgressItem {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: var(--color-surface);
+    border-radius: 4px;
+    border-left: 3px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+.chPublishProgressItem--success {
+    border-left-color: #4f4;
+}
+
+.chPublishProgressItem--failed {
+    border-left-color: #f44;
+}
+
+.chPublishProgressItem--pending {
+    border-left-color: #ff4;
+}
+
+.chPublishProgressItem--testing,
+.chPublishProgressItem--uploading,
+.chPublishProgressItem--publishing {
+    border-left-color: var(--color-accent);
+}
+
+.chPublishProgressIcon {
+    font-size: clamp(1rem, 1.2vw, 1.2rem);
+    width: 1.5rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.chPublishProgressPlatform {
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    font-weight: bold;
+    color: var(--color-text);
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.chPublishProgressStatus {
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: #aaa;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.chPublishProgressError {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #f88;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+/* ==================== HISTORY ==================== */
+.chHistoryStats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.6rem, 1vw, 1rem);
+    margin-bottom: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.chHistoryStat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: clamp(0.4rem, 0.6vw, 0.6rem) clamp(0.6rem, 1vw, 1rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    min-width: 60px;
+    flex: 1 1 auto;
+}
+
+.chHistoryStatValue {
+    font-size: clamp(1.2rem, 1.5vw, 1.5rem);
+    font-weight: bold;
+    color: var(--color-text);
+}
+
+.chHistoryStatLabel {
+    font-size: clamp(0.7rem, 0.8vw, 0.8rem);
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.chHistoryList {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.chHistoryEntry {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: clamp(0.6rem, 1vw, 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+}
+
+.chHistoryEntryHeader {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    flex-wrap: wrap;
+}
+
+.chHistoryEntryPlatform {
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: var(--color-text);
+    font-weight: bold;
+}
+
+.chHistoryEntryTime {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+    margin-left: auto;
+}
+
+.chHistoryEntryBody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.chHistoryEntryText {
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: var(--color-text);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.chHistoryEntryMeta {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+}
+
+.chHistoryEntryError {
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: #f88;
+    background: #2a1a1a;
+    padding: 0.4rem 0.6rem;
+    border-radius: 3px;
+    border-left: 3px solid #f44;
+    margin-top: 0.3rem;
+}
+
+.chHistoryLink {
+    color: var(--color-accent);
+    text-decoration: none;
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+}
+
+.chHistoryLink:hover {
+    text-decoration: underline;
+}
+
+/* ==================== POST LOGS ==================== */
+.chLogDetail {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.chLogDetailRow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: clamp(0.4rem, 0.6vw, 0.6rem);
+    background: var(--color-bg);
+    border-radius: 4px;
+    border-left: 3px solid var(--color-border);
+}
+
+.chLogDetailLabel {
+    font-size: clamp(0.7rem, 0.8vw, 0.8rem);
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: bold;
+}
+
+.chLogDetailValue {
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: var(--color-text);
+    word-break: break-word;
+}
+
+.chLogDetailError {
+    color: #f88;
+    background: #2a1a1a;
+    padding: 0.4rem 0.6rem;
+    border-radius: 3px;
+    border-left: 3px solid #f44;
+}
+
+/* ==================== COMPOSER — OVERRIDE MEDIA ==================== */
+.chOverrideMediaList {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+}
+
+.chOverrideMediaItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: clamp(0.4rem, 0.6vw, 0.6rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chOverrideMediaItem:hover {
+    border-color: var(--color-accent);
+}
+
+.chOverrideMediaItem--selected {
+    border-color: var(--color-accent);
+    background: var(--color-surface-hover);
+}
+
+/* ==================== MEDIA PREVIEW ==================== */
+.chMediaPreview {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    margin-top: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chMediaItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: clamp(0.4rem, 0.6vw, 0.6rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    flex-wrap: wrap;
+}
+
+.chMediaInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.chMediaName {
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: var(--color-text);
+}
+
+.chMediaSize {
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    color: #888;
+}
+
+.chSegmentedControl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.2rem, 0.3vw, 0.3rem);
+    padding: clamp(0.2rem, 0.3vw, 0.3rem);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+}
+
+.chSegment {
+    padding: clamp(0.45rem, 0.7vw, 0.7rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    background: transparent;
+    color: var(--color-text);
+    border: 1px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: 'pixelSans', sans-serif;
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    text-align: center;
+    transition: all 0.15s ease;
+}
+
+.chSegment:hover {
+    border-color: var(--color-accent);
+}
+
+.chSegment--active {
+    background: var(--color-accent);
+    color: #000;
+    border-color: var(--color-accent);
+    font-weight: bold;
+}
+
+.chInlineControl {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.chInlineMeta {
+    color: #888;
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ==================== ACCOUNT PANEL INLINE STYLE REPLACEMENTS ==================== */
+
+.chAccountPanel {
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+    padding: clamp(0.6rem, 1vw, 1rem);
+    background: var(--color-bg);
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+}
+
+.chAccountPanelHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: clamp(0.3rem, 0.5vw, 0.5rem);
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    flex-wrap: wrap;
+}
+
+.chAccountPanelTitle {
+    font-size: clamp(1rem, 1.2vw, 1.2rem);
+    font-weight: bold;
+    color: var(--color-text);
+}
+
+.chAccountPanelClose {
+    padding: clamp(0.3rem, 0.5vw, 0.5rem) clamp(0.5rem, 0.8vw, 0.8rem);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    line-height: 1;
+}
+
+.chAccountPanelInfo {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.3rem 1rem;
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+}
+
+.chAccountPanelLabel {
+    color: #888;
+    font-weight: 500;
+}
+
+.chAccountPanelSection {
+    margin-bottom: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.chAccountPanelSectionTitle {
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: #888;
+    margin-bottom: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.chAccountPanelContent {
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: var(--color-text);
+}
+
+.chAccountPanelMeta {
+    font-size: clamp(0.8rem, 0.9vw, 0.9rem);
+    color: #888;
+    margin-top: clamp(0.2rem, 0.3vw, 0.3rem);
+}
+
+.chCapBadge {
+    display: inline-flex;
+    align-items: center;
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    padding: 0.2rem 0.5rem;
+    background: var(--color-surface-hover);
+    border-radius: 3px;
+    margin-right: 0.3rem;
+    margin-bottom: 0.3rem;
+    border: 1px solid var(--color-border);
+}
+
+.chCapBadge--limit {
+    /* Same as chCapBadge, used for character limit display */
+    color: #888;
+}
+
+/* ==================== COMPOSER INLINE STYLE REPLACEMENTS ==================== */
+/* These classes replace inline styles used in Composer.jsx */
+
+.chComposerError {
+    color: var(--color-accent);
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: rgba(255, 34, 34, 0.1);
+    border-radius: 4px;
+    border: 1px solid var(--color-accent);
+}
+
+.chAccountInfo {
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: var(--color-bg);
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: clamp(0.5rem, 0.8vw, 0.8rem);
+    flex-wrap: wrap;
+}
+
+.chAccountInfo strong {
+    text-transform: capitalize;
+    color: var(--color-text);
+}
+
+.chAccountInfoMeta {
+    margin-left: auto;
+    display: flex;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    flex-wrap: wrap;
+}
+
+.chCapabilityText {
+    color: #4f4;
+}
+
+.chCharLimit {
+    opacity: 0.7;
+    color: #888;
+}
+
+.chMediaAddButton {
+    margin-bottom: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chTargetPlatform {
+    font-weight: bold;
+    text-transform: capitalize;
+    margin-bottom: clamp(0.3rem, 0.5vw, 0.5rem);
+    color: var(--color-text);
+}
+
+.chTargetCapabilities {
+    display: flex;
+    gap: 0.3rem;
+    font-size: clamp(0.7rem, 0.85vw, 0.85rem);
+    flex-wrap: wrap;
+}
+
+.chOverridePanel {
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: var(--color-bg);
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+}
+
+.chValidationBox {
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: rgba(255, 34, 34, 0.1);
+    border-radius: 4px;
+    border: 1px solid var(--color-accent);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+}
+
+.chValidationIssue {
+    color: #f88;
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    padding: clamp(0.3rem, 0.5vw, 0.5rem);
+    background: var(--color-bg);
+    border-radius: 3px;
+    border-left: 3px solid #f44;
+}
+
+.chValidationIssue strong {
+    color: var(--color-text);
+}
+
+/* ==================== ACCOUNTS INLINE STYLE REPLACEMENTS ==================== */
+
+.chAccountsError {
+    color: var(--color-accent);
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: rgba(255, 34, 34, 0.1);
+    border-radius: 4px;
+    border: 1px solid var(--color-accent);
+}
+
+.chConnectHeader {
+    margin-bottom: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chAccountListItem {
+    flex: 1;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.chAccountListItemTitle {
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+    color: var(--color-text);
+    margin-bottom: 0.2rem;
+}
+
+.chAccountListItemMeta {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+}
+
+.chComposeButton {
+    margin-left: clamp(0.3rem, 0.5vw, 0.5rem);
+    flex-shrink: 0;
+}
+
+.chAddAccountForm {
+    padding: clamp(0.6rem, 1vw, 1rem);
+    background: var(--color-bg);
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+}
+
+.chEnvPasswordButton {
+    margin-top: clamp(0.2rem, 0.3vw, 0.3rem);
+}
+
+.chFormHelper {
+    font-size: clamp(0.8rem, 0.95vw, 0.95rem);
+    color: #888;
+    margin-top: clamp(0.2rem, 0.3vw, 0.3rem);
+    line-height: 1.4;
+}
+
+.chFormHelper--success {
+    color: #4f4;
+}
+
+.chFormHelper--info {
+    color: #888;
+}
+
+.chFormHelper--spaced {
+    margin-top: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+.chAuthDescription {
+    color: #ccc;
+    margin-bottom: clamp(0.4rem, 0.6vw, 0.6rem);
+    line-height: 1.5;
+}
+
+/* ==================== SIDEBAR INLINE STYLE REPLACEMENTS ==================== */
+
+.chSidebarTag {
+    margin-top: clamp(0.2rem, 0.3vw, 0.3rem);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem;
+}
+
+.chSidebarActive {
+    background: var(--color-surface-hover);
+}
+
+/* ==================== HISTORY INLINE STYLE REPLACEMENTS ==================== */
+
+.chFilterButtonGroup {
+    margin-top: clamp(0.5rem, 0.8vw, 0.8rem);
+    margin-bottom: clamp(0.5rem, 0.8vw, 0.8rem);
+}
+
+.chRetryButton {
+    margin-top: clamp(0.4rem, 0.6vw, 0.6rem);
+}
+
+/* ==================== POST LOGS INLINE STYLE REPLACEMENTS ==================== */
+
+.chBackButton {
+    margin-bottom: clamp(0.6rem, 1vw, 1rem);
+}
+
+/* ==================== QUEUE ==================== */
+.chQueueEmpty {
+    text-align: center;
+    padding: clamp(1.5rem, 3vw, 3rem);
+    color: #666;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+}
+
+.chQueueResult {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.3rem, 0.5vw, 0.5rem);
+    padding: clamp(0.5rem, 0.8vw, 0.8rem);
+    background: var(--color-bg);
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+}
+
+.chQueueResultHeader {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 0.6vw, 0.6rem);
+    flex-wrap: wrap;
+}
+
+.chQueueResultMeta {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    color: #888;
+}
+
+.chQueueResultPlatform {
+    font-weight: bold;
+    color: var(--color-text);
+}
+
+.chQueueResultItem {
+    padding: clamp(0.3rem, 0.5vw, 0.5rem);
+}

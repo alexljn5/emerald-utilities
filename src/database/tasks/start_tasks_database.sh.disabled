@@ -1,0 +1,67 @@
+﻿#!/usr/bin/env bash
+set -euo pipefail
+
+# ============================================================
+# DISABLED — DO NOT USE
+# ============================================================
+# This script has been disabled to prevent a second PostgreSQL container.
+# Emerald Utilities uses a SINGLE PostgreSQL instance managed by:
+#   src/database/start_postgres.sh
+#   src/database/merge-sins.sh
+#
+# The tasks schema (pride.sql) is applied to the MAIN database.
+# Do NOT rename this file back to start_tasks_database.sh.
+# ============================================================
+
+# --- Windows → WSL path fix (if needed) ---
+if [[ "$0" =~ ^[A-Za-z]:\\ ]]; then
+    SCRIPT_PATH=$(wslpath "$0")
+    exec bash "$SCRIPT_PATH" "$@"
+fi
+
+# --- Resolve script directory ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "[Tasks DB] Using: $SCRIPT_DIR"
+
+# --- Validate compose file ---
+if [[ ! -f "$SCRIPT_DIR/docker-compose.yml" ]]; then
+    echo "[Tasks DB] ERROR: docker-compose.yml not found in $SCRIPT_DIR" >&2
+    exit 1
+fi
+
+cd "$SCRIPT_DIR"
+
+# --- Load env (optional) ---
+if [[ -f .env ]]; then
+    set -a
+    source .env
+    set +a
+fi
+
+# --- Start services ---
+echo "[Tasks DB] Starting PostgreSQL via docker compose..."
+docker compose up -d
+
+# --- Wait for readiness ---
+POSTGRES_USER="${POSTGRES_USER:-emerald-user}"
+POSTGRES_DB="${POSTGRES_DB:-emerald_utilities}"
+
+echo "[Tasks DB] Waiting for PostgreSQL..."
+
+for i in $(seq 1 30); do
+    # Detect service name dynamically from compose file
+    SERVICE_NAME=$(grep -E '^[a-zA-Z0-9_-]+:' docker-compose.yml | head -1 | cut -d: -f1)
+    if [[ -z "$SERVICE_NAME" ]]; then
+        SERVICE_NAME="postgres"
+    fi
+
+    if docker compose exec -T "$SERVICE_NAME" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+        echo "[Tasks DB] PostgreSQL ready (service: $SERVICE_NAME)."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "[Tasks DB] ERROR: PostgreSQL not ready after timeout." >&2
+exit 1

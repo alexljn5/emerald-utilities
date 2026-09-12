@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Emerald Utilities - Script Tool</title>
+    <link rel="stylesheet" href="../css/globals.css">
+    <link rel="stylesheet" href="../css/script_tool.css">
+</head>
+
+<body>
+
+    <div class="app">
+
+        <!-- LEFT PANEL: Script List -->
+        <div class="leftPanel">
+            <div id="friedEggs">
+                <h1>Script Tool</h1>
+                <span id="versionDisplay"></span>
+                <div id="logo">
+                    <img src="../../img/favicons/favicon.png" alt="Logo" width="64" height="64">
+                </div>
+            </div>
+
+            <a href="../index.html">
+                <button>← Back</button>
+            </a>
+
+            <button id="chooseScriptLocationButton">Choose Custom Scripts Folder</button>
+            <button id="loadScriptsButton">Load Scripts</button>
+
+            <h3>Scripts:</h3>
+            <div id="scriptList"></div>
+        </div>
+
+        <!-- RIGHT PANEL: Detail + Terminal -->
+        <div class="rightPanel">
+            <button id="terminalToggleButton" class="terminalToggle" title="Toggle Terminal">Terminal</button>
+            <!-- Detail Panel (hidden until script selected) -->
+            <div id="detailPanel" class="detailPanel hidden">
+                <h2 id="detailScriptName">Select a script</h2>
+
+                <div class="detailPanelContent">
+                    <div class="detailActions">
+                        <button id="runButton">Run</button>
+                        <button id="runStartupButton">Run Startup</button>
+                        <button id="viewButton">View</button>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>
+                            <input type="checkbox" id="autoRunToggle"> Auto-run on startup
+                        </label>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>
+                            <input type="checkbox" id="cronEnabledToggle"> Auto-start cron on startup
+                        </label>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>Cron / Interval (ms):</label>
+                        <input type="number" id="cronInput" placeholder="e.g. 5000 for 5 seconds" min="1000"
+                            step="1000">
+                        <button id="cronToggleButton">Start Cron</button>
+                    </div>
+
+                    <div class="detailRow ahkPathRow">
+                        <label>AutoHotkey Path:</label>
+                        <input id="ahkPathInput" type="text"
+                            placeholder="e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe">
+                        <button id="ahkBrowseButton">Browse</button>
+                        <button id="ahkResetButton">Reset</button>
+                    </div>
+
+                    <div class="detailRow">
+                        <label>Arguments:</label>
+                        <input id="argsInput" type="text" placeholder="Enter arguments">
+                    </div>
+
+                    <div class="detailRow">
+                        <label>Script Content:</label>
+                        <textarea id="scriptContent"></textarea>
+                    </div>
+                </div>
+
+                <div class="detailPanelActions">
+                    <button id="saveScriptButton">Save Script</button>
+                </div>
+            </div>
+
+            <!-- Terminal -->
+            <div id="terminalOutput"></div>
+        </div>
+
+    </div>
+    <script type="module" src="../globals.js"></script>
+    <script type="module" src="js/script_tool.js"></script>
+</body>
+
+</html>

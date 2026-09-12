@@ -254,6 +254,7 @@ export async function discoverBots() {
  */
 export async function discoverRemoteContainers() {
     const sshConfig = getSshConfig();
+    const allContainers = [];
 
     // Try Tailscale MagicDNS first, then fall back to LAN IP
     const hostsToTry = [TAILSCALE_HOST, '192.168.2.27'];
@@ -289,7 +290,7 @@ export async function discoverRemoteContainers() {
                 }).filter(c => c.name);
 
                 if (containers.length > 0) {
-                    return containers;
+                    allContainers.push(...containers);
                 }
             }
         } catch {
@@ -297,7 +298,15 @@ export async function discoverRemoteContainers() {
         }
     }
 
-    return [];
+    // Also check local Docker if available (no SSH needed)
+    try {
+        const localContainers = discoverLocalContainers();
+        allContainers.push(...localContainers);
+    } catch {
+        // ignore
+    }
+
+    return allContainers;
 }
 
 function discoverLocalDocker() {
@@ -340,6 +349,43 @@ function discoverLocalDocker() {
         // ignore
     }
     return bots;
+}
+
+/**
+ * Discover ALL Docker containers on the local machine (not just bot-named ones).
+ * Used by the Container Viewer to show all containers, not just bots.
+ * @returns {RemoteContainer[]}
+ */
+function discoverLocalContainers() {
+    const containers = [];
+    try {
+        const result = spawnSync('docker', ['ps', '-a', '--format', '{{.ID}}|{{.Names}}|{{.Status}}|{{.Image}}|{{.Ports}}|{{.CreatedAt}}'], {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            timeout: 10000
+        });
+
+        if (result.status !== 0) return containers;
+
+        const lines = result.stdout.trim().split('\n').filter(line => line.trim());
+        for (const line of lines) {
+            const parts = line.split('|');
+            const status = parts[2] || '';
+            const isRunning = status.toLowerCase().startsWith('up') && !status.toLowerCase().includes('exited');
+            containers.push({
+                id: parts[0] || '',
+                name: parts[1] || '',
+                status: isRunning ? 'running' : (status.toLowerCase().includes('exited') ? 'exited' : 'unknown'),
+                image: parts[3] || '',
+                ports: parts[4] || '',
+                createdAt: parts[5] || '',
+                host: 'localhost',
+            });
+        }
+    } catch {
+        // ignore
+    }
+    return containers;
 }
 
 export function getKnownHosts() {

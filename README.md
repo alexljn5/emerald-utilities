@@ -4,7 +4,7 @@
 
 # Emerald Utilities
 
-**Version:** 0.1.5
+**Version:** 0.1.7
 **Author:** alexljn5
 **License:** Proprietary — All Rights Reserved
 **Platform:** Windows · Linux · macOS

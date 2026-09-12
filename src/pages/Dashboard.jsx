@@ -4,6 +4,7 @@ import { scriptManager } from '../core/scriptManager.js';
 import { networkManager } from '../core/networkManager.js';
 import { useTerminalLog } from '../utils/terminalHooks.js';
 import { invoke } from '../utils/electronApi.js';
+import { formatDate, formatTime } from '../utils/dateUtils.js';
 import sigil from '../../img/backgrounds/sigil_1.png';
 import neutralMascot from '../../img/mascot/dashboardMascotNeutral.png';
 import happyMascot from '../../img/mascot/dashboardMascotHappy.png';
@@ -36,7 +37,7 @@ function normalizeWeatherCity(city) {
 }
 
 function formatClock(date) {
-    return date.toLocaleTimeString([], {
+    return formatTime(date, {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
@@ -44,7 +45,7 @@ function formatClock(date) {
 }
 
 function formatDateLabel(date) {
-    return date.toLocaleDateString([], {
+    return formatDate(date, {
         weekday: 'short',
         year: 'numeric',
         month: 'short',

@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PageShell from './PageShell.jsx';
 import { invoke, on } from '../utils/electronApi.js';
 import DateTimePicker from '../tasks/components/DateTimePicker.jsx';
+import { formatDateTime } from '../utils/dateUtils.js';
 import sigilLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 import '../css/tasks.css';
 
@@ -57,8 +58,8 @@ export default function Tasks({ route, setRoute }) {
 
         fresh.forEach(reminder => {
             const parts = [reminder.title];
-            if (reminder.due_time) parts.push(`Due: ${new Date(reminder.due_time).toLocaleString()}`);
-            if (reminder.reminder_time) parts.push(`Reminder: ${new Date(reminder.reminder_time).toLocaleString()}`);
+            if (reminder.due_time) parts.push(`Due: ${formatDateTime(reminder.due_time)}`);
+            if (reminder.reminder_time) parts.push(`Reminder: ${formatDateTime(reminder.reminder_time)}`);
             showTaskNotification({
                 title: 'Task Due',
                 message: parts.join('\n'),
@@ -606,12 +607,12 @@ export default function Tasks({ route, setRoute }) {
                                                 <span className="taskPriorityLabel">{task.priority || 'green'}</span>
                                                 {task.due_time && (
                                                     <span className="taskDue">
-                                                        Due: {new Date(task.due_time).toLocaleString()}
+                                                        Due: {formatDateTime(task.due_time)}
                                                     </span>
                                                 )}
                                                 {task.reminder_time && (
                                                     <span className="taskReminder">
-                                                        Reminder: {new Date(task.reminder_time).toLocaleString()}
+                                                        Reminder: {formatDateTime(task.reminder_time)}
                                                     </span>
                                                 )}
                                                 {task.notification_policy && task.notification_policy !== 'daily' && (
@@ -744,7 +745,7 @@ export default function Tasks({ route, setRoute }) {
                                                 <span className="taskPriorityLabel">{task.priority || 'green'}</span>
                                                 {task.due_time && (
                                                     <span className="taskDue">
-                                                        Due: {new Date(task.due_time).toLocaleString()}
+                                                        Due: {formatDateTime(task.due_time)}
                                                     </span>
                                                 )}
                                             </div>
@@ -766,7 +767,7 @@ export default function Tasks({ route, setRoute }) {
                                     <li key={r.id} className={`reminderItem taskPriority-${r.priority || 'green'}`}>
                                         <span className="reminderTitle">{r.title}</span>
                                         <span className="reminderTime">
-                                            {r.reminder_time ? new Date(r.reminder_time).toLocaleString() : ''}
+                                            {r.reminder_time ? formatDateTime(r.reminder_time) : ''}
                                         </span>
                                         <button
                                             type="button"
@@ -934,7 +935,7 @@ export default function Tasks({ route, setRoute }) {
                             )}
                             <div className="taskDetailMeta">
                                 {selectedTask.created_at && (
-                                    <p>Created: {new Date(selectedTask.created_at).toLocaleString()}</p>
+                                    <p>Created: {formatDateTime(selectedTask.created_at)}</p>
                                 )}
                                 <p>Status: {selectedTask.completed ? 'Completed' : 'Open'}</p>
                                 <p>{selectedTask.long_term ? 'Long-term item' : 'Task'}</p>
@@ -1031,10 +1032,10 @@ export default function Tasks({ route, setRoute }) {
                             </div>
                             <div className="taskDetailMeta">
                                 {selectedNote.created_at && (
-                                    <p>Created: {new Date(selectedNote.created_at).toLocaleString()}</p>
+                                    <p>Created: {formatDateTime(selectedNote.created_at)}</p>
                                 )}
                                 {selectedNote.updated_at && (
-                                    <p>Updated: {new Date(selectedNote.updated_at).toLocaleString()}</p>
+                                    <p>Updated: {formatDateTime(selectedNote.updated_at)}</p>
                                 )}
                                 <p>{selectedNote.archived ? 'Archived' : 'Active'}</p>
                             </div>

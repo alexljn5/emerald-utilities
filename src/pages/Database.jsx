@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import '../css/database.css';   // Make sure this file is imported
 import { invoke, on } from '../utils/electronApi.js';
+import { formatDateTime } from '../utils/dateUtils.js';
 
 const defaultScheduleForm = {
     id: '',
@@ -423,7 +424,7 @@ export default function Database({ route, setRoute }) {
                                 <div>
                                     <strong>{task.label}</strong>
                                     <span>{task.action} every {task.intervalMinutes} minutes</span>
-                                    <span>Next: {new Date(task.nextRunAt).toLocaleString()}</span>
+                                    <span>Next: {formatDateTime(task.nextRunAt)}</span>
                                     <span>Status: {task.lastStatus}</span>
                                 </div>
                                 <div className="scheduleItemActions">

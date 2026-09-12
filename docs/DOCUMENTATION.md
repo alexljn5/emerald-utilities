@@ -1,8 +1,8 @@
 # Emerald Utilities — Master Documentation
 
-**Version:** 0.1.6
+**Version:** 0.1.7
 **Status:** Active
-**Last Updated:** 11 September 2026
+**Last Updated:** 12 September 2026
 
 ---
 

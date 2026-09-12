@@ -4,17 +4,9 @@
 
 import { useState, useEffect } from 'react';
 import { invoke } from '../../utils/electronApi.js';
+import { formatDate } from '../../utils/dateUtils.js';
 
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
+const dateOpts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
 
 function formatDuration(ms) {
     if (!ms && ms !== 0) return '';
@@ -145,7 +137,7 @@ export default function History({ postId, accountId, onRetry }) {
                                 </span>
                                 <span className="chHistoryEntryPlatform">{entry.platform}</span>
                                 <span className="chHistoryEntryTime">
-                                    {formatDate(entry.startedAt)}
+                                    {formatDate(entry.startedAt, dateOpts)}
                                 </span>
                             </div>
                             <div className="chHistoryEntryBody">

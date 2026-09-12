@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function addLogEntry(message) {
         const entry = document.createElement("div");
         entry.className = "logEntry";
-        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        entry.textContent = `[${new Date().toLocaleTimeString('en-GB')}] ${message}`;
         importLogEl.appendChild(entry);
         importLogEl.scrollTop = importLogEl.scrollHeight;
     }

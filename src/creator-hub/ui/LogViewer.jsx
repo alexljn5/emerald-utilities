@@ -4,16 +4,9 @@
 
 import { useState, useEffect } from 'react';
 import { invoke } from '../../utils/electronApi.js';
+import { formatTime } from '../../utils/dateUtils.js';
 
-function formatTime(isoStr) {
-    if (!isoStr) return '';
-    const date = new Date(isoStr);
-    return date.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
+const timeOpts = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
 
 function getLevelClass(level) {
     switch (level) {
@@ -118,7 +111,7 @@ export default function LogViewer() {
                 <div className="chLogList">
                     {filteredLogs.map((log, index) => (
                         <div key={index} className={`chLogEntry chLogEntry--${log.level}`}>
-                            <span className="chLogTime">{formatTime(log.timestamp)}</span>
+                            <span className="chLogTime">{formatTime(log.timestamp, timeOpts)}</span>
                             <span className={`chLogLevel ${getLevelClass(log.level)}`}>
                                 {log.level.toUpperCase()}
                             </span>

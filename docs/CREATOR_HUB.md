@@ -1,8 +1,8 @@
 # Emerald Utilities — Creator Hub
 
-**Version:** 0.1.5
+**Version:** 0.1.7
 **Status:** Active  
-**Last Updated:** 22 July 2026
+**Last Updated:** 12 September 2026
 
 ---
 

@@ -1,8 +1,34 @@
 # Emerald Utilities — Changelog
 
-**Version:** 0.1.6
+**Version:** 0.1.7
 **Status:** Active
-**Last Updated:** 11 September 2026
+**Last Updated:** 12 September 2026
+
+---
+
+## [0.1.7] — 2026-09-12
+
+### Added
+- Centralised date/time formatting utility (`src/utils/dateUtils.js`) with
+  `formatDate`, `formatTime`, and `formatDateTime` helpers pinned to the
+  `en-GB` locale (day/month/year order)
+- Unit tests for the date utility (`tests/unit/dateUtils.test.js`)
+
+### Changed
+- All user-facing date and time displays now use `en-GB` locale (dd/mm/yy)
+  instead of the system default, which produced American mm/dd/yy format on
+  US-configured machines
+- Updated components: `Dashboard.jsx`, `Tasks.jsx`, `Internet.jsx`,
+  `Database.jsx`, `DateTimePicker.jsx`, `notificationService.js`,
+  `pages/js/database.js`, `bot-entry.js`, and all Creator Hub UI components
+  (`Sidebar.jsx`, `Queue.jsx`, `PostLogs.jsx`, `History.jsx`,
+  `AccountPanel.jsx`, `LogViewer.jsx`)
+- `docs/STANDARDISATION.md` bumped to 0.1.7
+- `docs/TODO.md` archived to
+  `docs/archive/todo/TODO-12-09-2026-11-13.md`
+
+### Security
+- No security changes in this release
 
 ---
 

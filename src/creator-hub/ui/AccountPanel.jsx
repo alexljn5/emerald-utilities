@@ -3,16 +3,9 @@
 // Renders account info based on platform metadata.
 
 import { ACCOUNT_STATUS } from '../../globals.js';
+import { formatDateTime } from '../../utils/dateUtils.js';
 
-function formatDate(dateStr) {
-    if (!dateStr) return 'Never';
-    return new Date(dateStr).toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
+const dateOpts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
 
 function getStatusClass(status) {
     switch (status) {
@@ -53,7 +46,7 @@ export default function AccountPanel({ account, platformMeta, onTest, onDisconne
                     {account.status}
                 </span>
                 <span className="chAccountPanelLabel">Last used</span>
-                <span>{formatDate(account.lastUsed)}</span>
+                <span>{account.lastUsed ? formatDateTime(account.lastUsed, dateOpts) : 'Never'}</span>
             </div>
 
             {/* Authentication info */}
@@ -97,7 +90,7 @@ export default function AccountPanel({ account, platformMeta, onTest, onDisconne
                     </div>
                     {meta.lastSuccessfulPublish && (
                         <div className="chAccountPanelMeta">
-                            Last success: {formatDate(meta.lastSuccessfulPublish)}
+                            Last success: {meta.lastSuccessfulPublish ? formatDateTime(meta.lastSuccessfulPublish, dateOpts) : 'Never'}
                         </div>
                     )}
                 </div>

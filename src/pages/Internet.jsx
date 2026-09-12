@@ -7,6 +7,7 @@ import {
     startForwardWorker, getForwardStatus, clearSent,
     verifyAutoForward, forwardLegacyToPostgres, scrapeAndForwardInWebview
 } from '../scrapers/xscraper/index.js';
+import { formatTime } from '../utils/dateUtils.js';
 import xscraperLogo from '../../img/logos/alexljn5_logo_merge_transparent.png';
 
 /** How often the UI polls the durable forwarder for live counters. */
@@ -826,7 +827,7 @@ export default function Internet({ route, setRoute }) {
                     {forwardStats.lastSyncAt && (
                         <div className="stat-item">
                             <span className="stat-label">Last sync</span>
-                            <span className="stat-value">{new Date(forwardStats.lastSyncAt).toLocaleTimeString()}</span>
+                            <span className="stat-value">{formatTime(forwardStats.lastSyncAt)}</span>
                         </div>
                     )}
                 </div>

@@ -2,18 +2,9 @@
 // Detailed publish log metadata view.
 
 import { useState } from 'react';
+import { formatDateTime } from '../../utils/dateUtils.js';
 
-function formatDate(dateStr) {
-    if (!dateStr) return 'N/A';
-    const date = new Date(dateStr);
-    return date.toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
+const dateOpts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
 
 function formatDuration(ms) {
     if (!ms && ms !== 0) return 'N/A';
@@ -71,7 +62,7 @@ export default function PostLogs({ log, onBack }) {
                 </div>
                 <div className="chLogDetailRow">
                     <span className="chLogDetailLabel">Started At</span>
-                    <span className="chLogDetailValue">{formatDate(log.startedAt)}</span>
+                    <span className="chLogDetailValue">{log.startedAt ? formatDateTime(log.startedAt, dateOpts) : 'N/A'}</span>
                 </div>
                 <div className="chLogDetailRow">
                     <span className="chLogDetailLabel">Duration</span>

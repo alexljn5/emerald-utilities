@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { invoke } from '../../utils/electronApi.js';
+import { formatDate } from '../../utils/dateUtils.js';
 
 export default function Sidebar({ onSelectPost, selectedPostId, currentView, onViewChange, onSelectLog }) {
     const [posts, setPosts] = useState([]);
@@ -37,16 +38,7 @@ export default function Sidebar({ onSelectPost, selectedPostId, currentView, onV
         if (onViewChange) onViewChange(newView);
     }
 
-    function formatDate(dateStr) {
-        if (!dateStr) return '';
-        const date = new Date(dateStr);
-        return date.toLocaleDateString([], {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }
+    const dateOpts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
 
     return (
         <div className="creatorHubLeft">
@@ -114,7 +106,7 @@ export default function Sidebar({ onSelectPost, selectedPostId, currentView, onV
                                     {post.title || (post.message || '').slice(0, 50) || 'Untitled'}
                                 </div>
                                 <div className="chListItemMeta">
-                                    {formatDate(post.createdAt)}
+                                    {formatDate(post.createdAt, dateOpts)}
                                 </div>
                                 {(post.tags || []).length > 0 && (
                                     <div className="chSidebarTag">
@@ -148,7 +140,7 @@ export default function Sidebar({ onSelectPost, selectedPostId, currentView, onV
                                     ID: {log.id.slice(0, 8)}...
                                 </div>
                                 <div className="chListItemMeta">
-                                    {formatDate(log.startedAt)}
+                                    {formatDate(log.startedAt, dateOpts)}
                                 </div>
                             </li>
                         ))}

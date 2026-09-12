@@ -22,7 +22,7 @@ client.login(process.env.TOKEN).catch(err => {
 });
 
 client.once('clientReady', () => {
-    console.log(`Bot is live and hot-reload works! ${new Date().toLocaleTimeString()}`);
+    console.log(`Bot is live and hot-reload works! ${new Date().toLocaleTimeString('en-GB')}`);
 });
 
 client.on('messageCreate', (message) => {

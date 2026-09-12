@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { formatDateTime } from '../../utils/dateUtils.js';
 
 export default function DateTimePicker({ value, onChange, placeholder }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -121,7 +122,7 @@ export default function DateTimePicker({ value, onChange, placeholder }) {
             >
                 <span className="datetimePickerIcon">[ ]</span>
                 <span className="datetimePickerText">
-                    {value ? new Date(value).toLocaleString() : placeholder || 'Select date & time...'}
+                    {value ? formatDateTime(value) : placeholder || 'Select date & time...'}
                 </span>
                 {value && (
                     <span className="datetimePickerClear" onClick={(e) => { e.stopPropagation(); clearValue(); }}>×</span>

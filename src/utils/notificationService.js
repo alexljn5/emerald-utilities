@@ -17,6 +17,7 @@
  */
 
 import { OSNotifier, getAumid } from './osNotifier.js';
+import { formatDateTime } from './dateUtils.js';
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
@@ -173,8 +174,8 @@ const NOTIFICATION_ICON = resolveNotificationIcon();
 
 function buildReminderPayload(task) {
     const parts = [task.title];
-    if (task.due_time) parts.push(`Due: ${new Date(task.due_time).toLocaleString()}`);
-    if (task.reminder_time) parts.push(`Reminder: ${new Date(task.reminder_time).toLocaleString()}`);
+    if (task.due_time) parts.push(`Due: ${formatDateTime(task.due_time)}`);
+    if (task.reminder_time) parts.push(`Reminder: ${formatDateTime(task.reminder_time)}`);
     return {
         title: 'Reminder',
         message: parts.join('\n'),
@@ -185,8 +186,8 @@ function buildReminderPayload(task) {
 
 function buildDueDatePayload(task) {
     const parts = [task.title];
-    if (task.due_time) parts.push(`Due: ${new Date(task.due_time).toLocaleString()}`);
-    if (task.reminder_time) parts.push(`Reminder: ${new Date(task.reminder_time).toLocaleString()}`);
+    if (task.due_time) parts.push(`Due: ${formatDateTime(task.due_time)}`);
+    if (task.reminder_time) parts.push(`Reminder: ${formatDateTime(task.reminder_time)}`);
     return {
         title: 'Due date',
         message: parts.join('\n'),
@@ -197,8 +198,8 @@ function buildDueDatePayload(task) {
 
 function buildPriorityPayload(task) {
     const parts = [task.title];
-    if (task.due_time) parts.push(`Due: ${new Date(task.due_time).toLocaleString()}`);
-    if (task.reminder_time) parts.push(`Reminder: ${new Date(task.reminder_time).toLocaleString()}`);
+    if (task.due_time) parts.push(`Due: ${formatDateTime(task.due_time)}`);
+    if (task.reminder_time) parts.push(`Reminder: ${formatDateTime(task.reminder_time)}`);
     parts.push('Requires attention.');
     return {
         title: 'High priority',
@@ -213,8 +214,8 @@ function buildSubtaskDuePayload(task, subtask) {
     if (subtask) {
         parts.push(`Subtask: ${subtask.title}`);
     }
-    if (subtask?.due_time) parts.push(`Due: ${new Date(subtask.due_time).toLocaleString()}`);
-    if (subtask?.reminder_time) parts.push(`Reminder: ${new Date(subtask.reminder_time).toLocaleString()}`);
+    if (subtask?.due_time) parts.push(`Due: ${formatDateTime(subtask.due_time)}`);
+    if (subtask?.reminder_time) parts.push(`Reminder: ${formatDateTime(subtask.reminder_time)}`);
     return {
         title: 'Subtask deadline',
         message: parts.join('\n'),

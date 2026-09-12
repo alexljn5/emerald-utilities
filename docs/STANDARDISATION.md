@@ -1,8 +1,8 @@
 # Emerald Utilities — UI Standardisation
 
-**Version:** 0.1.5
+**Version:** 0.1.7
 **Status:** Active
-**Last Updated:** 22 July 2026
+**Last Updated:** 12 September 2026
 
 > **Maintenance reminder:** When bumping the app version, update the `**Version:**` and `**Last Updated:**` fields above to match [`src/globals.js`](src/globals.js:5) and today's date. This prevents documentation drift.
 
@@ -358,4 +358,4 @@ When a TODO document is completed, archive it following this system:
 4. Document the archiving system in this STANDARDISATION.md file
 5. Never delete archived TODOs — they serve as historical records
 
-**Current archive:** `docs/archive/todo/TODO-22-07-2026-11-34.md`
+**Current archive:** `docs/archive/todo/TODO-12-09-2026-11-13.md`

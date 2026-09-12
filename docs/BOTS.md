@@ -1,8 +1,8 @@
 # Bots — INFBOT Integration
 
-**Version:** 0.1.0
+**Version:** 0.1.7
 **Status:** Active
-**Last Updated:** 16 August 2026
+**Last Updated:** 12 September 2026
 
 ---
 

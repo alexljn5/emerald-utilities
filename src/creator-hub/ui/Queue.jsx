@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { invoke } from '../../utils/electronApi.js';
+import { formatDateTime } from '../../utils/dateUtils.js';
 
 export default function Queue() {
     const [results, setResults] = useState([]);
@@ -18,17 +19,7 @@ export default function Queue() {
         setResults([]);
     }
 
-    function formatDate(dateStr) {
-        if (!dateStr) return '';
-        const date = new Date(dateStr);
-        return date.toLocaleString([], {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-    }
+    const dateOpts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
 
     return (
         <div className="chPanel">
@@ -44,7 +35,7 @@ export default function Queue() {
                                     Post: {result.postId?.slice(0, 8) || 'unknown'}
                                 </span>
                                 <span className="chQueueResultMeta">
-                                    {formatDate(result.startedAt)} - {formatDate(result.finishedAt)}
+                                    {formatDateTime(result.startedAt, dateOpts)} - {formatDateTime(result.finishedAt, dateOpts)}
                                 </span>
                             </div>
                             <div className="chList">

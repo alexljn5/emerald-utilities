@@ -9,7 +9,16 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'BatchMode=yes'];
+// BatchMode=yes prevents interactive password/passphrase prompts.
+// If your key is passphrase-protected, start ssh-agent and add the key
+// before launching the app: `eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519`
+const SSH_OPTS = [
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'UserKnownHostsFile=/dev/null',
+    '-o', 'BatchMode=yes',
+    '-o', 'AddKeysToAgent=yes',
+    '-o', 'IdentitiesOnly=yes'
+];
 
 export class BotInstance {
     constructor(config) {

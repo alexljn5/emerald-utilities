@@ -53,7 +53,16 @@ const BOT_NAMES = ['infbot', 'emerald-bot', 'discord-bot', 'bot'];
 const BOT_PORTS = [3000, 3001, 8080, 8888, 9000];
 
 // ==================== SSH HELPERS ====================
-const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'BatchMode=yes'];
+// BatchMode=yes prevents interactive password/passphrase prompts.
+// If your key is passphrase-protected, start ssh-agent and add the key
+// before launching the app: `eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519`
+const SSH_OPTS = [
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'UserKnownHostsFile=/dev/null',
+    '-o', 'BatchMode=yes',
+    '-o', 'AddKeysToAgent=yes',
+    '-o', 'IdentitiesOnly=yes'
+];
 
 function getSshConfig() {
     const config = readBotConfig();
@@ -66,7 +75,11 @@ function getSshConfig() {
 }
 
 function sshCommand(host, user, port, key, localCmd) {
-    const ssh = ['ssh', ...SSH_OPTS, '-p', port, '-i', key, `${user}@${host}`, localCmd];
+    // Prepend a full PATH export — the remote server's default PATH may be
+    // broken (e.g. only /usr/share/archcraft/scripts), causing "command not
+    // found" for docker, screen, etc.
+    const remoteCmd = `export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/usr/lib/docker:/bin:/sbin && ${localCmd}`;
+    const ssh = ['ssh', ...SSH_OPTS, '-p', port, '-i', key, `${user}@${host}`, remoteCmd];
     return ssh;
 }
 
@@ -79,14 +92,32 @@ function runSshCommand(host, user, port, key, cmd, options = {}) {
             timeout: options.timeout || 10000,
             ...options
         });
-    } catch {
-        return { status: 1, stdout: '', stderr: 'SSH command failed' };
+    } catch (err) {
+        return { status: 1, stdout: '', stderr: String(err?.message || err || 'SSH command failed') };
     }
 }
 
 function canSsh(host, user, port, key) {
     const result = runSshCommand(host, user, port, key, 'echo ok', { timeout: 3000 });
     return result.status === 0 && result.stdout.trim() === 'ok';
+}
+
+/**
+ * Test SSH connectivity to a host and return a detailed result.
+ * Used by the dashboard to diagnose connection issues.
+ * @returns {{ ok: boolean, host: string, error?: string, stderr?: string }}
+ */
+export function testSshConnection(host, user, port, key) {
+    const result = runSshCommand(host, user, port, key, 'echo ok', { timeout: 5000 });
+    if (result.status === 0 && result.stdout.trim() === 'ok') {
+        return { ok: true, host };
+    }
+    return {
+        ok: false,
+        host,
+        error: result.stderr?.trim() || `SSH exited with code ${result.status}`,
+        stderr: result.stderr?.trim() || ''
+    };
 }
 
 // ==================== DOCKER DISCOVERY ====================
@@ -255,6 +286,7 @@ export async function discoverBots() {
 export async function discoverRemoteContainers() {
     const sshConfig = getSshConfig();
     const allContainers = [];
+    const errors = [];
 
     // Try Tailscale MagicDNS first, then fall back to LAN IP
     const hostsToTry = [TAILSCALE_HOST, '192.168.2.27'];
@@ -292,9 +324,17 @@ export async function discoverRemoteContainers() {
                 if (containers.length > 0) {
                     allContainers.push(...containers);
                 }
+            } else {
+                errors.push({
+                    host,
+                    error: result.stderr?.trim() || `SSH exited with code ${result.status}`
+                });
             }
-        } catch {
-            // Try next host
+        } catch (err) {
+            errors.push({
+                host,
+                error: String(err?.message || err || 'SSH command failed')
+            });
         }
     }
 
@@ -302,11 +342,11 @@ export async function discoverRemoteContainers() {
     try {
         const localContainers = discoverLocalContainers();
         allContainers.push(...localContainers);
-    } catch {
-        // ignore
+    } catch (err) {
+        errors.push({ host: 'localhost', error: String(err?.message || err || 'Local Docker failed') });
     }
 
-    return allContainers;
+    return { containers: allContainers, errors };
 }
 
 function discoverLocalDocker() {

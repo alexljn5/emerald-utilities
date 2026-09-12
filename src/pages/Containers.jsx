@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import PageShell from './PageShell.jsx';
 import { invoke } from '../utils/electronApi.js';
-import { formatDateTime } from '../utils/dateUtils.js';
 import '../css/containers.css';
 
 const TABS = {
@@ -15,6 +14,8 @@ export default function Containers({ route, setRoute }) {
     const [allContainers, setAllContainers] = useState([]);
     const [loadingContainers, setLoadingContainers] = useState(false);
     const [containerError, setContainerError] = useState(null);
+    const [sshTest, setSshTest] = useState(null);
+    const [testingSsh, setTestingSsh] = useState(false);
 
     // Load containers on mount
     useEffect(() => {
@@ -32,6 +33,9 @@ export default function Containers({ route, setRoute }) {
                 if (!cancelled) {
                     if (activeResult?.ok) {
                         setActiveContainers(activeResult.containers || []);
+                        if (activeResult.errors?.length > 0) {
+                            setContainerError(activeResult.error);
+                        }
                     } else {
                         setContainerError(activeResult?.error || 'Failed to load active containers');
                     }
@@ -58,6 +62,19 @@ export default function Containers({ route, setRoute }) {
         return () => clearInterval(containerInterval);
     }, []);
 
+    async function handleTestSsh() {
+        setTestingSsh(true);
+        setSshTest(null);
+        try {
+            const result = await invoke('container:test-ssh');
+            setSshTest(result);
+        } catch (err) {
+            setSshTest({ ok: false, error: err.message });
+        } finally {
+            setTestingSsh(false);
+        }
+    }
+
     return (
         <PageShell title="Containers" route={route} setRoute={setRoute}>
             <div className="botsContent">
@@ -82,13 +99,38 @@ export default function Containers({ route, setRoute }) {
                 {/* Tab Content */}
                 {activeTab === TABS.CONTAINERS && (
                     <div className="botsTabContent">
+                        {/* SSH Diagnostics */}
+                        <div className="containerBridgeSection">
+                            <div className="containerCardHeader">
+                                <h2 style={{ margin: 0 }}>SSH Connection</h2>
+                                <button
+                                    className="botsTab"
+                                    onClick={handleTestSsh}
+                                    disabled={testingSsh}
+                                    style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+                                >
+                                    {testingSsh ? 'Testing...' : 'Test SSH'}
+                                </button>
+                            </div>
+                            {sshTest && (
+                                <p className="placeholder" style={{ color: sshTest.ok ? '#44ff66' : '#ff6b6b', margin: 0 }}>
+                                    {sshTest.ok
+                                        ? `✓ Connected to ${sshTest.host} via Tailscale`
+                                        : `✗ ${sshTest.host}: ${sshTest.error || sshTest.stderr || 'Connection failed'}`}
+                                </p>
+                            )}
+                            {containerError && !sshTest && (
+                                <p className="placeholder" style={{ color: '#ff6b6b', margin: 0 }}>
+                                    ⚠ {containerError}
+                                </p>
+                            )}
+                        </div>
+
                         {/* Active Containers Bridge */}
                         <div className="containerBridgeSection">
                             <h2>Active Containers</h2>
                             {loadingContainers ? (
                                 <p className="placeholder">Scanning for active containers...</p>
-                            ) : containerError ? (
-                                <p className="placeholder" style={{ color: '#ff6b6b' }}>Error: {containerError}</p>
                             ) : activeContainers.length === 0 ? (
                                 <p className="placeholder">No active containers found. Start a bot or container to see it here.</p>
                             ) : (

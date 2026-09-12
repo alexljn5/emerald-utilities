@@ -84,7 +84,16 @@ function scriptRemote() { return isRemote(); }
 // changes via setSshConfig() take effect immediately without a module reload.
 // Tailscale MagicDNS hostnames (e.g. 'infhub-server') are resolved by the
 // operating system — no Tailscale-specific code is needed here.
-const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'BatchMode=yes'];
+// BatchMode=yes prevents interactive password/passphrase prompts.
+// If your key is passphrase-protected, start ssh-agent and add the key
+// before launching the app: `eval $(ssh-agent) && ssh-add ~/.ssh/id_ed25519`
+const SSH_OPTS = [
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'UserKnownHostsFile=/dev/null',
+    '-o', 'BatchMode=yes',
+    '-o', 'AddKeysToAgent=yes',
+    '-o', 'IdentitiesOnly=yes'
+];
 
 function isRemote() {
     return Boolean(getSshConfig().host);

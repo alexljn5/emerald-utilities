@@ -308,20 +308,47 @@ export function registerBotIpcHandlers(ipcMain, broadcast) {
 
     ipcMain.handle('container:list-active', async () => {
         try {
-            const containers = await discoverRemoteContainers();
-            const activeContainers = containers.filter(c => c.status === 'running');
-            return { ok: true, containers: activeContainers, total: activeContainers.length };
+            const result = await discoverRemoteContainers();
+            const activeContainers = result.containers.filter(c => c.status === 'running');
+            return {
+                ok: true,
+                containers: activeContainers,
+                total: activeContainers.length,
+                errors: result.errors,
+                error: result.errors.length > 0 ? result.errors.map(e => `${e.host}: ${e.error}`).join('; ') : null
+            };
         } catch (err) {
-            return { ok: false, error: err.message, containers: [], total: 0 };
+            return { ok: false, error: err.message, containers: [], total: 0, errors: [{ host: 'unknown', error: err.message }] };
         }
     });
 
     ipcMain.handle('container:list-all', async () => {
         try {
-            const containers = await discoverRemoteContainers();
-            return { ok: true, containers, total: containers.length };
+            const result = await discoverRemoteContainers();
+            return {
+                ok: true,
+                containers: result.containers,
+                total: result.containers.length,
+                errors: result.errors,
+                error: result.errors.length > 0 ? result.errors.map(e => `${e.host}: ${e.error}`).join('; ') : null
+            };
         } catch (err) {
-            return { ok: false, error: err.message, containers: [], total: 0 };
+            return { ok: false, error: err.message, containers: [], total: 0, errors: [{ host: 'unknown', error: err.message }] };
+        }
+    });
+
+    // Test SSH connectivity to the configured host
+    ipcMain.handle('container:test-ssh', async () => {
+        try {
+            const { testSshConnection } = await import('./bot-discovery.js');
+            const sshConfig = getSshConfig();
+            if (!sshConfig.host) {
+                return { ok: false, error: 'No SSH host configured. Set it in Settings → Bot SSH Config.' };
+            }
+            const result = testSshConnection(sshConfig.host, sshConfig.user, sshConfig.port, sshConfig.key);
+            return result;
+        } catch (err) {
+            return { ok: false, error: err.message };
         }
     });
 }

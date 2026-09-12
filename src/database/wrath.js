@@ -19,7 +19,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { pool, checkDbHealth } from './db-pool.js';
+import { pool, checkDbHealth, connectionInfo } from './db-pool.js';
 import { resolveEnvPath } from '../utils/pathResolver.js';
 import { dbLog as log } from '../utils/logger.js';
 
@@ -830,12 +830,17 @@ async function healthCheck() {
     }
 }
 
-function getConnectionInfo() {
+async function getConnectionInfo() {
+    // Always do a fresh health check so the status is accurate on first load
+    // (dbHealth is only populated after a query operation).
+    if (!dbHealth) {
+        dbHealth = await checkDbHealth();
+    }
     return {
-        host: resolved.host,
-        port: resolved.port,
-        database: resolved.database,
-        user: resolved.user,
+        host: connectionInfo.host,
+        port: connectionInfo.port,
+        database: connectionInfo.database,
+        user: connectionInfo.user,
         connected: dbHealth?.ok ?? false,
     };
 }

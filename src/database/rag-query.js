@@ -195,10 +195,13 @@ async function postJson(url, bodyObj, { apiKey = null, timeoutMs = 60000, label 
                 err,
                 isReset && attempt < retries ? 'transient reset, will retry' : undefined
             );
-            // Retry only on transient connection resets; rethrow HTTP errors.
-            if (!isReset || attempt === retries) throw err;
+            // Retry on transient connection resets AND aborts (timeout);
+            // rethrow HTTP errors and other non-transient failures.
+            const isAbort = /aborted|abort|timeout/i.test(`${err.message} ${causeCode}`);
+            if ((!isReset && !isAbort) || attempt === retries) throw err;
+            const reason = isAbort ? 'timeout/abort' : 'connection reset';
             await new Promise(r => setTimeout(r, 300 * attempt));
-            ollamaLog.warn(`retrying ${label} after connection reset...`);
+            ollamaLog.warn(`retrying ${label} after ${reason}...`);
         }
     }
     throw lastErr;
@@ -584,9 +587,12 @@ ${wantsShort ? 'Keep it very short.' : ''}`;
         if (ctxWindow && ctxWindow > 0) {
             ollamaOptions.num_ctx = ctxWindow;
         }
-        // Ensure the model has room to generate a full response.
-        // Some small models stop after 1 token if num_predict is too low.
-        ollamaOptions.num_predict = 4096;
+        // Adaptive num_predict: short requests don't need 4096 tokens,
+        // and a huge budget can cause the model to ramble or time out.
+        // Estimate based on user query length — most responses are <200 tokens.
+        const queryLen = queryText?.length || 50;
+        const estimatedMax = Math.max(256, Math.min(1024, Math.ceil(queryLen * 4) + 200));
+        ollamaOptions.num_predict = estimatedMax;
     }
 
     const chatBody = {

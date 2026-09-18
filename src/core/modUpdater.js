@@ -393,6 +393,67 @@ function getToCopyFolder(modsPath) {
     return path.join(path.dirname(modsPath), `${path.basename(modsPath)}-to-update`);
 }
 
+/**
+ * Get the still-needs-updating archive folder.
+ * Old mods from a previous MC version are moved here, organized by
+ * their old version number (e.g. still-needs-updating/26.2/).
+ */
+function getStillNeedsUpdatingFolder(modsPath) {
+    return path.join(path.dirname(modsPath), 'still-needs-updating');
+}
+
+/**
+ * Archive outdated mods to a version-named subdirectory.
+ *
+ * When updating from MC version A to B, mods that were for version A
+ * (and were not updated to B) are moved to:
+ *   still-needs-updating/A/
+ *
+ * This preserves them instead of deleting, while keeping the main
+ * mods folder clean with only the current version's mods.
+ *
+ * @param {string} modsPath - Path to the mods folder
+ * @param {string} oldMCVersion - The previous MC version (e.g. "26.2")
+ * @param {Set<string>} updatedModIds - Mod IDs that were successfully updated (these stay)
+ * @returns {Array<{id, file, archivedTo}>}
+ */
+function archiveOutdatedMods(modsPath, oldMCVersion, updatedModIds) {
+    if (!fs.existsSync(modsPath)) return [];
+
+    const stillNeedsBase = getStillNeedsUpdatingFolder(modsPath);
+    const archiveDir = path.join(stillNeedsBase, String(oldMCVersion));
+    const archived = [];
+
+    const files = fs.readdirSync(modsPath);
+    for (const file of files) {
+        if (!file.toLowerCase().endsWith('.jar')) continue;
+
+        const filePath = path.join(modsPath, file);
+        try {
+            const zip = new AdmZip(filePath);
+            const entry = zip.getEntry('fabric.mod.json');
+            if (!entry) continue;
+
+            const content = JSON.parse(entry.getData().toString('utf8'));
+            const modId = String(content.id);
+
+            // Skip mods that were updated — they belong in the main folder
+            if (updatedModIds.has(modId)) continue;
+
+            // This mod is from the old version and wasn't updated — archive it
+            fs.mkdirSync(archiveDir, { recursive: true });
+            const target = path.join(archiveDir, file);
+            fs.renameSync(filePath, target);
+            archived.push({ id: modId, file, archivedTo: target });
+            console.log(`[Mod Updater] Archived outdated mod ${file} → still-needs-updating/${oldMCVersion}/`);
+        } catch (err) {
+            console.warn(`[Mod Updater] Failed to archive ${file}:`, err.message);
+        }
+    }
+
+    return archived;
+}
+
 export function getDefaultModsFolder(app) {
     const devPath = path.join(app.getAppPath(), 'minecraft-mod-updater', 'mods');
     if (fs.existsSync(devPath)) {
@@ -511,6 +572,8 @@ export async function processModDownloads({
     backup,
     deleteOld,
     copyNonUpdatable,
+    previousMCVersion,
+    archiveOutdated,
     app
 }) {
     const modsPath = resolveModsFolder(modsFolder, app);
@@ -518,6 +581,7 @@ export async function processModDownloads({
     const modsToCopyPath = getToCopyFolder(modsPath);
     const outputDir = overwrite ? modsPath : modsUpdatedPath;
     const results = [];
+    const updatedModIds = new Set();
 
     fs.mkdirSync(modsPath, { recursive: true });
 
@@ -569,6 +633,7 @@ export async function processModDownloads({
             }
 
             const downloadedPath = await downloadMod(mod.versionData, mod.id, outputDir);
+            updatedModIds.add(mod.id);
             results.push({
                 id: mod.id,
                 file: mod.file,
@@ -585,11 +650,22 @@ export async function processModDownloads({
         }
     }
 
+    // --- Archive outdated mods ---
+    // After downloading updates, any remaining mods in the main folder
+    // that weren't updated get moved to still-needs-updating/<old-version>/
+    // so the user can review them later without losing them.
+    let archived = [];
+    if (archiveOutdated && previousMCVersion && overwrite) {
+        archived = archiveOutdatedMods(modsPath, previousMCVersion, updatedModIds);
+    }
+
     return {
         ok: true,
         modsPath,
         outputDir,
         copiedDir: (!overwrite && copyNonUpdatable) ? modsToCopyPath : null,
+        archivedDir: archived.length > 0 ? getStillNeedsUpdatingFolder(modsPath) : null,
+        archived,
         mods: results
     };
 }

@@ -109,7 +109,7 @@ export default function TheAI({ route, setRoute }) {
                     setConversationId(activeConvId);
                     const formatted = msgResult.messages.map(msg => ({
                         role: msg.author === 'emerald-user' ? 'user' : msg.author === 'Cream' ? 'assistant' : msg.author,
-                        content: msg.content,
+                        content: msg.author === 'Cream' ? normalizeModelResponse(msg.content) : msg.content,
                         timestamp: msg.timestamp,
                     }));
                     console.log('[AI] Loaded', formatted.length, 'messages for active conversation', activeConvId);
@@ -142,7 +142,7 @@ export default function TheAI({ route, setRoute }) {
                 if (msgResult?.ok && Array.isArray(msgResult.messages)) {
                     const formatted = msgResult.messages.map(msg => ({
                         role: msg.author === 'emerald-user' ? 'user' : msg.author === 'Cream' ? 'assistant' : msg.author,
-                        content: msg.content,
+                        content: msg.author === 'Cream' ? normalizeModelResponse(msg.content) : msg.content,
                         timestamp: msg.timestamp,
                     }));
                     console.log('[AI] Loaded', formatted.length, 'messages for conversation', latestConv.id);
@@ -247,6 +247,26 @@ export default function TheAI({ route, setRoute }) {
             return () => clearTimeout(timer);
         }
     }, [messages]);
+
+    // Auto-scroll to bottom on window/container resize when user is near bottom.
+    // This fixes the "have to scroll down after resizing window" annoyance.
+    useEffect(() => {
+        if (!outputRef.current) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (!outputRef.current || !shouldAutoScroll.current) return;
+            // Use requestAnimationFrame to ensure layout is settled
+            requestAnimationFrame(() => {
+                if (outputRef.current && shouldAutoScroll.current) {
+                    outputRef.current.scrollTop = outputRef.current.scrollHeight;
+                }
+            });
+        });
+
+        resizeObserver.observe(outputRef.current);
+
+        return () => resizeObserver.disconnect();
+    }, []);
 
     const handleSend = async () => {
         if (!input.trim() || isRunning) return;

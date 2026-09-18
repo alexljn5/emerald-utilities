@@ -216,7 +216,12 @@ export async function checkDbHealth() {
     let client;
     try {
         client = await pool.connect();
-        await client.query('SELECT 1');
+        // AbortSignal.timeout prevents queries from hanging indefinitely
+        // when the DB is reachable but unresponsive (e.g. silent packet drop).
+        const queryTimeoutMs = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '3000', 10);
+        const timeoutSignal = AbortSignal.timeout(queryTimeoutMs);
+
+        await client.query({ text: 'SELECT 1', signal: timeoutSignal });
 
         // Gather PostgreSQL version and pgvector availability in the same
         // round-trip so preflight/diagnostics can report them without an
@@ -226,10 +231,11 @@ export async function checkDbHealth() {
         let pgvector = false;
         try {
             const [verRes, extRes] = await Promise.all([
-                client.query('SELECT version() AS v'),
-                client.query(
-                    "SELECT COUNT(*)::int AS c FROM pg_extension WHERE extname = 'vector'"
-                ),
+                client.query({ text: 'SELECT version() AS v', signal: timeoutSignal }),
+                client.query({
+                    text: "SELECT COUNT(*)::int AS c FROM pg_extension WHERE extname = 'vector'",
+                    signal: timeoutSignal,
+                }),
             ]);
             pgVersion = verRes.rows[0]?.v || null;
             pgvector = Number(extRes.rows[0]?.c || 0) > 0;

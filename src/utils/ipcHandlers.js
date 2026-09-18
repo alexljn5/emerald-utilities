@@ -657,6 +657,8 @@ export function registerIpcHandlers(context) {
                 backup: Boolean(options.backup),
                 deleteOld: Boolean(options.deleteOld),
                 copyNonUpdatable: options.copyNonUpdatable !== false,
+                previousMCVersion: options.previousMCVersion || null,
+                archiveOutdated: options.archiveOutdated !== false,
                 app
             });
 
@@ -1046,6 +1048,35 @@ export function registerIpcHandlers(context) {
 
             ragLog.info('grok-chat', `Conversation: ${prepared.conversationId}, history messages: ${prepared.history.length}`);
 
+            // 2a. Deterministic greeting shortcut.
+            // Simple greetings ("hi", "hello", "hai", "hey") should get a
+            // warm, brief response without going through the LLM. This
+            // prevents the model from continuing old transcript patterns or
+            // looping generic database content on trivial inputs.
+            const normalizedMsg = userMessage.trim().toLowerCase();
+            const isSimpleGreeting = /^(hi|hello|hai|hey|hi there|hey there|yo|sup|hi!|hello!|hey!|hai!)\b/.test(normalizedMsg);
+            if (isSimpleGreeting) {
+                const greeting = "Hiii Lune ♡";
+                const saved = await saveAssistantResponse({
+                    conversationId: prepared.conversationId,
+                    responseContent: greeting,
+                });
+                ragLog.info('grok-chat', `Greeting shortcut: "${userMessage}" -> "${greeting}"`);
+                return {
+                    ok: true,
+                    response: greeting,
+                    conversationId: prepared.conversationId,
+                    messageId: saved.messageId,
+                    contextDebug: {
+                        mode: 'greeting-shortcut',
+                        systemPrompt: false,
+                        ragMessages: 0,
+                        contextMessages: prepared.context.length,
+                        note: 'Deterministic greeting response — bypassed LLM',
+                    },
+                };
+            }
+
             // 2. Retrieve semantically-relevant OLDER context via RAG. Each hit
             //    carries its surrounding window + metadata, so it is never an
             //    isolated fragment. This is what lets the model infer ongoing
@@ -1074,14 +1105,41 @@ export function registerIpcHandlers(context) {
             //    models from copying it verbatim.
             const character = getCharacterSheet(agentId);
 
+            // Strip leading role labels from history content. If old messages
+            // contain "Cream: ..." or "Lune: ..." prefixes, the model will
+            // copy them verbatim. Removing the labels breaks the transcript
+            // pattern and prevents recursive serialization.
+            const stripRoleLabel = (text) => {
+                if (!text) return '';
+                return String(text).replace(/^(Cream|Lune|assistant|user):\s*/gi, '').trim();
+            };
+
+            // Detect generic/template responses that the model tends to
+            // copy verbatim when they appear in history. These phrases are
+            // not useful context — they're filler — so we exclude them.
+            const isGenericTemplate = (text) => {
+                if (!text) return false;
+                const t = String(text).toLowerCase();
+                return /feeling comfortable|keep moving forward|explore these new ideas|what should we do next|roleplaying adventure|let's just keep moving|let's see what happens/i.test(t);
+            };
+
             // Build context strings at different sizes for smart fallback.
             // llama2-uncensored struggles with very long multi-turn context,
             // so we try a moderate amount first, then reduce if we get empty responses.
+            // Context builder: presents history as numbered reference notes,
+            // NOT as dialogue. Using "[1]" instead of "Lune:" prevents the
+            // model from treating it as a conversation transcript and
+            // continuing/reproducing it (recursive dialogue serialization).
             const buildContextString = (historySlice) => {
-                const recent = historySlice.length > 0
-                    ? `Recent messages:\n${historySlice.map(m => `${m.author === 'emerald-user' ? 'Lune' : m.author}: "${m.content}"`).join('\n')}\n\n`
-                    : '';
-                return recent;
+                if (historySlice.length === 0) return '';
+                const lines = historySlice
+                    .filter(m => !isGenericTemplate(m.content))
+                    .map((m, i) => {
+                        const speaker = m.author === 'emerald-user' ? 'Lune' : m.author;
+                        return `${i + 1}. ${speaker} said: ${stripRoleLabel(m.content)}`;
+                    });
+                if (lines.length === 0) return '';
+                return `=== CONVERSATION HISTORY (reference only, do not repeat) ===\n${lines.join('\n')}\n=== END HISTORY ===\n`;
             };
 
             const context20 = buildContextString(prepared.history.slice(-20));
@@ -1090,38 +1148,67 @@ export function registerIpcHandlers(context) {
 
             ragLog.info('grok-chat', `LLM context: trying 20 messages first (RAG: ${retrieved.length} hits not sent to LLM), system prompt from character sheet`);
 
+            // Diagnostic: log the actual context being sent to the LLM.
+            // This helps identify recursive dialogue contamination.
+            ragLog.info('grok-chat', `[DIAG] context20 length: ${context20.length}, content: ${context20.substring(0, 500)}`);
+            ragLog.info('grok-chat', `[DIAG] userMessage: "${userMessage}"`);
+
+            // Build the final user prompt with the CURRENT message as the
+            // absolute focus. History is demoted to reference-only.
+            // Keep responses SHORT — this is a chat, not an essay.
+            const userPrompt = `${context20}
+
+NOW LUNE SAYS (this is what you're responding to — nothing else matters):
+"${userMessage}"
+
+Respond as Cream. Keep it SHORT and natural. One or two sentences max.
+Do NOT write "Cream:" or "Lune:" labels. Do NOT repeat the history.
+Do NOT ask "what should we do next?" Just respond to what Lune just said.`;
+
             // 4. Query LLM with smart context fallback.
             //    Try 20 messages first for conversation flow, then reduce
-            //    if the model returns empty responses. This avoids the
-            //    "entire chat is buggy" problem while still giving the
-            //    model enough context to maintain consistency.
+            //    if the model returns empty responses or generic template
+            //    filler. This avoids the "entire chat is buggy" problem
+            //    while still giving the model enough context to maintain
+            //    consistency.
             //    Pass timeout from caller for overall request timeout.
             //    Pass character sheet so identity/personality is preserved.
-            let response = await queryWithLLM(userMessage, context20, [], {
-                timeoutMs,
-                useCharacterSheet: true,
-                characterSheet: character,
-                fallbackResponse: "I'm having trouble connecting right now. Could you try again in a moment? ♡",
-            });
+            //
+            //    The user prompt is constructed to make the CURRENT message
+            //    the absolute focus, with history demoted to reference-only.
+            //    This prevents the model from getting confused by repeated
+            //    "hai" messages in history and responding to an old message.
 
-            if (!response || response.trim().length === 0) {
-                ragLog.warn('grok-chat', 'Empty response with 20 messages, retrying with 6 messages');
-                response = await queryWithLLM(userMessage, context6, [], {
+            const contextLevels = [
+                { label: '20 messages', context: context20, instruction: 'Respond as Cream. Keep it SHORT and natural. One or two sentences max. Do NOT write "Cream:" or "Lune:" labels. Do NOT repeat the history. Do NOT ask "what should we do next?" Just respond to what Lune just said.' },
+                { label: '6 messages', context: context6, instruction: 'Respond as Cream. Keep it SHORT. One or two sentences. No labels.' },
+                { label: '2 messages', context: context2, instruction: 'Respond as Cream. Keep it SHORT. No labels.' },
+                { label: 'no history', context: '', instruction: 'Respond as Cream. Keep it SHORT. No labels. Just answer Lune directly.' },
+            ];
+
+            let response = null;
+            for (const level of contextLevels) {
+                const prompt = `${level.context}
+
+NOW LUNE SAYS: "${userMessage}"
+
+${level.instruction}`;
+                response = await queryWithLLM(userMessage, prompt, [], {
                     timeoutMs,
                     useCharacterSheet: true,
                     characterSheet: character,
-                    fallbackResponse: "I'm having trouble connecting right now. Could you try again in a moment? ♡",
+                    fallbackResponse: "Hiii Lune ♡",
                 });
-            }
 
-            if (!response || response.trim().length === 0) {
-                ragLog.warn('grok-chat', 'Empty response with 6 messages, retrying with 2 messages');
-                response = await queryWithLLM(userMessage, context2, [], {
-                    timeoutMs,
-                    useCharacterSheet: true,
-                    characterSheet: character,
-                    fallbackResponse: "I'm having trouble connecting right now. Could you try again in a moment? ♡",
-                });
+                const isEmpty = !response || response.trim().length === 0;
+                const isTemplate = !isEmpty && isGenericTemplate(response);
+                if (!isEmpty && !isTemplate) break;
+
+                if (isTemplate) {
+                    ragLog.warn('grok-chat', `Generic template response with ${level.label}, retrying with smaller context: "${response.substring(0, 80)}..."`);
+                } else {
+                    ragLog.warn('grok-chat', `Empty response with ${level.label}, retrying with smaller context`);
+                }
             }
 
             // 5. Save assistant response

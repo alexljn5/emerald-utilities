@@ -34,8 +34,7 @@ import {
 } from './ai-context.js';
 import { loadCharacterSheet as loadCharacterSheetFromRegistry, getAgentSystemPrompt as getAgentSystemPromptFromRegistry, getAvailableAgents, getAgent, isValidAgentId } from './character-sheets.js';
 import { readFile } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { resolveDatabasePath } from '../utils/pathResolver.js';
 
 // ============================================================
 // Configuration
@@ -44,8 +43,7 @@ import { fileURLToPath } from 'url';
 const DEFAULT_CONTEXT_MESSAGES = parseInt(process.env.AI_CONTEXT_MESSAGES || '100', 10);
 const DEFAULT_CONVERSATION_TITLE = 'New Conversation';
 
-// Load context configuration from config.json
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Load context configuration from ai-context.defaults.json
 let contextConfig = {
     contextMode: 'maximum',
     maxContextTokens: 32768,
@@ -53,7 +51,7 @@ let contextConfig = {
 };
 
 try {
-    const configPath = join(__dirname, 'config.json');
+    const configPath = resolveDatabasePath('ai-context.defaults.json');
     const raw = await readFile(configPath, 'utf8');
     const config = JSON.parse(raw);
     if (config.contextMode) contextConfig.contextMode = config.contextMode;

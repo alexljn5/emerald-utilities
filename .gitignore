@@ -54,3 +54,4 @@ src/containers/bot-config.json
 
 #Docs
 docs/TODO.md
+scripts/test-normalizer.mjs

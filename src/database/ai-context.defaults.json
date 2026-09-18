@@ -1,0 +1,5 @@
+{
+    "contextMode": "maximum",
+    "maxContextTokens": 32768,
+    "reservedOutputTokens": 2048
+}

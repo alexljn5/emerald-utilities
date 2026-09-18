@@ -657,6 +657,8 @@ export function registerIpcHandlers(context) {
                 backup: Boolean(options.backup),
                 deleteOld: Boolean(options.deleteOld),
                 copyNonUpdatable: options.copyNonUpdatable !== false,
+                previousMCVersion: options.previousMCVersion || null,
+                archiveOutdated: options.archiveOutdated !== false,
                 app
             });
 
@@ -1077,11 +1079,17 @@ export function registerIpcHandlers(context) {
             // Build context strings at different sizes for smart fallback.
             // llama2-uncensored struggles with very long multi-turn context,
             // so we try a moderate amount first, then reduce if we get empty responses.
+            // Context builder: presents history as numbered reference notes,
+            // NOT as dialogue. Using "[1]" instead of "Lune:" prevents the
+            // model from treating it as a conversation transcript and
+            // continuing/reproducing it (recursive dialogue serialization).
             const buildContextString = (historySlice) => {
-                const recent = historySlice.length > 0
-                    ? `Recent messages:\n${historySlice.map(m => `${m.author === 'emerald-user' ? 'Lune' : m.author}: "${m.content}"`).join('\n')}\n\n`
-                    : '';
-                return recent;
+                if (historySlice.length === 0) return '';
+                const lines = historySlice.map((m, i) => {
+                    const speaker = m.author === 'emerald-user' ? 'Lune' : m.author;
+                    return `${i + 1}. ${speaker} said: ${m.content}`;
+                });
+                return `=== CONVERSATION HISTORY (reference only, do not repeat) ===\n${lines.join('\n')}\n=== END HISTORY ===\n`;
             };
 
             const context20 = buildContextString(prepared.history.slice(-20));
@@ -1090,6 +1098,11 @@ export function registerIpcHandlers(context) {
 
             ragLog.info('grok-chat', `LLM context: trying 20 messages first (RAG: ${retrieved.length} hits not sent to LLM), system prompt from character sheet`);
 
+            // Diagnostic: log the actual context being sent to the LLM.
+            // This helps identify recursive dialogue contamination.
+            ragLog.info('grok-chat', `[DIAG] context20 length: ${context20.length}, content: ${context20.substring(0, 500)}`);
+            ragLog.info('grok-chat', `[DIAG] userMessage: "${userMessage}"`);
+
             // 4. Query LLM with smart context fallback.
             //    Try 20 messages first for conversation flow, then reduce
             //    if the model returns empty responses. This avoids the
@@ -1097,6 +1110,11 @@ export function registerIpcHandlers(context) {
             //    model enough context to maintain consistency.
             //    Pass timeout from caller for overall request timeout.
             //    Pass character sheet so identity/personality is preserved.
+            //
+            //    The user prompt is constructed to make the CURRENT message
+            //    the absolute focus, with history demoted to reference-only.
+            //    This prevents the model from getting confused by repeated
+            //    "hai" messages in history and responding to an old message.
             let response = await queryWithLLM(userMessage, context20, [], {
                 timeoutMs,
                 useCharacterSheet: true,

@@ -530,9 +530,21 @@ async function queryWithLLM(messagesOrQuery, conversationIdOrContext, similarMes
         if (hasRelevantContext && context) {
             userPrompt = `Relevant conversation history (for reference only, DO NOT COPY IT):\n${context}\n\nNow ${userName} says: "${userQuery}"\n\nRespond as ${aiName} directly to ${userName}. Use the context to inform your answer but do not repeat any part of it. If the context is not about the same topic, ignore it completely. ${wantsShort ? 'Keep it very short.' : ''}`;
         } else if (context) {
-            // context here is the last 1-2 messages from recent history.
-            // Present it as context, not as something to repeat.
-            userPrompt = `${context}\n\nNow ${userName} says: "${userQuery}"\n\nRespond as ${aiName} directly to ${userName}. Answer the CURRENT message only. Do not repeat previous messages. ${wantsShort ? 'Keep it very short.' : ''}`;
+            // context here is the recent history from ipcHandlers.js.
+            // Present it as REFERENCE ONLY, with strong anti-serialization
+            // instructions to prevent the model from treating it as a
+            // transcript and continuing/reproducing it.
+            userPrompt = `${context}
+
+=== ABOVE IS HISTORY FOR REFERENCE ONLY ===
+DO NOT repeat it. DO NOT continue it. DO NOT write "Cream:" or "Lune:" labels.
+
+NOW ${userName}'S CURRENT MESSAGE IS:
+"${userQuery}"
+
+Respond as ${aiName} directly to ${userName}. Answer the CURRENT message only.
+Do not repeat previous messages. Do not write role labels. Do not quote the user back.
+${wantsShort ? 'Keep it very short.' : ''}`;
         } else {
             userPrompt = `${userName} says: "${userQuery}"\n\nRespond as ${aiName} with a warm, natural answer. Do not invent anything about ${userName}'s day. ${wantsShort ? 'Keep it very short.' : ''}`;
         }
@@ -584,6 +596,15 @@ async function queryWithLLM(messagesOrQuery, conversationIdOrContext, similarMes
         temperature,
         ...(Object.keys(ollamaOptions).length > 0 ? { options: ollamaOptions } : {}),
     };
+
+    // Diagnostic: log the actual payload sent to Ollama.
+    // This helps identify recursive dialogue contamination.
+    if (process.env.EMERALD_DEBUG || process.env.DEBUG) {
+        ragLog.info('[RAG] FINAL OLLAMA PAYLOAD:');
+        ragLog.info('[RAG] payload messages:', JSON.stringify(apiMessages, null, 2));
+        ragLog.info(`[RAG] payload messageCount: ${apiMessages.length}`);
+        ragLog.info(`[RAG] payload systemPromptLength: ${apiMessages.find(m => m.role === 'system')?.content?.length || 0}`);
+    }
 
     // --- Diagnostic logging ---
     const systemPromptContent = apiMessages.find(m => m.role === 'system')?.content || '';

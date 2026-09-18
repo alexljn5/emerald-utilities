@@ -17,7 +17,8 @@ const SSH_OPTS = [
     '-o', 'UserKnownHostsFile=/dev/null',
     '-o', 'BatchMode=yes',
     '-o', 'AddKeysToAgent=yes',
-    '-o', 'IdentitiesOnly=yes'
+    '-o', 'IdentitiesOnly=yes',
+    '-o', 'ConnectTimeout=5'
 ];
 
 // Resolve an SSH key path for the current platform.
